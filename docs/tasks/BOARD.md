@@ -12,15 +12,14 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
 | TASK-002 | Project domain and persistence foundation | DONE | Accepted and squash-merged via PR #8 after Team Lead review, green CI and truthful TDD evidence. |
 | TASK-003 | Creative Brief backend and persistence | DONE | Accepted and squash-merged via PR #9 after Team Lead review, real PostgreSQL owner/concurrency tests and green CI. |
-| TASK-004 | Creative Brief frontend workspace | CHANGES_REQUESTED | PR #10 reviewed by Team Lead. Fix dirty/saved-state correctness, real ProjectDetail route regression coverage, run real TASK-003 backend smoke, and obtain green CI on corrected `develop` base. Keep fixes on `feature/TASK-004-creative-brief-web`. |
-| TASK-005 | AI provider capability and text-generation contracts | CHANGES_REQUESTED | PR #11 reviewed by Team Lead. Fix registry metadata aliasing/thread-safety, make provider errors safe-by-default against secret-bearing raw messages, deep-snapshot fake requests, and obtain green CI on corrected `develop` base. Keep fixes on `feature/TASK-005-ai-provider-contracts`. |
+| TASK-004 | Creative Brief frontend workspace | CHANGES_REQUESTED | PR #10 round 2: previous findings are resolved, but failed validation/network/stale saves currently clear the dirty state while preserving unsaved input. Fix this state transition test-first, sync latest `develop`, rerun verification/CI and keep work on `feature/TASK-004-creative-brief-web`. |
+| TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 
 ## Active parallel wave — WAVE-F1-A
-TASK-003 is complete. Current remaining work:
-- Dev B — TASK-004: `CHANGES_REQUESTED`, fix PR #10 on the same branch under TDD and rerun real backend integration.
-- Dev C — TASK-005: `CHANGES_REQUESTED`, fix PR #11 on the same branch under TDD, rerun `-race` verification and green PR CI.
+TASK-003 and TASK-005 are complete. Current remaining work:
+- Dev B — TASK-004: `CHANGES_REQUESTED`, fix failed-save dirty-state correctness on PR #10 under TDD, sync latest `develop`, and rerun green CI.
 
-Do not invent a third task merely to fill capacity. PM opens additional parallel work only when dependencies and write surfaces are genuinely independent.
+No additional task is opened merely to fill capacity. PM opens new parallel work only when dependencies and write surfaces are genuinely independent.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
