@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -28,6 +29,8 @@ var (
 	ErrNoJobAvailable = errors.New("jobs: no eligible job available")
 	ErrUnknownJobKind = errors.New("jobs: unknown job kind")
 )
+
+const ErrorCodeMaxAttemptsExceeded = "ERR_MAX_ATTEMPTS_EXCEEDED"
 
 type Job struct {
 	ID          uuid.UUID       `json:"id"`
@@ -83,8 +86,18 @@ func (in EnqueueInput) Validate() error {
 		// If Caller provides 0, Validate checks if it's invalid unless defaulted before validation.
 		return errors.Join(ErrInvalidInput, errors.New("max_attempts must be >= 1"))
 	}
-	if len(in.Payload) > 0 && !json.Valid(in.Payload) {
-		return errors.Join(ErrInvalidInput, errors.New("payload must be valid json"))
+	if len(in.Payload) > 0 {
+		if err := ValidateJSONObject(in.Payload); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ValidateJSONObject(value json.RawMessage) error {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+		return errors.Join(ErrInvalidInput, errors.New("value must be a JSON object"))
 	}
 	return nil
 }

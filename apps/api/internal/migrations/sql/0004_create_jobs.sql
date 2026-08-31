@@ -21,7 +21,10 @@ CREATE TABLE jobs (
 	CONSTRAINT jobs_dedupe_key_length CHECK (dedupe_key IS NULL OR (char_length(btrim(dedupe_key)) BETWEEN 1 AND 200)),
 	CONSTRAINT jobs_state_allowed CHECK (state IN ('queued', 'running', 'succeeded', 'failed')),
 	CONSTRAINT jobs_attempt_nonnegative CHECK (attempt >= 0),
-	CONSTRAINT jobs_max_attempts_positive CHECK (max_attempts >= 1)
+	CONSTRAINT jobs_max_attempts_positive CHECK (max_attempts >= 1),
+	CONSTRAINT jobs_attempt_not_exceed_max CHECK (attempt <= max_attempts),
+	CONSTRAINT jobs_payload_object CHECK (jsonb_typeof(payload) = 'object'),
+	CONSTRAINT jobs_result_object CHECK (result IS NULL OR jsonb_typeof(result) = 'object')
 );
 
 CREATE UNIQUE INDEX jobs_owner_kind_dedupe_key_idx ON jobs (owner_id, kind, dedupe_key) WHERE (dedupe_key IS NOT NULL);

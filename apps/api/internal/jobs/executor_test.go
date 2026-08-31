@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ type fakeJobRepository struct {
 	mu           sync.Mutex
 	jobs         map[uuid.UUID]*jobs.Job
 	claimedToken map[uuid.UUID]uuid.UUID
+	renewErr     error
 }
 
 func newFakeJobRepository() *fakeJobRepository {
@@ -127,6 +129,9 @@ func (f *fakeJobRepository) ClaimNext(ctx context.Context, opts jobs.ClaimOption
 func (f *fakeJobRepository) RenewLease(ctx context.Context, id uuid.UUID, leaseToken uuid.UUID, extendDuration time.Duration) (jobs.Job, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.renewErr != nil {
+		return jobs.Job{}, f.renewErr
+	}
 	j, ok := f.jobs[id]
 	if !ok {
 		return jobs.Job{}, jobs.ErrJobNotFound
@@ -300,5 +305,141 @@ func TestExecutorContextCancellation(t *testing.T) {
 	}
 	if updated.State != jobs.StateRunning {
 		t.Fatalf("expected running after cancellation, got %s", updated.State)
+	}
+}
+
+func TestExecutorRenewsLeaseDuringLongHandler(t *testing.T) {
+	repo := newFakeJobRepository()
+	registry := jobs.NewRegistry()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var handlerCalls atomic.Int32
+	handler := jobs.HandlerFunc(func(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
+		if handlerCalls.Add(1) > 1 {
+			return nil, errors.New("handler called more than once")
+		}
+		close(entered)
+		select {
+		case <-release:
+			return json.RawMessage(`{"ok":true}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	if err := registry.Register("long_kind", handler); err != nil {
+		t.Fatalf("register handler: %v", err)
+	}
+
+	secondCalled := make(chan struct{}, 1)
+	secondRegistry := jobs.NewRegistry()
+	if err := secondRegistry.Register("long_kind", jobs.HandlerFunc(func(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
+		secondCalled <- struct{}{}
+		return json.RawMessage(`{"duplicate":true}`), nil
+	})); err != nil {
+		t.Fatalf("register second handler: %v", err)
+	}
+
+	ownerID := uuid.New()
+	job, err := repo.Enqueue(context.Background(), jobs.EnqueueInput{
+		OwnerID:     ownerID,
+		Kind:        "long_kind",
+		MaxAttempts: 3,
+		Payload:     json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	firstExecutor := jobs.NewExecutor(repo, registry, jobs.ExecutorConfig{LeaseDuration: 40 * time.Millisecond})
+	secondExecutor := jobs.NewExecutor(repo, secondRegistry, jobs.ExecutorConfig{LeaseDuration: 40 * time.Millisecond})
+	firstDone := make(chan error, 1)
+	go func() {
+		_, runErr := firstExecutor.RunOnce(context.Background())
+		firstDone <- runErr
+	}()
+
+	<-entered
+	time.Sleep(120 * time.Millisecond)
+	executed, err := secondExecutor.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("second executor: %v", err)
+	}
+	if executed {
+		t.Fatalf("second executor reclaimed a healthy long-running job")
+	}
+	select {
+	case <-secondCalled:
+		t.Fatalf("second handler ran while first handler was healthy")
+	default:
+	}
+
+	close(release)
+	select {
+	case err := <-firstDone:
+		if err != nil {
+			t.Fatalf("first executor: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("first handler did not finish")
+	}
+
+	updated, err := repo.GetByID(context.Background(), ownerID, job.ID)
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	if updated.State != jobs.StateSucceeded || handlerCalls.Load() != 1 {
+		t.Fatalf("expected one successful handler call, state=%s calls=%d", updated.State, handlerCalls.Load())
+	}
+}
+
+func TestExecutorDoesNotCommitAfterLeaseRenewalLoss(t *testing.T) {
+	repo := newFakeJobRepository()
+	repo.renewErr = jobs.ErrStaleLease
+	registry := jobs.NewRegistry()
+
+	entered := make(chan struct{})
+	if err := registry.Register("lost_lease_kind", jobs.HandlerFunc(func(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
+		close(entered)
+		<-ctx.Done()
+		return json.RawMessage(`{"should_not":"commit"}`), nil
+	})); err != nil {
+		t.Fatalf("register handler: %v", err)
+	}
+
+	ownerID := uuid.New()
+	job, err := repo.Enqueue(context.Background(), jobs.EnqueueInput{
+		OwnerID:     ownerID,
+		Kind:        "lost_lease_kind",
+		MaxAttempts: 3,
+		Payload:     json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	executor := jobs.NewExecutor(repo, registry, jobs.ExecutorConfig{LeaseDuration: 40 * time.Millisecond})
+	done := make(chan error, 1)
+	go func() {
+		_, runErr := executor.RunOnce(context.Background())
+		done <- runErr
+	}()
+	<-entered
+
+	select {
+	case runErr := <-done:
+		if !errors.Is(runErr, jobs.ErrStaleLease) {
+			t.Fatalf("expected ErrStaleLease, got %v", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("executor did not stop after lease renewal loss")
+	}
+
+	updated, err := repo.GetByID(context.Background(), ownerID, job.ID)
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	if updated.State != jobs.StateRunning {
+		t.Fatalf("expected lease-lost job to remain running for reclaim, got %s", updated.State)
 	}
 }

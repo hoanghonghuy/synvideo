@@ -58,6 +58,41 @@ func TestJobRepositoryIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("payload and result must be json objects", func(t *testing.T) {
+		_, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			Kind:        "invalid_payload_kind",
+			MaxAttempts: 1,
+			Payload:     json.RawMessage(`[]`),
+		})
+		if !errors.Is(err, jobs.ErrInvalidInput) {
+			t.Fatalf("expected invalid payload error, got %v", err)
+		}
+
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			Kind:        "invalid_result_kind",
+			MaxAttempts: 1,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue valid job: %v", err)
+		}
+		claimed, err := jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{
+			Kinds:         []string{"invalid_result_kind"},
+			LeaseDuration: 10 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if _, err := jobRepo.MarkSuccess(context.Background(), job.ID, *claimed.LeaseToken, json.RawMessage(`null`)); !errors.Is(err, jobs.ErrInvalidInput) {
+			t.Fatalf("expected invalid result error, got %v", err)
+		}
+		if _, err := jobRepo.MarkTerminalFailure(context.Background(), job.ID, *claimed.LeaseToken, "ERR_TEST_CLEANUP"); err != nil {
+			t.Fatalf("cleanup: %v", err)
+		}
+	})
+
 	// 2 & 3. Concurrent claimers yield exactly one owner for an attempt + atomic lease/attempt increment
 	t.Run("2-3. Concurrent claimers and atomic lease", func(t *testing.T) {
 		dedupe := "dedupe-claim-concurrent"
@@ -269,6 +304,38 @@ func TestJobRepositoryIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("6b. Retry cannot exceed max attempts", func(t *testing.T) {
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			Kind:        "retry_exhausted_kind",
+			MaxAttempts: 1,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		claimed, err := jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{
+			Kinds:         []string{"retry_exhausted_kind"},
+			LeaseDuration: 10 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if _, err := jobRepo.MarkRetryableFailure(context.Background(), job.ID, *claimed.LeaseToken, "ERR_RETRY", time.Now().UTC()); err == nil {
+			t.Fatal("expected retry at max attempts to be rejected")
+		}
+		current, err := jobRepo.GetByID(context.Background(), ownerID, job.ID)
+		if err != nil {
+			t.Fatalf("get job: %v", err)
+		}
+		if current.State != jobs.StateRunning || current.Attempt != current.MaxAttempts {
+			t.Fatalf("expected exhausted job to remain running at max attempt, got state=%s attempt=%d", current.State, current.Attempt)
+		}
+		if _, err := jobRepo.MarkTerminalFailure(context.Background(), job.ID, *claimed.LeaseToken, "ERR_TEST_CLEANUP"); err != nil {
+			t.Fatalf("cleanup: %v", err)
+		}
+	})
+
 	// 7. Expired lease is reclaimable after simulated worker crash
 	t.Run("7. Expired lease is reclaimable", func(t *testing.T) {
 		dedupe := "dedupe-expire-reclaim"
@@ -327,6 +394,42 @@ func TestJobRepositoryIntegration(t *testing.T) {
 		_, err = jobRepo.MarkSuccess(context.Background(), job.ID, *claimed2.LeaseToken, json.RawMessage(`{"good":true}`))
 		if err != nil {
 			t.Fatalf("worker 2 mark success: %v", err)
+		}
+	})
+
+	t.Run("7b. Expired final attempt becomes terminal", func(t *testing.T) {
+		kind := "final_expired_kind_" + uuid.NewString()
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			Kind:        kind,
+			MaxAttempts: 1,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		if _, err := jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{
+			Kinds:         []string{kind},
+			LeaseDuration: 50 * time.Millisecond,
+		}); err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+		if _, err := jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{
+			Kinds:         []string{kind},
+			LeaseDuration: 10 * time.Second,
+		}); !errors.Is(err, jobs.ErrNoJobAvailable) {
+			t.Fatalf("expected no claim after final lease expiry, got %v", err)
+		}
+		current, err := jobRepo.GetByID(context.Background(), ownerID, job.ID)
+		if err != nil {
+			t.Fatalf("get job: %v", err)
+		}
+		if current.State != jobs.StateFailed || current.FinishedAt == nil {
+			t.Fatalf("expected expired final attempt to be terminal failed, got %#v", current)
+		}
+		if current.ErrorCode == nil || *current.ErrorCode != "ERR_MAX_ATTEMPTS_EXCEEDED" {
+			t.Fatalf("expected max attempts error code, got %v", current.ErrorCode)
 		}
 	})
 

@@ -83,6 +83,20 @@ func TestJobValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("payload must be a json object", func(t *testing.T) {
+		for _, payload := range []string{`[]`, `null`, `"text"`, `42`} {
+			input := jobs.EnqueueInput{
+				OwnerID:     ownerID,
+				Kind:        "ai_proposal_generation",
+				MaxAttempts: 3,
+				Payload:     json.RawMessage(payload),
+			}
+			if err := input.Validate(); !errors.Is(err, jobs.ErrInvalidInput) {
+				t.Errorf("payload %s: expected ErrInvalidInput, got %v", payload, err)
+			}
+		}
+	})
+
 	t.Run("dedupe key length validation", func(t *testing.T) {
 		longKey := string(make([]byte, 201))
 		input := jobs.EnqueueInput{

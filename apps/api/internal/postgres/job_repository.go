@@ -179,12 +179,30 @@ func (r *JobRepository) ClaimNext(ctx context.Context, options jobs.ClaimOptions
 	}
 	defer tx.Rollback(ctx)
 
+	_, err = tx.Exec(ctx, `
+		UPDATE jobs
+		SET state = 'failed',
+			error_code = $1,
+			lease_token = NULL,
+			lease_until = NULL,
+			finished_at = COALESCE(finished_at, now()),
+			updated_at = now()
+		WHERE kind = ANY($2)
+		  AND (
+			(state = 'running' AND lease_until <= now() AND attempt >= max_attempts)
+			OR (state = 'queued' AND attempt >= max_attempts)
+		  );
+	`, jobs.ErrorCodeMaxAttemptsExceeded, options.Kinds)
+	if err != nil {
+		return jobs.Job{}, fmt.Errorf("finalize exhausted jobs: %w", err)
+	}
+
 	var jobID uuid.UUID
 	findQuery := `
 		SELECT id
 		FROM jobs
 		WHERE (
-			(state = 'queued' AND available_at <= now())
+			(state = 'queued' AND available_at <= now() AND attempt < max_attempts)
 			OR
 			(state = 'running' AND lease_until <= now() AND attempt < max_attempts)
 		)
@@ -197,6 +215,9 @@ func (r *JobRepository) ClaimNext(ctx context.Context, options jobs.ClaimOptions
 	err = tx.QueryRow(ctx, findQuery, options.Kinds).Scan(&jobID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if err := tx.Commit(ctx); err != nil {
+				return jobs.Job{}, fmt.Errorf("commit exhausted job cleanup: %w", err)
+			}
 			return jobs.Job{}, jobs.ErrNoJobAvailable
 		}
 		return jobs.Job{}, fmt.Errorf("find claimable job: %w", err)
@@ -256,6 +277,10 @@ func (r *JobRepository) RenewLease(ctx context.Context, id uuid.UUID, leaseToken
 }
 
 func (r *JobRepository) MarkSuccess(ctx context.Context, id uuid.UUID, leaseToken uuid.UUID, result json.RawMessage) (jobs.Job, error) {
+	if err := jobs.ValidateJSONObject(result); err != nil {
+		return jobs.Job{}, err
+	}
+
 	query := fmt.Sprintf(`
 		UPDATE jobs
 		SET state = 'succeeded',
@@ -289,6 +314,7 @@ func (r *JobRepository) MarkRetryableFailure(ctx context.Context, id uuid.UUID, 
 			error_code = $2,
 			updated_at = now()
 		WHERE id = $3 AND lease_token = $4 AND state = 'running'
+		  AND attempt < max_attempts
 		RETURNING %s;
 	`, jobSelectFields)
 

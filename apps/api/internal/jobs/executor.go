@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Handler interface {
@@ -72,6 +74,11 @@ type Executor struct {
 	config   ExecutorConfig
 }
 
+type handlerResult struct {
+	result json.RawMessage
+	err    error
+}
+
 func NewExecutor(repo Repository, registry *Registry, cfg ExecutorConfig) *Executor {
 	if cfg.LeaseDuration <= 0 {
 		cfg.LeaseDuration = 30 * time.Second
@@ -117,7 +124,13 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 		return true, ErrUnknownJobKind
 	}
 
-	result, handleErr := handler.Handle(ctx, job)
+	result, handleErr, lifecycleErr := e.runHandler(ctx, handler, job, leaseToken)
+	if lifecycleErr != nil {
+		return true, lifecycleErr
+	}
+	if ctx.Err() != nil {
+		return true, ctx.Err()
+	}
 	if handleErr == nil {
 		_, err := e.repo.MarkSuccess(context.Background(), job.ID, leaseToken, result)
 		return true, err
@@ -147,7 +160,7 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 		}
 		code := retryErr.Code
 		if code == "" {
-			code = "ERR_MAX_ATTEMPTS_EXCEEDED"
+			code = ErrorCodeMaxAttemptsExceeded
 		}
 		_, err := e.repo.MarkTerminalFailure(context.Background(), job.ID, leaseToken, code)
 		return true, err
@@ -171,6 +184,44 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 	}
 	_, err = e.repo.MarkTerminalFailure(context.Background(), job.ID, leaseToken, code)
 	return true, err
+}
+
+func (e *Executor) runHandler(ctx context.Context, handler Handler, job Job, leaseToken uuid.UUID) (json.RawMessage, error, error) {
+	handlerCtx, cancelHandler := context.WithCancel(ctx)
+	defer cancelHandler()
+
+	resultCh := make(chan handlerResult, 1)
+	go func() {
+		result, err := handler.Handle(handlerCtx, job)
+		resultCh <- handlerResult{result: result, err: err}
+	}()
+
+	renewInterval := e.config.LeaseDuration / 2
+	if renewInterval <= 0 {
+		renewInterval = time.Nanosecond
+	}
+	renewTicker := time.NewTicker(renewInterval)
+	defer renewTicker.Stop()
+
+	for {
+		select {
+		case result := <-resultCh:
+			return result.result, result.err, nil
+		case <-ctx.Done():
+			cancelHandler()
+			<-resultCh
+			return nil, ctx.Err(), nil
+		case <-renewTicker.C:
+			renewCtx, cancelRenew := context.WithTimeout(context.Background(), renewInterval)
+			_, err := e.repo.RenewLease(renewCtx, job.ID, leaseToken, e.config.LeaseDuration)
+			cancelRenew()
+			if err != nil {
+				cancelHandler()
+				<-resultCh
+				return nil, nil, err
+			}
+		}
+	}
 }
 
 func (e *Executor) Start(ctx context.Context) error {
