@@ -1,11 +1,14 @@
 # TASK-008 — AI Proposal frontend workspace
 
-Status: READY
+Status: IN_PROGRESS
 Milestone: F1 Creative Workflow
 Depends on: TASK-004 accepted
-Wave: WAVE-F1-B
+Wave: WAVE-F1-B / continuing in WAVE-F1-C
 Branch: `feature/TASK-008-ai-proposal-web`
 Base: `develop`
+
+## Current claim state
+The canonical remote branch exists and currently acts as the task lock. At the PM checkpoint it had no implementation commits beyond `develop`; the owning developer must sync latest `origin/develop` before starting/continuing TDD implementation.
 
 ## Goal
 Build the creator-facing AI Proposal workspace for viewing Proposal history, editing a draft, resolving stale edits and explicitly approving a version before script generation.
@@ -21,7 +24,7 @@ Build the creator-facing AI Proposal workspace for viewing Proposal history, edi
 ## Contract
 `docs/contracts/AI_PROPOSAL_V1.md` is frozen. Develop against deterministic transport mocks first.
 
-TASK-006 provides the real persistence/API. Final backend smoke happens only after TASK-006 merges.
+TASK-006 provides the real persistence/API and is accepted on `develop`; final backend smoke must use that implementation.
 
 Generation CTA is intentionally outside this task and is added by TASK-009. Do not fake successful AI generation in the UI.
 
@@ -35,7 +38,7 @@ Generation CTA is intentionally outside this task and is added by TASK-009. Do n
 - i18n resource additions.
 
 ## Reserved / do not touch
-- `apps/api/**` — TASK-006/TASK-007.
+- `apps/api/**` — accepted Proposal backend/generation plus TASK-010/TASK-011 work.
 - unrelated global visual redesign/shared architecture refactors.
 - Creative Brief behavior except minimal navigation entry.
 
@@ -79,7 +82,7 @@ Start RED for at least:
 - [ ] No fake generation success or vendor/provider UI is introduced.
 - [ ] Visible copy goes through i18n.
 - [ ] Frontend lint/typecheck/test/build green.
-- [ ] After TASK-006 merges, real backend smoke covers list/get/edit/stale/approve.
+- [ ] Real backend smoke covers list/get/edit/stale/approve.
 - [ ] TDD evidence is truthful.
 
 ## Verification
@@ -90,6 +93,6 @@ At minimum:
 - full repository verification and `git diff --check`.
 
 ## Merge order
-May implement against mocks immediately. Final acceptance/merge should happen after TASK-006 is accepted and real backend smoke passes. Independent from TASK-007.
+Independent from TASK-010 and TASK-011 by primary write surface. Final acceptance uses merged TASK-006 backend. TASK-009 remains blocked until this task is accepted.
 
 Do not self-merge or self-mark DONE.
