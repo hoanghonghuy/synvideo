@@ -1,16 +1,16 @@
 # SynVideo Task Board
 
-Current milestone: `BOOTSTRAP / CODEBASE AUDIT`
+Current milestone: `FOUNDATION PLANNING`
 
-The implementation repository has not yet been audited, so feature tasks must not be invented from this board before the real code/history is available.
+SynVideo starts from a clean repository. Product documentation, agent workflow, rules and skills are now established on `develop`. No application implementation exists yet, so the next PM action is to define the first implementation milestone and task contracts from the approved product baseline.
 
 | ID | Task | Status | Spec / Notes |
 |---|---|---|---|
-| BOOT-001 | Push existing SynVideo code/history and establish `develop` | BLOCKED_EXTERNAL | Must preserve the real local/EC2 Git history; do not create a separate docs-only root history. |
-| AUDIT-001 | Audit current codebase against approved product baseline | BLOCKED | Run after BOOT-001 using `synvideo-product-audit`. |
-| PLAN-001 | Build milestone/task backlog from audit gaps | BLOCKED | PM action after AUDIT-001. |
+| BOOT-001 | Initialize repository and establish `develop` | DONE | `main` contains the initial repository commit; PM/product scaffold lives on `develop`. |
+| AUDIT-001 | Audit pre-existing codebase | CANCELLED | Not applicable: user confirmed there is no pre-existing application code. |
+| PLAN-001 | Define Foundation milestone and first implementation task set | IN_PROGRESS | PM action based on `docs/product/**`, ADRs and engineering constraints. |
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
 
-PM owns status changes and task priority.
+PM owns status changes and task priority. AI Developers may only start implementation tasks explicitly marked `READY`.
