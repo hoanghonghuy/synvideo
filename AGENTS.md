@@ -20,15 +20,18 @@ See `docs/engineering/CONTINUE_PROTOCOL.md` only when the continuation state nee
 ## Coding workflow
 1. Start from the latest `origin/develop` when taking a new task.
 2. Read `docs/tasks/BOARD.md` and select only a `READY` task whose dependencies are satisfied.
-3. Before claiming it, fetch remote branches and confirm the task's canonical remote branch does not already exist and has no active PR.
-4. Create the dedicated task branch from latest `origin/develop` and push it to origin immediately as the task claim/lock. If that push loses a race, do not work on the task; select another eligible READY task.
-5. Read only the files explicitly referenced by that task.
-6. Follow `docs/engineering/TDD_PROTOCOL.md`: RED -> GREEN -> REFACTOR for behavior changes, with meaningful regression coverage.
-7. Respect the task's declared write paths/integration contract. For parallel work follow `docs/engineering/PARALLEL_WORK_PROTOCOL.md`.
-8. Implement only the task scope. Record unrelated findings instead of expanding scope.
-9. Run the task's required verification.
-10. Open a PR to `develop`. Never implement directly on `main` or `develop`.
-11. Do not mark a task `DONE`; Team Lead does that after acceptance review.
+3. Before claiming it, fetch remote branches and `git worktree` state; confirm the task's canonical remote branch does not already exist, has no active PR, and is not already represented by another local task worktree.
+4. For implementation, **one task must use one dedicated Git worktree**. The shared/control checkout stays on `develop` while concurrent agents are active. Never use `git switch` in that shared checkout to move between concurrent tasks.
+5. Create the dedicated task worktree/branch from latest `origin/develop`, then atomically create the canonical remote task branch with create-if-absent semantics as the claim/lock. A plain push of the same base SHA is not a sufficient concurrency lock. If the atomic claim loses a race, remove only the just-created empty local worktree/branch and select another eligible task.
+6. After a successful claim, do all edits, tests, commits, rebases and review fixes inside that task worktree. Read only the files explicitly referenced by that task.
+7. Follow `docs/engineering/TDD_PROTOCOL.md`: RED -> GREEN -> REFACTOR for behavior changes, with meaningful regression coverage.
+8. Respect the task's declared write paths/integration contract. For parallel work follow `docs/engineering/PARALLEL_WORK_PROTOCOL.md`.
+9. Implement only the task scope. Record unrelated findings instead of expanding scope.
+10. Run the task's required verification.
+11. Open a PR to `develop`. Never implement directly on `main` or `develop`.
+12. Do not mark a task `DONE`; Team Lead does that after acceptance review.
+
+For an existing task/PR, locate or create the dedicated worktree for its existing canonical branch and continue there. Never switch a shared control checkout to another active task branch, and never reset/clean/remove a worktree that may belong to another agent.
 
 Do not continuously merge `develop` while implementing an unrelated task. Sync when starting work, when the task requires new upstream changes, and before final PR integration when necessary.
 
@@ -47,8 +50,8 @@ Never copy/adapt source unless its current license has been verified and the tas
 ## Skills
 Use a skill only when its description matches the work; open the `SKILL.md` then follow only the references it names.
 - `synvideo-continue`: determine and execute the next valid workflow action from repo/PR/issue state after a generic continuation command.
-- `synvideo-task-worker`: implement one READY task end-to-end using TDD and parallel-safe claiming.
-- `synvideo-wave-planner`: PM planning for a small batch of independent parallel tasks with frozen contracts, path ownership and merge order.
+- `synvideo-task-worker`: implement one READY task end-to-end using TDD, atomic claiming and a dedicated worktree.
+- `synvideo-wave-planner`: PM planning for a small batch of independent parallel tasks with frozen contracts, path/worktree ownership and merge order.
 - `synvideo-code-review`: Team Lead review of a PR/diff against requirements and quality gates.
 - `synvideo-open-source-research`: research reuse candidates before building a subsystem.
 - `synvideo-product-audit`: audit the existing codebase against the product baseline.
