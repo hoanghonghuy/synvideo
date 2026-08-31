@@ -11,17 +11,16 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | PLAN-001 | Define Foundation milestone and first implementation task set | DONE | Initial architecture baseline and first dependency chain are defined. |
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
 | TASK-002 | Project domain and persistence foundation | DONE | Accepted and squash-merged via PR #8 after Team Lead review, green CI and truthful TDD evidence. |
-| TASK-003 | Creative Brief backend and persistence | READY | Issue #5. WAVE-F1-A. Owns backend Creative Brief domain/API/persistence. Canonical branch `feature/TASK-003-creative-brief-api`. |
-| TASK-004 | Creative Brief frontend workspace | READY | Issue #6. WAVE-F1-A. Consumes frozen Creative Brief V1 contract; final acceptance includes backend integration after TASK-003 merges. Canonical branch `feature/TASK-004-creative-brief-web`. |
-| TASK-005 | AI provider capability and text-generation contracts | READY | Issue #7. WAVE-F1-A. Isolated provider package and merge-order independent from TASK-003/004. Canonical branch `feature/TASK-005-ai-provider-contracts`. |
+| TASK-003 | Creative Brief backend and persistence | DONE | Accepted and squash-merged via PR #9 after Team Lead review, real PostgreSQL owner/concurrency tests and green CI. |
+| TASK-004 | Creative Brief frontend workspace | READY | Issue #6. WAVE-F1-A. Backend contract is now merged on `develop`; implement against the frozen Creative Brief V1 contract and run real backend integration before acceptance. Canonical branch `feature/TASK-004-creative-brief-web`. |
+| TASK-005 | AI provider capability and text-generation contracts | READY | Issue #7. WAVE-F1-A. Isolated provider package and merge-order independent. Canonical branch `feature/TASK-005-ai-provider-contracts`. |
 
 ## Active parallel wave — WAVE-F1-A
-Up to three AI Developers may work concurrently:
-- Dev A — TASK-003: backend Creative Brief API/persistence.
-- Dev B — TASK-004: frontend Creative Brief workspace against frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
+TASK-003 is complete. Up to two remaining AI Developers may work concurrently:
+- Dev B — TASK-004: frontend Creative Brief workspace against the merged backend and frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
 - Dev C — TASK-005: isolated AI provider capability/text boundary.
 
-TASK-003 and TASK-004 share a contract, not implementation files. TASK-005 is merge-order independent from both. TASK-004 may develop/review in parallel but final acceptance includes smoke/integration after TASK-003 merges.
+Do not invent a third task merely to fill capacity. PM opens additional parallel work only when dependencies and write surfaces are genuinely independent.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
