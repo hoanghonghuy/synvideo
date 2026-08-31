@@ -23,6 +23,14 @@ This task must establish production-quality persistence/API boundaries that late
 
 Do not recursively load unrelated docs.
 
+## Parallel safety
+TASK-002 began before WAVE-F1-A was defined and remains the shared foundation. Do not split or reassign its active implementation mid-task.
+
+While TASK-002 is in progress, future WAVE-F1-A tasks remain BLOCKED. TASK-002 must not proactively implement their reserved scope:
+- Creative Brief V1 domain/API/persistence (TASK-003);
+- Creative Brief V1 frontend workspace (TASK-004);
+- AI provider capability/text-generation boundary (TASK-005).
+
 ## TDD adoption note
 TASK-002 was already in progress when repository-wide TDD became mandatory. Do **not** fabricate historical RED evidence for work that already existed before the rule changed.
 
