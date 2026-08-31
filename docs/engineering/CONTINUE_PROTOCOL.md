@@ -46,7 +46,7 @@ Finish current task acceptance criteria -> verify -> push/PR
 No active PR/task
    |
    v
-Use control checkout on develop; sync/fetch latest origin/develop + remote branches + worktree state
+Use control checkout on develop; sync/fetch origin/develop + remote branches + worktree state
    |
    v
 Read BOARD + open task issues
@@ -61,13 +61,16 @@ Skip tasks whose canonical remote branch/PR/local task worktree already exists
 Highest-priority unclaimed READY task?
    | yes
    v
-Create dedicated task worktree/local branch from origin/develop
+Atomically create canonical remote branch at selected origin/develop SHA only-if-absent
+   | lost race ----------------------> Re-fetch -> next READY task; never alter winner
+   | success
+   v
+Create/attach dedicated local task worktree tracking claimed branch
    |
    v
-Atomically create remote branch only-if-absent as claim/lock
-   | success ------------------------> TDD task-worker inside task worktree
-   | lost race ----------------------> Remove only new empty local worktree/branch -> re-fetch -> next task
-   | no task ------------------------> Stop and report blocker/claimed/no executable task
+TDD task-worker inside task worktree
+   |
+   no task --------------------------> Stop and report blocker/claimed/no executable task
 ```
 
 ## Priority
@@ -83,15 +86,16 @@ Never abandon an active review to start unrelated work unless the PM/task board 
 When multiple developers receive `tiếp tục` concurrently:
 
 1. Use the control checkout on `develop`; fetch remote branches and inspect worktrees before selecting work.
-2. A canonical remote task branch, active PR, or existing task worktree means that task is already claimed.
+2. A canonical remote task branch, active PR, existing local task branch or task worktree means that task is already claimed/ambiguous and must not be silently taken over.
 3. Select only an unclaimed READY task whose dependencies are satisfied.
-4. Create its exact local branch in a dedicated worktree from latest `origin/develop`.
-5. Atomically create the canonical remote branch with create-if-absent/expected-nonexistent semantics before implementation.
+4. Record the latest selected `origin/develop` SHA.
+5. Atomically create the canonical **remote** task branch at that SHA using GitHub create-ref/create-branch fail-if-exists semantics.
 6. **Do not rely on a plain same-SHA `git push` as the lock**: two agents starting from the same base can otherwise both observe apparent success/up-to-date.
-7. If the atomic claim loses a race, do not overwrite/take over/delete the winner's branch. Remove only the losing agent's newly created empty local worktree/branch, re-fetch and select the next eligible task.
-8. After a successful claim, perform all implementation and Git history changes inside the dedicated task worktree.
+7. If remote create-ref loses a race, do not overwrite/take over/delete the winner's branch. Re-fetch and select the next eligible task.
+8. Only after successful remote claim, create/attach the dedicated local worktree for the canonical branch.
+9. Perform all implementation and Git history changes inside that dedicated task worktree.
 
-See `docs/engineering/PARALLEL_WORK_PROTOCOL.md` for exact wave/path/worktree rules.
+See `docs/engineering/PARALLEL_WORK_PROTOCOL.md` for exact GitHub create-ref, wave, path and worktree rules.
 
 ## TDD
 New behavior and review fixes follow `docs/engineering/TDD_PROTOCOL.md` unless a task records a justified exception.
