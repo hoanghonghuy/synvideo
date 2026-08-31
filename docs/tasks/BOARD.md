@@ -10,7 +10,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | AUDIT-001 | Audit pre-existing codebase | CANCELLED | Not applicable: there is no pre-existing application code. |
 | PLAN-001 | Define Foundation milestone and first implementation task set | DONE | Initial architecture baseline and first dependency chain are defined. |
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
-| TASK-002 | Project domain and persistence foundation | IN_PROGRESS | Issue #4 / `feature/TASK-002-project-persistence`. Current shared foundation; do not split/reassign mid-task. |
+| TASK-002 | Project domain and persistence foundation | IN_PROGRESS | Issue #4 / `feature/TASK-002-project-persistence`. Current shared foundation; repository-wide TDD was adopted mid-task, so remaining work/fixes are test-first and historical RED evidence must not be fabricated. |
 | TASK-003 | Creative Brief backend and persistence | BLOCKED | WAVE-F1-A. Opens after TASK-002 acceptance. Owns backend Creative Brief domain/API/persistence. |
 | TASK-004 | Creative Brief frontend workspace | BLOCKED | WAVE-F1-A. Opens after TASK-002 acceptance; consumes frozen Creative Brief V1 contract; final integration gate TASK-003. |
 | TASK-005 | AI provider capability and text-generation contracts | BLOCKED | WAVE-F1-A. Isolated provider package; opens with the wave after TASK-002 acceptance. |
@@ -32,7 +32,7 @@ TASK-003 and TASK-004 share a contract, not implementation files. TASK-005 is me
 - PM owns priority, dependency graph, wave composition and READY/BLOCKED/DONE transitions.
 - AI Developers may start only `READY` tasks whose dependencies are satisfied.
 - Parallel agents use the canonical remote task branch as a claim/lock: fetch first, skip tasks whose remote branch/PR already exists, create the exact branch from latest `origin/develop`, and push it immediately before implementation.
-- Every implementation task follows `docs/engineering/TDD_PROTOCOL.md` unless a justified exception is documented.
+- Every implementation task follows `docs/engineering/TDD_PROTOCOL.md` unless a justified exception is documented. TASK-002 is the one grandfathered in-progress task; no fake historical TDD evidence.
 - A task normally moves `READY -> IN_PROGRESS -> REVIEW -> DONE`.
 - Team Lead may move `REVIEW -> CHANGES_REQUESTED` until acceptance criteria are satisfied.
 - Do not create parallelism by splitting tightly coupled work after implementation has already begun. Prefer contract-first tasks with isolated write paths.
