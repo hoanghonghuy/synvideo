@@ -26,10 +26,17 @@ The wave intentionally separates three implementation surfaces behind frozen con
 - Contract files are PM-owned and frozen during the wave.
 
 ## Integration gate
-TASK-009 remains BLOCKED until TASK-006/007/008 are accepted. It is the only task allowed to connect generation engine -> Proposal CreateDraft -> generation HTTP endpoint -> frontend Generate/Regenerate action.
+TASK-009 remains BLOCKED until TASK-006/007/008 are accepted. It is the only task allowed to connect generation engine -> Proposal CreateDraft -> **durable async generation job** -> frontend Generate/Regenerate action.
+
+Before TASK-009 becomes READY, PM must freeze its job resource/state/API contract. Per ADR 0005, provider generation must not be implemented as one long blocking HTTP request.
+
+## Live-provider gate
+The accepted provider package currently defines neutral contracts/capabilities; deterministic fakes are appropriate for tests but do not make production AI available. If no live BYOK/provider adapter capability exists by TASK-009 planning time, PM must open that work explicitly. Do not represent fake generation as a production-complete AI flow.
 
 ## TDD
 Every task follows `docs/engineering/TDD_PROTOCOL.md`; truthful RED -> GREEN -> REFACTOR evidence is required. No coverage-only test may be represented as a behavioral RED failure.
 
 ## Completion rule
-WAVE-F1-B foundation is complete when TASK-006/007/008 are merged. Stage 3–4 AI Proposal is complete only after TASK-009 is also accepted with real end-to-end smoke.
+WAVE-F1-B foundation is complete when TASK-006/007/008 are merged.
+
+TASK-009 completion proves the Proposal workflow integration/job path. Stage 3–4 may be called **production AI complete** only when the integration is accepted **and** a live secure provider/BYOK capability is available; test fakes do not satisfy that production gate.
