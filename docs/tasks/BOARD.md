@@ -13,12 +13,12 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-002 | Project domain and persistence foundation | DONE | Accepted and squash-merged via PR #8 after Team Lead review, green CI and truthful TDD evidence. |
 | TASK-003 | Creative Brief backend and persistence | DONE | Accepted and squash-merged via PR #9 after Team Lead review, real PostgreSQL owner/concurrency tests and green CI. |
 | TASK-004 | Creative Brief frontend workspace | CHANGES_REQUESTED | PR #10 reviewed by Team Lead. Fix dirty/saved-state correctness, real ProjectDetail route regression coverage, run real TASK-003 backend smoke, and obtain green CI on corrected `develop` base. Keep fixes on `feature/TASK-004-creative-brief-web`. |
-| TASK-005 | AI provider capability and text-generation contracts | READY | Issue #7. WAVE-F1-A. Isolated provider package and merge-order independent. Canonical branch `feature/TASK-005-ai-provider-contracts`. |
+| TASK-005 | AI provider capability and text-generation contracts | CHANGES_REQUESTED | PR #11 reviewed by Team Lead. Fix registry metadata aliasing/thread-safety, make provider errors safe-by-default against secret-bearing raw messages, deep-snapshot fake requests, and obtain green CI on corrected `develop` base. Keep fixes on `feature/TASK-005-ai-provider-contracts`. |
 
 ## Active parallel wave — WAVE-F1-A
 TASK-003 is complete. Current remaining work:
 - Dev B — TASK-004: `CHANGES_REQUESTED`, fix PR #10 on the same branch under TDD and rerun real backend integration.
-- Dev C — TASK-005: `READY`, isolated AI provider capability/text boundary.
+- Dev C — TASK-005: `CHANGES_REQUESTED`, fix PR #11 on the same branch under TDD, rerun `-race` verification and green PR CI.
 
 Do not invent a third task merely to fill capacity. PM opens additional parallel work only when dependencies and write surfaces are genuinely independent.
 
