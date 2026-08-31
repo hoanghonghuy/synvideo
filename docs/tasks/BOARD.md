@@ -1,16 +1,24 @@
 # SynVideo Task Board
 
-Current milestone: `FOUNDATION PLANNING`
+Current milestone: `F0 — TECHNICAL FOUNDATION`
 
-SynVideo starts from a clean repository. Product documentation, agent workflow, rules and skills are now established on `develop`. No application implementation exists yet, so the next PM action is to define the first implementation milestone and task contracts from the approved product baseline.
+PM plans ahead, but AI Developers may start only tasks explicitly marked `READY`. Dependent tasks remain blocked until the preceding foundation is reviewed and accepted.
 
 | ID | Task | Status | Spec / Notes |
 |---|---|---|---|
 | BOOT-001 | Initialize repository and establish `develop` | DONE | `main` contains the initial repository commit; PM/product scaffold lives on `develop`. |
-| AUDIT-001 | Audit pre-existing codebase | CANCELLED | Not applicable: user confirmed there is no pre-existing application code. |
-| PLAN-001 | Define Foundation milestone and first implementation task set | IN_PROGRESS | PM action based on `docs/product/**`, ADRs and engineering constraints. |
+| AUDIT-001 | Audit pre-existing codebase | CANCELLED | Not applicable: there is no pre-existing application code. |
+| PLAN-001 | Define Foundation milestone and first implementation task set | DONE | Initial architecture baseline and first dependency chain are defined. |
+| TASK-001 | Technical foundation and runnable project skeleton | READY | `docs/tasks/TASK-001.md`; first coding task. |
+| TASK-002 | Project domain and persistence foundation | BLOCKED | Depends on accepted TASK-001. Preview: `docs/tasks/TASK-002.md`. |
+| TASK-003 | Creative Brief intake foundation | BLOCKED | Depends on accepted TASK-002. Preview: `docs/tasks/TASK-003.md`. |
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
 
-PM owns status changes and task priority. AI Developers may only start implementation tasks explicitly marked `READY`.
+## Operating rule
+- PM owns priority and status changes.
+- AI Developers may start only `READY` tasks.
+- A task normally moves `READY -> IN_PROGRESS -> REVIEW -> DONE`.
+- Team Lead may move `REVIEW -> CHANGES_REQUESTED` until acceptance criteria are satisfied.
+- Do not open many dependent tasks as READY merely to keep an agent busy; correctness of the accepted foundation takes priority over speculative parallelism.
