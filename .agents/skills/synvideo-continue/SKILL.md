@@ -62,12 +62,12 @@ Always resolve the highest applicable state below. Do not skip an earlier state 
    - Fetch `origin`, update local `develop` with fast-forward only, fetch remote task branches, and inspect `git worktree list --porcelain`.
    - Read `docs/tasks/BOARD.md` and relevant open GitHub task issues.
    - Consider READY tasks in PM priority order whose dependencies are satisfied.
-   - Skip any task whose canonical remote branch already exists, already has an active PR, or is already represented by another local task worktree: that task is claimed.
+   - Skip any task whose canonical remote branch already exists, already has an active PR, or is already represented by another local task worktree/branch: that task is claimed.
    - For the first unclaimed eligible task, read its spec and only its referenced docs.
-   - Execute the claim protocol in `PARALLEL_WORK_PROTOCOL.md`: create a dedicated task worktree/local branch from latest `origin/develop`, then atomically create the remote branch with expected-nonexistent/create-if-absent semantics.
-   - A plain push of a same-base branch is not a sufficient lock.
-   - If the atomic remote claim loses a race, remove only the just-created empty local worktree/branch, re-fetch, and try the next eligible READY task. Never overwrite/delete the winner's branch.
-   - Execute the claimed task using `synvideo-task-worker` from its dedicated worktree.
+   - Execute the claim protocol in `PARALLEL_WORK_PROTOCOL.md`: atomically create the canonical **remote** task branch at the selected latest `origin/develop` SHA using GitHub create-ref/create-branch fail-if-exists semantics.
+   - A plain same-base `git push` is not a sufficient lock.
+   - If remote create-ref loses a race, do not alter/delete the winning branch; re-fetch and try the next eligible READY task.
+   - After a successful remote claim, create/attach the dedicated local worktree for that branch and execute the task using `synvideo-task-worker` there.
 
 6. **No executable unclaimed READY task exists**
    - Stop.
@@ -93,7 +93,7 @@ Do not recursively load all docs or source code. Do not repeatedly merge/rebase 
 
 - Implementation never goes directly to `main` or `develop`.
 - New implementation starts from latest `origin/develop` on a dedicated task branch **and dedicated worktree**.
-- The canonical remote task branch is the parallel-work claim only when created atomically as an absent ref; ordinary same-SHA push success is not proof of exclusive ownership.
+- The canonical remote task branch is the parallel-work claim only when this agent successfully creates the previously absent remote ref atomically.
 - Review fixes stay on the existing task branch, worktree and PR.
 - Never discard/overwrite uncommitted work merely to move to another task.
 - Never `git switch` a shared control checkout between concurrent task branches.
