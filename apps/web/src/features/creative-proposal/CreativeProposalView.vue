@@ -72,6 +72,7 @@ async function loadVersion(version: number, discardDirty = false) {
 
   proposalLoading.value = true
   loadErrorCode.value = ''
+  mutationErrorCode.value = ''
   fieldErrors.value = {}
   try {
     const proposal = await getCreativeProposal(String(route.params.id), version)
