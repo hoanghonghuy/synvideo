@@ -1,19 +1,26 @@
 # TASK-007 — AI Proposal generation engine
 
-Status: CHANGES_REQUESTED
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-003 and TASK-005 accepted
 Wave: WAVE-F1-B
 Branch: `feature/TASK-007-ai-proposal-generation`
 Base: `develop`
-Active PR: #16
+PR: #16
 
-## Current review gate
-Team Lead review found one MAJOR contract bug plus a CI/process gate:
-- cancellation/deadline that occurs while `GenerateText` is in flight is currently remapped to `GENERATION_PROVIDER_FAILED` instead of propagating `context.Canceled` / `context.DeadlineExceeded`;
-- PR #16 was opened against `main`; Team Lead retargeted it to `develop`, and the corrected-base head needs a new CI run after the fix push.
+## Acceptance record
+Accepted and squash-merged via PR #16 after Team Lead review round 2.
 
-Required TDD fix: add a RED in-flight cancellation/deadline regression, preserve standard context errors before provider-error mapping, update truthful TDD evidence, sync latest `origin/develop`, push the same branch and rerun green CI.
+Final acceptance included:
+- provider-neutral Proposal generation engine isolated to `apps/api/internal/proposalgeneration/**`;
+- strict structured candidate parsing/validation against frozen Proposal content rules;
+- prompt separation of creator facts/constraints from AI recommendations;
+- Project format/duration intent preserved, including long-form behavior;
+- safe stable provider errors without raw secret leakage;
+- context cancellation/deadline propagation before and during the provider call;
+- regression tests for in-flight cancellation and deadline expiration;
+- no DB/router/frontend/vendor SDK scope leakage;
+- CI run #74 green on base `develop` after rebasing merged TASK-006.
 
 ## Goal
 Implement a provider-neutral application engine that transforms accepted Project + current Creative Brief context into a strictly validated AI Proposal candidate using the existing text-generation provider boundary.
@@ -78,16 +85,16 @@ Start RED for at least:
 8. long-form duration/content format is not silently converted to short-form assumptions.
 
 ## Acceptance criteria
-- [ ] Engine depends only on accepted provider-neutral interfaces/types, not vendor SDKs.
-- [ ] Output matches frozen Proposal editable schema and carries source brief revision.
-- [ ] Invalid/malformed model output never becomes a persisted-looking successful candidate.
-- [ ] Prompt behavior distinguishes creator facts from AI recommendations.
-- [ ] Stable safe errors and in-flight cancellation/deadline behavior are tested.
-- [ ] No persistence/router/frontend/shared composition edits.
-- [ ] TDD evidence truthful; `-race`/backend/full verification green where applicable.
+- [x] Engine depends only on accepted provider-neutral interfaces/types, not vendor SDKs.
+- [x] Output matches frozen Proposal editable schema and carries source brief revision.
+- [x] Invalid/malformed model output never becomes a persisted-looking successful candidate.
+- [x] Prompt behavior distinguishes creator facts from AI recommendations.
+- [x] Stable safe errors and in-flight cancellation/deadline behavior are tested.
+- [x] No persistence/router/frontend/shared composition edits.
+- [x] TDD evidence truthful; `-race`/backend/full verification green where applicable.
 
 ## Verification
-At minimum:
+Accepted verification included:
 - targeted generation tests;
 - `go test -count=1 -race ./internal/proposalgeneration/...`;
 - `gofmt`, `go vet ./...`, `go test ./...`, backend build;
@@ -95,6 +102,4 @@ At minimum:
 - PR CI on base `develop`.
 
 ## Merge order
-Merge-order independent from TASK-006 and TASK-008. TASK-006 is already merged; TASK-009 consumes this engine only after TASK-007 is accepted.
-
-Do not self-merge or self-mark DONE.
+TASK-006 and TASK-007 are accepted and merged. TASK-009 consumes this engine only after TASK-008 is also accepted and PM freezes the async generation-job contract.
