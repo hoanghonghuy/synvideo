@@ -16,7 +16,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
-| TASK-008 | AI Proposal frontend workspace | IN_PROGRESS | Issue #14. Canonical branch `feature/TASK-008-ai-proposal-web` exists as claim/lock; owner must sync latest `develop` before implementation. |
+| TASK-008 | AI Proposal frontend workspace | IN_PROGRESS | Issue #14. Canonical branch `feature/TASK-008-ai-proposal-web` exists as claim/lock; owner must sync latest `develop` and continue in its dedicated task worktree. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Requires TASK-008 + TASK-010 accepted; consumes durable jobs rather than implementing another queue. |
 | TASK-010 | Durable job execution foundation | READY | Issue #18. Owns generic PostgreSQL job/lease/retry executor + migration `0004`; branch `feature/TASK-010-durable-job-foundation`. |
 | TASK-011 | Script domain, persistence and approval API | READY | Issue #19. Starts Stage 5–6 Script persistence from approved Proposal + migration `0005`; branch `feature/TASK-011-script-persistence`. |
@@ -33,6 +33,7 @@ Current three implementation slots:
 - Dev C — TASK-011: `READY`, Script persistence/approval foundation.
 
 Isolation / merge rules:
+- **Each implementation slot must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
 - TASK-008 owns Proposal frontend only; no backend edits.
 - TASK-010 owns `jobs/**`, job repository and migration `0004`; no Proposal/Script semantics or public generic job API.
 - TASK-011 owns Script backend + migration `0005`; no jobs/frontend/provider generation work.
@@ -67,8 +68,12 @@ Downstream Creative Workflow stages after Proposal remain substantial: Script ge
 ## Operating rules
 - PM owns priority, dependency graph, wave composition and READY/BLOCKED/DONE transitions.
 - AI Developers may start only `READY` tasks whose dependencies are satisfied.
-- Parallel agents use the canonical remote task branch as a claim/lock: fetch first, skip tasks whose remote branch/PR already exists, create the exact branch from latest `origin/develop`, and push it immediately before implementation.
+- **One implementation task = one dedicated Git worktree.** The shared/control checkout should stay on `develop` while concurrent agents are active; never use `git switch` there to move among task branches.
+- Parallel agents inspect remote branches, PRs and `git worktree list --porcelain` before claiming. Existing canonical branch/PR/task worktree means the task is claimed.
+- A new remote task branch must be claimed with **atomic create-if-absent / expected-nonexistent semantics**. A plain same-base `git push` is not sufficient as an exclusive lock. Only after the atomic claim succeeds may implementation begin inside the dedicated task worktree.
+- If a claim race is lost, the losing agent removes only its just-created empty local worktree/branch, never overwrites/deletes the winning remote branch, then selects another eligible READY task.
+- Review fixes stay on the original branch/PR and its dedicated worktree.
 - Every implementation task follows `docs/engineering/TDD_PROTOCOL.md`; RED -> GREEN -> REFACTOR evidence must be truthful and coverage-only additions must not be misrepresented as failing RED behavior.
 - A task normally moves `READY -> IN_PROGRESS -> REVIEW -> DONE`.
 - Team Lead may move `REVIEW -> CHANGES_REQUESTED` until acceptance criteria are satisfied.
-- Do not create parallelism by splitting tightly coupled work after implementation has already begun. Prefer contract-first tasks with isolated write paths.
+- Do not create parallelism by splitting tightly coupled work after implementation has already begun. Prefer contract-first tasks with isolated write paths and isolated worktrees.
