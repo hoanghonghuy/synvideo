@@ -1,6 +1,6 @@
 # TASK-004 — Creative Brief frontend workspace
 
-Status: CHANGES_REQUESTED
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-002 accepted
 Integration gate: TASK-003 backend merged before final acceptance — satisfied via PR #9
@@ -87,36 +87,29 @@ Start with RED feature/component/client tests, including at minimum:
 Use contract-shaped transport mocks; snapshots alone are insufficient.
 
 ## Acceptance criteria
-- [ ] Creator can open a project and reach the Creative Brief workspace.
-- [ ] All V1 fields can be edited with clear validation/help where needed.
-- [ ] Save/reopen behavior follows the frozen API contract.
-- [ ] Dirty/saving/saved/error/stale states are implemented and tested.
-- [ ] Stale edits cannot silently overwrite newer server state.
-- [ ] Visible copy is localized through i18n.
-- [ ] Frontend lint/typecheck/test/build remain green.
-- [ ] Branch is rebased/synced as needed onto merged TASK-003 backend and real backend integration smoke passes before acceptance.
-- [ ] PR contains TDD evidence.
+- [x] Creator can open a project and reach the Creative Brief workspace.
+- [x] All V1 fields can be edited with clear validation/help where needed.
+- [x] Save/reopen behavior follows the frozen API contract.
+- [x] Dirty/saving/saved/error/stale states are implemented and tested.
+- [x] Stale edits cannot silently overwrite newer server state.
+- [x] Visible copy is localized through i18n.
+- [x] Frontend lint/typecheck/test/build remain green.
+- [x] Branch is rebased/synced as needed onto merged TASK-003 backend and real backend integration smoke passes before acceptance.
+- [x] PR contains TDD evidence.
 
 ## Open-source research
 None required; this is product UI/application behavior rather than an editor/media subsystem.
 
 ## Verification
-At minimum:
+Accepted on PR #10 after Team Lead review with:
 - targeted Creative Brief client/feature/component tests;
 - `npm run lint:web`;
 - `npm run typecheck:web`;
 - `npm run test:web`;
 - `npm run build:web`;
-- final smoke against merged TASK-003 backend;
-- `git diff --check` or equivalent.
+- real backend smoke covering 404 new draft → 201 create → 200 update → 409 stale → GET latest;
+- final failed-save dirty-state regression coverage for validation/network/stale paths;
+- green PR CI.
 
 ## Delivery
-PR to `develop` from `feature/TASK-004-creative-brief-web` must include:
-- UX/state summary;
-- TDD evidence: RED/GREEN/REFACTOR;
-- contract-client behavior tested;
-- frontend verification;
-- final backend integration result against merged TASK-003;
-- any contract issue surfaced without silently changing the frontend expectation.
-
-Do not self-merge or mark DONE.
+Accepted and squash-merged into `develop` via PR #10.
