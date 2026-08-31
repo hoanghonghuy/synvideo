@@ -235,6 +235,57 @@ describe('CreativeProposalView', () => {
     ).toHaveLength(1)
   })
 
+  it('preserves dirty edits when stale recovery fails to reload the latest version', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse([draftSummary, approvedSummary]))
+      .mockResolvedValueOnce(jsonResponse(draftProposal))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'STALE_REVISION',
+              message: 'Creative proposal revision is stale.',
+            },
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed' } }, 503))
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    await wrapper.find('[name="audience_summary"]').setValue('Thay doi can bao ve')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="reload-latest-proposal"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.find('[name="audience_summary"]').element as HTMLTextAreaElement).value).toBe('Thay doi can bao ve')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu.')
+    expect(wrapper.text()).toContain('Không thể kết nối máy chủ.')
+
+    await wrapper.find('[data-testid="version-1"]').trigger('click')
+    expect(wrapper.text()).toContain('Chọn Hủy thay đổi')
+    expect(fetchMock.mock.calls.filter(([url]) => url === `/api/v1/projects/${projectId}/creative-proposals/1`)).toHaveLength(0)
+  })
+
+  it('shows a visible retry state when the initial proposal version cannot be loaded', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse([draftSummary]))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed' } }, 503))
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Không thể kết nối máy chủ.')
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(true)
+    expect(wrapper.find('[name="audience_summary"]').exists()).toBe(false)
+  })
+
   it('renders approved and superseded versions as read-only', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))

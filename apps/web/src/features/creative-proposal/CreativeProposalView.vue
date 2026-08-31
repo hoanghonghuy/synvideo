@@ -32,6 +32,7 @@ const dirty = ref(false)
 const staleConflict = ref(false)
 const confirmApproval = ref(false)
 const errorCode = ref('')
+const failedVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 const formValues = ref<CreativeProposalFormState>(emptyFormState())
 
@@ -69,13 +70,12 @@ async function loadVersion(version: number, discardDirty = false) {
   proposalLoading.value = true
   errorCode.value = ''
   fieldErrors.value = {}
-  resetEditState()
-  selectedVersion.value = version
   try {
     const proposal = await getCreativeProposal(String(route.params.id), version)
     applyProposal(proposal)
   } catch (error) {
     errorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    failedVersion.value = version
   } finally {
     proposalLoading.value = false
   }
@@ -102,10 +102,12 @@ function applyProposal(proposal: CreativeProposal) {
   selectedVersion.value = proposal.version
   formValues.value = toFormState(proposal)
   upsertSummary(proposal)
+  saved.value = false
   dirty.value = false
   staleConflict.value = false
   confirmApproval.value = false
   pendingVersion.value = null
+  failedVersion.value = null
 }
 
 function onDirtyChange(isDirty: boolean) {
@@ -241,6 +243,14 @@ function toFormState(proposal: CreativeProposal): CreativeProposalFormState {
 function projectID(): string {
   return project.value?.id ?? String(route.params.id)
 }
+
+async function retryFailedVersion() {
+  if (failedVersion.value === null) {
+    await loadWorkspace()
+    return
+  }
+  await loadVersion(failedVersion.value, true)
+}
 </script>
 
 <template>
@@ -322,7 +332,7 @@ function projectID(): string {
           >
             {{ t('creativeProposal.states.loadingVersion') }}
           </p>
-          <template v-else-if="selectedProposal">
+          <template v-if="selectedProposal">
             <div class="proposal-meta">
               <p>
                 {{ t('creativeProposal.states.version', { value: selectedProposal.version }) }} ·
@@ -382,10 +392,18 @@ function projectID(): string {
               </button>
             </div>
             <div
-              v-else-if="errorCode"
+              v-if="errorCode && (!staleConflict || errorCode !== 'STALE_REVISION')"
               class="notice error"
             >
-              {{ t(`creativeProposal.errors.${errorCode}`) }}
+              <p>{{ t(`creativeProposal.errors.${errorCode}`) }}</p>
+              <button
+                class="secondary-button"
+                data-testid="retry-proposal-load"
+                type="button"
+                @click="retryFailedVersion"
+              >
+                {{ t('projects.actions.retry') }}
+              </button>
             </div>
             <div
               v-if="isReadOnly"
@@ -442,6 +460,20 @@ function projectID(): string {
               @submit="submit"
             />
           </template>
+          <div
+            v-else-if="errorCode"
+            class="notice error"
+          >
+            <p>{{ t(`creativeProposal.errors.${errorCode}`) }}</p>
+            <button
+              class="secondary-button"
+              data-testid="retry-proposal-load"
+              type="button"
+              @click="retryFailedVersion"
+            >
+              {{ t('projects.actions.retry') }}
+            </button>
+          </div>
         </section>
       </div>
     </template>
