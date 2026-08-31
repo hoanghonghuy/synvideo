@@ -104,7 +104,7 @@ func (c *Content) normalizeAndValidateFields(fields map[string]string) {
 
 			if trimmedKey == "" {
 				fields["sections["+strconv.Itoa(idx)+"].key"] = "required"
-			} else if len(trimmedKey) > 64 {
+			} else if len([]rune(trimmedKey)) > 64 {
 				fields["sections["+strconv.Itoa(idx)+"].key"] = "max_length"
 			} else if !keyRegex.MatchString(trimmedKey) {
 				fields["sections["+strconv.Itoa(idx)+"].key"] = "invalid_format"
@@ -116,7 +116,7 @@ func (c *Content) normalizeAndValidateFields(fields map[string]string) {
 
 			trimmedHeading := strings.TrimSpace(s.Heading)
 			c.Sections[idx].Heading = trimmedHeading
-			if len(trimmedHeading) > 300 {
+			if len([]rune(trimmedHeading)) > 300 {
 				fields["sections["+strconv.Itoa(idx)+"].heading"] = "max_length"
 			}
 
@@ -124,7 +124,7 @@ func (c *Content) normalizeAndValidateFields(fields map[string]string) {
 			c.Sections[idx].Body = trimmedBody
 			if trimmedBody == "" {
 				fields["sections["+strconv.Itoa(idx)+"].body"] = "required"
-			} else if len(trimmedBody) > 20000 {
+			} else if len([]rune(trimmedBody)) > 20000 {
 				fields["sections["+strconv.Itoa(idx)+"].body"] = "max_length"
 			}
 		}
@@ -137,7 +137,7 @@ func (c *Content) normalizeAndValidateFields(fields map[string]string) {
 	}
 
 	c.Notes = strings.TrimSpace(c.Notes)
-	if len(c.Notes) > 10000 {
+	if len([]rune(c.Notes)) > 10000 {
 		fields["notes"] = "max_length"
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
 
@@ -330,6 +331,86 @@ func TestScriptRepositoryIntegration(t *testing.T) {
 		}
 		if supersededCount != concurrency-1 {
 			t.Fatalf("expected %d superseded drafts, got %d", concurrency-1, supersededCount)
+		}
+	})
+
+	t.Run("10. Multibyte Unicode character persistence roundtrip", func(t *testing.T) {
+		ownerU := uuid.New()
+		projectU, err := projectRepo.Create(context.Background(), ownerU, project.CreateInput{
+			Title:         "Dự án kịch bản tiếng Việt",
+			ContentFormat: project.ContentFormatShort,
+			AspectRatio:   project.AspectRatio9x16,
+			Locale:        project.LocaleVI,
+		})
+		if err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+
+		propU, err := proposalRepo.CreateDraft(context.Background(), ownerU, projectU.ID, creativeproposal.CreateDraftInput{
+			SourceBriefRevision: 1,
+			Content:             validProposalContent("Đề xuất video ngắn tiếng Việt"),
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		propUApproved, err := proposalRepo.Approve(context.Background(), ownerU, projectU.ID, propU.Version, propU.Revision)
+		if err != nil {
+			t.Fatalf("approve proposal: %v", err)
+		}
+
+		// Create heading with 300 Vietnamese runes (e.g. 600+ UTF-8 bytes)
+		unicodeHeadingRunes := make([]rune, 300)
+		for i := range unicodeHeadingRunes {
+			unicodeHeadingRunes[i] = 'ế'
+		}
+		unicodeHeading := string(unicodeHeadingRunes)
+
+		// Create body with 5000 Vietnamese runes (e.g. 15000 UTF-8 bytes)
+		unicodeBodyRunes := make([]rune, 5000)
+		for i := range unicodeBodyRunes {
+			unicodeBodyRunes[i] = 'ả'
+		}
+		unicodeBody := string(unicodeBodyRunes)
+
+		// Create notes with 4000 Vietnamese runes (e.g. 12000 UTF-8 bytes)
+		unicodeNotesRunes := make([]rune, 4000)
+		for i := range unicodeNotesRunes {
+			unicodeNotesRunes[i] = 'ộ'
+		}
+		unicodeNotes := string(unicodeNotesRunes)
+
+		content := script.Content{
+			Sections: []script.Section{
+				{
+					Key:     "phan-mo-dau",
+					Heading: unicodeHeading,
+					Body:    unicodeBody,
+				},
+			},
+			Notes: unicodeNotes,
+		}
+
+		created, err := repo.CreateDraft(context.Background(), ownerU, projectU.ID, script.CreateDraftInput{
+			SourceProposalVersion: propUApproved.Version,
+			Content:               content,
+		})
+		if err != nil {
+			t.Fatalf("create unicode script draft: %v", err)
+		}
+
+		fetched, err := repo.GetByVersion(context.Background(), ownerU, projectU.ID, created.Version)
+		if err != nil {
+			t.Fatalf("get unicode script: %v", err)
+		}
+
+		if len([]rune(fetched.Sections[0].Heading)) != 300 || fetched.Sections[0].Heading != unicodeHeading {
+			t.Fatalf("heading unicode runes mismatch: len=%d", len([]rune(fetched.Sections[0].Heading)))
+		}
+		if len([]rune(fetched.Sections[0].Body)) != 5000 || fetched.Sections[0].Body != unicodeBody {
+			t.Fatalf("body unicode runes mismatch: len=%d", len([]rune(fetched.Sections[0].Body)))
+		}
+		if len([]rune(fetched.Notes)) != 4000 || fetched.Notes != unicodeNotes {
+			t.Fatalf("notes unicode runes mismatch: len=%d", len([]rune(fetched.Notes)))
 		}
 	})
 }

@@ -29,6 +29,14 @@ func validContent() script.Content {
 	}
 }
 
+func repeatRunes(r rune, count int) string {
+	runes := make([]rune, count)
+	for i := range runes {
+		runes[i] = r
+	}
+	return string(runes)
+}
+
 func TestContentValidation(t *testing.T) {
 	t.Run("valid content", func(t *testing.T) {
 		content := validContent()
@@ -105,12 +113,26 @@ func TestContentValidation(t *testing.T) {
 			t.Fatalf("expected error for empty section body")
 		}
 
-		// Body > 20000 chars
+		// Body > 20000 chars (ASCII)
 		content = validContent()
 		content.Sections[0].Body = strings.Repeat("a", 20001)
 		err = content.NormalizeAndValidate()
 		if err == nil {
 			t.Fatalf("expected error for section body >20000 chars")
+		}
+
+		// Body exactly 20000 multibyte characters (e.g. Vietnamese 'ế' = 3 bytes, total 60000 bytes) -> must pass
+		content = validContent()
+		content.Sections[0].Body = repeatRunes('ế', 20000)
+		if err := content.NormalizeAndValidate(); err != nil {
+			t.Fatalf("expected exactly 20000 multibyte runes body to pass, got error: %v", err)
+		}
+
+		// Body 20001 multibyte characters -> must fail
+		content = validContent()
+		content.Sections[0].Body = repeatRunes('ế', 20001)
+		if err := content.NormalizeAndValidate(); err == nil {
+			t.Fatalf("expected 20001 multibyte runes body to fail")
 		}
 	})
 
@@ -120,6 +142,20 @@ func TestContentValidation(t *testing.T) {
 		err := content.NormalizeAndValidate()
 		if err == nil {
 			t.Fatalf("expected error for heading >300 chars")
+		}
+
+		// Heading exactly 300 multibyte characters -> must pass
+		content = validContent()
+		content.Sections[0].Heading = repeatRunes('đ', 300)
+		if err := content.NormalizeAndValidate(); err != nil {
+			t.Fatalf("expected exactly 300 multibyte runes heading to pass, got error: %v", err)
+		}
+
+		// Heading 301 multibyte characters -> must fail
+		content = validContent()
+		content.Sections[0].Heading = repeatRunes('đ', 301)
+		if err := content.NormalizeAndValidate(); err == nil {
+			t.Fatalf("expected 301 multibyte runes heading to fail")
 		}
 	})
 
@@ -144,6 +180,20 @@ func TestContentValidation(t *testing.T) {
 		content.Notes = strings.Repeat("n", 10001)
 		if err := content.NormalizeAndValidate(); err == nil {
 			t.Fatalf("expected error for notes >10000 chars")
+		}
+
+		// Notes exactly 10000 multibyte characters -> must pass
+		content = validContent()
+		content.Notes = repeatRunes('ạ', 10000)
+		if err := content.NormalizeAndValidate(); err != nil {
+			t.Fatalf("expected exactly 10000 multibyte runes notes to pass, got error: %v", err)
+		}
+
+		// Notes 10001 multibyte characters -> must fail
+		content = validContent()
+		content.Notes = repeatRunes('ạ', 10001)
+		if err := content.NormalizeAndValidate(); err == nil {
+			t.Fatalf("expected 10001 multibyte runes notes to fail")
 		}
 	})
 }
