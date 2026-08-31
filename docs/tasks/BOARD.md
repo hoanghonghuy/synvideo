@@ -16,27 +16,50 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
-| TASK-008 | AI Proposal frontend workspace | READY | Issue #14. Owns Proposal web feature + minimal route/i18n/navigation; TASK-006 is now merged, so final real backend smoke can run when implementation is ready. |
-| TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Async/durable integration gate after TASK-006/007/008: generation job -> validated candidate -> persist draft -> frontend status -> approve. |
+| TASK-008 | AI Proposal frontend workspace | IN_PROGRESS | Issue #14. Canonical branch `feature/TASK-008-ai-proposal-web` exists as claim/lock; owner must sync latest `develop` before implementation. |
+| TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Requires TASK-008 + TASK-010 accepted; consumes durable jobs rather than implementing another queue. |
+| TASK-010 | Durable job execution foundation | READY | Issue #18. Owns generic PostgreSQL job/lease/retry executor + migration `0004`; branch `feature/TASK-010-durable-job-foundation`. |
+| TASK-011 | Script domain, persistence and approval API | READY | Issue #19. Starts Stage 5–6 Script persistence from approved Proposal + migration `0005`; branch `feature/TASK-011-script-persistence`. |
 
-## Active parallel wave — WAVE-F1-B
+## Active parallel wave — WAVE-F1-C
 Frozen contracts:
 - `docs/contracts/AI_PROPOSAL_V1.md`
-- `docs/contracts/AI_PROPOSAL_GENERATION_V1.md`
+- `docs/contracts/JOB_EXECUTION_V1.md`
+- `docs/contracts/SCRIPT_V1.md`
 
-Current wave state:
-- Dev A — TASK-006: DONE via PR #17.
-- Dev B — TASK-007: DONE via PR #16.
-- Dev C — TASK-008: READY / independent frontend workspace; TASK-006 backend integration gate is available.
+Current three implementation slots:
+- Dev A — TASK-008: `IN_PROGRESS`, Proposal frontend workspace.
+- Dev B — TASK-010: `READY`, durable job execution foundation.
+- Dev C — TASK-011: `READY`, Script persistence/approval foundation.
 
 Isolation / merge rules:
-- TASK-006 and TASK-007 are accepted and merged.
-- TASK-008 develops against the frozen Proposal HTTP/resource contract and may run its final real backend smoke against merged TASK-006.
-- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> async generation-job HTTP/status -> frontend Generate/Regenerate. It stays BLOCKED until TASK-008 is accepted and PM freezes the job contract.
-- ADR 0005 forbids treating provider generation as a long blocking HTTP request; TASK-009 must use an explicit job boundary.
-- Completing TASK-009 proves workflow integration. Do not call AI Proposal production-complete unless a live provider/BYOK capability is also accepted; deterministic fakes are for tests only.
+- TASK-008 owns Proposal frontend only; no backend edits.
+- TASK-010 owns `jobs/**`, job repository and migration `0004`; no Proposal/Script semantics or public generic job API.
+- TASK-011 owns Script backend + migration `0005`; no jobs/frontend/provider generation work.
+- TASK-008, TASK-010 and TASK-011 are merge-order independent by primary write surface.
+- TASK-009 becomes eligible only after TASK-008 and TASK-010 are accepted and PM freezes its feature-specific generation-job request/payload/result contract.
+- TASK-011 consumes already accepted Proposal approval semantics; it does not depend on live AI Proposal generation.
+- ADR 0005 forbids long provider calls inside blocking HTTP requests; TASK-009 must use TASK-010 durable jobs.
+- AI Proposal is not production-complete until a live provider/BYOK capability is accepted; deterministic fakes remain test-only.
 
-See `docs/tasks/WAVE_F1_B.md` for the wave integration plan.
+See `docs/tasks/WAVE_F1_C.md` for migration ownership and integration gates.
+
+## Product progress checkpoint
+Accepted durable product capabilities currently cover:
+- runnable technical foundation and CI/local infrastructure;
+- Project persistence and owner boundary;
+- creator-facing Creative Brief persistence/workspace;
+- provider-neutral text-generation capability boundary;
+- AI Proposal persistence/versioning/approval backend;
+- AI Proposal provider-neutral generation engine.
+
+Still incomplete before the Proposal stage is creator-usable end to end:
+- TASK-008 Proposal frontend;
+- TASK-010 durable async execution;
+- TASK-009 generation-job integration;
+- live provider/BYOK capability.
+
+Downstream Creative Workflow stages after Proposal remain substantial: Script generation/frontend, Scene Plan, media/audio acquisition/generation, Scene Editor, render/export and publishing/channel management.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
