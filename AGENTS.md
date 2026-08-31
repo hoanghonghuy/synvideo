@@ -20,10 +20,10 @@ See `docs/engineering/CONTINUE_PROTOCOL.md` only when the continuation state nee
 ## Coding workflow
 1. Start from the latest `origin/develop` when taking a new task.
 2. Read `docs/tasks/BOARD.md` and select only a `READY` task whose dependencies are satisfied.
-3. Before claiming it, fetch remote branches and `git worktree` state; confirm the task's canonical remote branch does not already exist, has no active PR, and is not already represented by another local task worktree.
-4. For implementation, **one task must use one dedicated Git worktree**. The shared/control checkout stays on `develop` while concurrent agents are active. Never use `git switch` in that shared checkout to move between concurrent tasks.
-5. Create the dedicated task worktree/branch from latest `origin/develop`, then atomically create the canonical remote task branch with create-if-absent semantics as the claim/lock. A plain push of the same base SHA is not a sufficient concurrency lock. If the atomic claim loses a race, remove only the just-created empty local worktree/branch and select another eligible task.
-6. After a successful claim, do all edits, tests, commits, rebases and review fixes inside that task worktree. Read only the files explicitly referenced by that task.
+3. Before claiming it, fetch remote branches and `git worktree` state; confirm the task's canonical remote branch does not already exist, has no active PR, and is not already represented by another local task worktree/branch.
+4. Atomically create the canonical **remote** task branch at the selected `origin/develop` SHA using GitHub create-ref/create-branch fail-if-exists semantics. A plain same-SHA `git push` is not a sufficient concurrency lock. If create-ref loses a race, do not work on or alter that branch; select another eligible task.
+5. After the remote claim succeeds, create/attach a **dedicated Git worktree** for that canonical branch. The shared/control checkout stays on `develop` while concurrent agents are active. Never use `git switch` in that shared checkout to move between concurrent tasks.
+6. After a successful claim/worktree setup, do all edits, tests, commits, rebases and review fixes inside that task worktree. Read only the files explicitly referenced by that task.
 7. Follow `docs/engineering/TDD_PROTOCOL.md`: RED -> GREEN -> REFACTOR for behavior changes, with meaningful regression coverage.
 8. Respect the task's declared write paths/integration contract. For parallel work follow `docs/engineering/PARALLEL_WORK_PROTOCOL.md`.
 9. Implement only the task scope. Record unrelated findings instead of expanding scope.
@@ -50,7 +50,7 @@ Never copy/adapt source unless its current license has been verified and the tas
 ## Skills
 Use a skill only when its description matches the work; open the `SKILL.md` then follow only the references it names.
 - `synvideo-continue`: determine and execute the next valid workflow action from repo/PR/issue state after a generic continuation command.
-- `synvideo-task-worker`: implement one READY task end-to-end using TDD, atomic claiming and a dedicated worktree.
+- `synvideo-task-worker`: implement one READY task end-to-end using TDD, atomic remote claiming and a dedicated worktree.
 - `synvideo-wave-planner`: PM planning for a small batch of independent parallel tasks with frozen contracts, path/worktree ownership and merge order.
 - `synvideo-code-review`: Team Lead review of a PR/diff against requirements and quality gates.
 - `synvideo-open-source-research`: research reuse candidates before building a subsystem.
