@@ -16,17 +16,17 @@ The Script implementation itself is accepted on reviewed head `6fb2910`:
 - real PostgreSQL concurrency coverage remains present;
 - CI #110 is green.
 
-After TASK-010 / PR #21 merged into `develop` as `f731f4b9...`, GitHub reports PR #22 `mergeable: false` because both tasks touch shared backend composition/test hotspots.
+TASK-010 / PR #21 has since merged into `develop` as `f731f4b9...`, followed by PM control-plane commits. GitHub currently reports PR #22 as mergeable, but the branch still has an old base SHA and has not run CI against the latest combined `develop` state.
 
 Required action on the same dedicated TASK-011 worktree:
 1. fetch latest `origin/develop`;
 2. rebase or merge latest `develop` into the same branch;
-3. resolve only genuine shared-file conflicts, preserving both accepted TASK-010 jobs wiring and TASK-011 Script wiring;
-4. do not change frozen Script semantics unless conflict resolution requires it;
+3. preserve both accepted TASK-010 jobs foundation and TASK-011 Script behavior if any shared-file resolution is needed;
+4. do not change frozen Script semantics unless the sync genuinely requires it;
 5. rerun targeted Script tests + full CI;
-6. push the same PR #22 for a final conflict-delta check.
+6. push the same PR #22 for a final latest-base delta check.
 
-This is a sync/conflict-resolution gate, not a new Script product finding.
+This is a latest-base verification gate, not a new Script product finding.
 
 ## Goal
 Start Creative Workflow Stage 5–6 by implementing the durable Script resource from an approved Proposal: versioned editable drafts, optimistic revision concurrency, immutable approval, PostgreSQL persistence and owner-isolated read/edit/approve APIs.
@@ -110,6 +110,6 @@ This task does not generate Script text with AI and does not create Scene Plans.
 - [x] TDD evidence is truthful.
 
 ## Next dependencies
-A later Script generation-engine task may build independently against `SCRIPT_V1`; later integration will persist generated candidates through this task's internal `CreateDraft`. Scene Plan work starts only from an approved Script version.
+TASK-012 Script generation engine can build independently against frozen Script contracts. Later integration will persist generated candidates through this task's internal `CreateDraft`. Scene Plan work starts only from an approved Script version.
 
 Do not self-merge or self-mark DONE.
