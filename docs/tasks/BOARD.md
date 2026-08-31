@@ -18,7 +18,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
 | TASK-008 | AI Proposal frontend workspace | CHANGES_REQUESTED | PR #20. Recoverable version/reload GET failures currently clear dirty state too early and can leave blank/incoherent selection UI; fix under TDD on the same branch/worktree. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Requires TASK-008 + TASK-010 accepted; consumes durable jobs rather than implementing another queue. |
-| TASK-010 | Durable job execution foundation | READY | Issue #18. Owns generic PostgreSQL job/lease/retry executor + migration `0004`; branch `feature/TASK-010-durable-job-foundation`. |
+| TASK-010 | Durable job execution foundation | CHANGES_REQUESTED | PR #21. Needs executor lease heartbeat, exhausted-final-lease terminalization, repository max-attempt enforcement and JSON-object envelope validation. |
 | TASK-011 | Script domain, persistence and approval API | READY | Issue #19. Starts Stage 5–6 Script persistence from approved Proposal + migration `0005`; branch `feature/TASK-011-script-persistence`. |
 
 ## Active parallel wave — WAVE-F1-C
@@ -29,7 +29,7 @@ Frozen contracts:
 
 Current three implementation slots:
 - Dev A — TASK-008: `CHANGES_REQUESTED` on PR #20; preserve dirty/recoverable state across failed version/reload GET and surface coherent visible errors.
-- Dev B — TASK-010: `READY`, durable job execution foundation.
+- Dev B — TASK-010: `CHANGES_REQUESTED` on PR #21; fix long-handler lease heartbeat, final-attempt crash terminalization, durable max-attempt enforcement and JSON-object envelope semantics.
 - Dev C — TASK-011: `READY`, Script persistence/approval foundation.
 
 Isolation / merge rules:
