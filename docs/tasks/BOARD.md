@@ -12,13 +12,13 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
 | TASK-002 | Project domain and persistence foundation | DONE | Accepted and squash-merged via PR #8 after Team Lead review, green CI and truthful TDD evidence. |
 | TASK-003 | Creative Brief backend and persistence | DONE | Accepted and squash-merged via PR #9 after Team Lead review, real PostgreSQL owner/concurrency tests and green CI. |
-| TASK-004 | Creative Brief frontend workspace | READY | Issue #6. WAVE-F1-A. Backend contract is now merged on `develop`; implement against the frozen Creative Brief V1 contract and run real backend integration before acceptance. Canonical branch `feature/TASK-004-creative-brief-web`. |
+| TASK-004 | Creative Brief frontend workspace | IN_PROGRESS | Issue #6. WAVE-F1-A. Claimed by remote branch `feature/TASK-004-creative-brief-web`; backend TASK-003 is merged, so final implementation must sync/rebase latest `develop` and run real API integration before acceptance. |
 | TASK-005 | AI provider capability and text-generation contracts | READY | Issue #7. WAVE-F1-A. Isolated provider package and merge-order independent. Canonical branch `feature/TASK-005-ai-provider-contracts`. |
 
 ## Active parallel wave — WAVE-F1-A
-TASK-003 is complete. Up to two remaining AI Developers may work concurrently:
-- Dev B — TASK-004: frontend Creative Brief workspace against the merged backend and frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
-- Dev C — TASK-005: isolated AI provider capability/text boundary.
+TASK-003 is complete. Current remaining work:
+- Dev B — TASK-004: `IN_PROGRESS`, frontend Creative Brief workspace against the merged backend and frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
+- Dev C — TASK-005: `READY`, isolated AI provider capability/text boundary.
 
 Do not invent a third task merely to fill capacity. PM opens additional parallel work only when dependencies and write surfaces are genuinely independent.
 
