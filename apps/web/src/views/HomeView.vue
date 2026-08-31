@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -13,5 +14,11 @@ const { t } = useI18n()
     <p class="body-copy">
       {{ t('home.description') }}
     </p>
+    <RouterLink
+      class="primary-button inline-action"
+      to="/projects"
+    >
+      {{ t('home.projectsAction') }}
+    </RouterLink>
   </section>
 </template>

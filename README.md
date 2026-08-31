@@ -35,6 +35,12 @@ Start local infrastructure:
 docker compose -f infra/docker-compose.yml up -d
 ```
 
+Apply database migrations:
+
+```sh
+make migrate
+```
+
 Start the frontend:
 
 ```sh
@@ -45,6 +51,7 @@ Start the backend API:
 
 ```sh
 cd apps/api
+set -a; . ../../.env.example; set +a
 go run ./cmd/api
 ```
 
@@ -56,6 +63,8 @@ The frontend runs on Vite's default port unless overridden by Vite CLI options. 
 Development-only infrastructure defaults are documented in `.env.example`.
 
 Local object storage uses SeaweedFS `4.44` as a development-only S3-compatible endpoint on `http://localhost:8333`. MinIO Community Edition is intentionally not used for this foundation because its public repository is no longer maintained; production storage remains provider-neutral and should be selected by a later task.
+
+Project routes use `SYNVIDEO_LOCAL_ACTOR_ID` only in `development` and `test`. Production rejects that local actor fallback so project data is not accidentally exposed before a real authentication task exists.
 
 ## Verification
 
@@ -69,9 +78,10 @@ Backend:
 
 ```sh
 cd apps/api
+SYNVIDEO_DATABASE_URL=postgres://synvideo:synvideo_dev_password@localhost:5432/synvideo?sslmode=disable go run ./cmd/migrate up
 test -z "$(gofmt -l .)"
 go vet ./...
-go test ./...
+SYNVIDEO_DATABASE_URL=postgres://synvideo:synvideo_dev_password@localhost:5432/synvideo?sslmode=disable SYNVIDEO_TEST_DATABASE_URL=postgres://synvideo:synvideo_dev_password@localhost:5432/synvideo?sslmode=disable go test ./...
 go build ./cmd/api
 ```
 
