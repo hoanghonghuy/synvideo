@@ -102,7 +102,6 @@ async function submit(payload: CreativeBriefPayload) {
   errorCode.value = ''
   fieldErrors.value = {}
   saved.value = false
-  dirty.value = false
   staleConflict.value = false
   try {
     const body =

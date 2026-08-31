@@ -195,9 +195,10 @@ describe('CreativeBriefView', () => {
     expect((wrapper.find('[name="source_text"]').element as HTMLTextAreaElement).value).toBe('   ')
     expect((wrapper.find('[name="objective"]').element as HTMLInputElement).value).toBe('Muc tieu giu lai')
     expect(wrapper.text()).toContain('Vui lòng kiểm tra lại')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
   })
 
-  it('preserves entered values after network failure', async () => {
+  it('keeps dirty state after network failure', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
       .mockResolvedValueOnce(
@@ -217,6 +218,33 @@ describe('CreativeBriefView', () => {
 
     expect((wrapper.find('[name="source_text"]').element as HTMLTextAreaElement).value).toBe('Van con o day')
     expect(wrapper.text()).toContain('Không thể kết nối máy chủ')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
+  })
+
+  it('keeps dirty state after stale revision failure', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse(existingBrief))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'STALE_REVISION',
+              message: 'Creative brief revision is stale.',
+            },
+          },
+          409,
+        ),
+      )
+
+    const wrapper = await mountCreativeBriefView()
+    await flushPromises()
+
+    await wrapper.find('[name="source_text"]').setValue('Thay doi xung dot')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
   })
 
   it('shows stale conflict state and does not auto-retry overwrite', async () => {
