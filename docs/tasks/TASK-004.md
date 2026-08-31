@@ -1,6 +1,6 @@
 # TASK-004 — Creative Brief frontend workspace
 
-Status: IN_PROGRESS
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-002 accepted
 Integration gate: TASK-003 backend merged before final acceptance — satisfied via PR #9
