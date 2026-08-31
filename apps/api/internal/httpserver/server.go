@@ -10,6 +10,7 @@ import (
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
@@ -25,7 +26,18 @@ type ProjectService interface {
 	Update(ctx context.Context, principal project.Principal, id uuid.UUID, input project.UpdateInput) (project.Project, error)
 }
 
-func New(cfg config.Config, logger *slog.Logger, projectService ProjectService, actorResolver actor.Resolver) *http.Server {
+type CreativeBriefService interface {
+	Get(ctx context.Context, principal project.Principal, projectID uuid.UUID) (creativebrief.CreativeBrief, error)
+	Put(ctx context.Context, principal project.Principal, projectID uuid.UUID, input creativebrief.PutInput) (creativebrief.CreativeBrief, bool, error)
+}
+
+func New(
+	cfg config.Config,
+	logger *slog.Logger,
+	projectService ProjectService,
+	creativeBriefService CreativeBriefService,
+	actorResolver actor.Resolver,
+) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/healthz", healthHandler)
 	mux.HandleFunc("GET /api/v1/readyz", readinessHandler(cfg))
@@ -35,6 +47,11 @@ func New(cfg config.Config, logger *slog.Logger, projectService ProjectService, 
 		mux.HandleFunc("GET /api/v1/projects", handler.list)
 		mux.HandleFunc("GET /api/v1/projects/{id}", handler.get)
 		mux.HandleFunc("PATCH /api/v1/projects/{id}", handler.update)
+	}
+	if creativeBriefService != nil && actorResolver != nil {
+		handler := creativeBriefHandler{service: creativeBriefService, actorResolver: actorResolver}
+		mux.HandleFunc("GET /api/v1/projects/{id}/creative-brief", handler.get)
+		mux.HandleFunc("PUT /api/v1/projects/{id}/creative-brief", handler.put)
 	}
 
 	return &http.Server{
