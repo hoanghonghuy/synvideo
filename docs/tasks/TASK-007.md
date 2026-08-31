@@ -1,11 +1,19 @@
 # TASK-007 — AI Proposal generation engine
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-003 and TASK-005 accepted
 Wave: WAVE-F1-B
 Branch: `feature/TASK-007-ai-proposal-generation`
 Base: `develop`
+Active PR: #16
+
+## Current review gate
+Team Lead review found one MAJOR contract bug plus a CI/process gate:
+- cancellation/deadline that occurs while `GenerateText` is in flight is currently remapped to `GENERATION_PROVIDER_FAILED` instead of propagating `context.Canceled` / `context.DeadlineExceeded`;
+- PR #16 was opened against `main`; Team Lead retargeted it to `develop`, and the corrected-base head needs a new CI run after the fix push.
+
+Required TDD fix: add a RED in-flight cancellation/deadline regression, preserve standard context errors before provider-error mapping, update truthful TDD evidence, sync latest `origin/develop`, push the same branch and rerun green CI.
 
 ## Goal
 Implement a provider-neutral application engine that transforms accepted Project + current Creative Brief context into a strictly validated AI Proposal candidate using the existing text-generation provider boundary.
@@ -33,7 +41,7 @@ This task does not persist Proposal versions and does not add HTTP routes. TASK-
 None by default.
 
 ## Reserved / do not touch
-- `apps/api/internal/creativeproposal/**`, Proposal migration/repository/API — TASK-006.
+- `apps/api/internal/creativeproposal/**`, Proposal migration/repository/API — TASK-006 accepted and merged.
 - `apps/api/internal/httpserver/**` and `apps/api/cmd/api/main.go`.
 - `apps/web/**` — TASK-008.
 - provider registry/error implementation unless a genuine blocker is escalated to Team Lead.
@@ -65,7 +73,7 @@ Start RED for at least:
 3. malformed JSON -> `GENERATION_INVALID_OUTPUT`;
 4. structurally valid but contract-invalid candidate -> `GENERATION_INVALID_OUTPUT`;
 5. provider unavailable/failure -> stable safe generation error without raw-secret leakage;
-6. context cancellation/deadline propagates;
+6. context cancellation/deadline propagates, including cancellation/deadline while the provider call is in flight;
 7. source Project/Creative Brief inputs are not mutated;
 8. long-form duration/content format is not silently converted to short-form assumptions.
 
@@ -74,7 +82,7 @@ Start RED for at least:
 - [ ] Output matches frozen Proposal editable schema and carries source brief revision.
 - [ ] Invalid/malformed model output never becomes a persisted-looking successful candidate.
 - [ ] Prompt behavior distinguishes creator facts from AI recommendations.
-- [ ] Stable safe errors and cancellation behavior are tested.
+- [ ] Stable safe errors and in-flight cancellation/deadline behavior are tested.
 - [ ] No persistence/router/frontend/shared composition edits.
 - [ ] TDD evidence truthful; `-race`/backend/full verification green where applicable.
 
@@ -83,9 +91,10 @@ At minimum:
 - targeted generation tests;
 - `go test -count=1 -race ./internal/proposalgeneration/...`;
 - `gofmt`, `go vet ./...`, `go test ./...`, backend build;
-- full repository verification and `git diff --check`.
+- full repository verification and `git diff --check`;
+- PR CI on base `develop`.
 
 ## Merge order
-Merge-order independent from TASK-006 and TASK-008. TASK-009 consumes the accepted engine after this task merges.
+Merge-order independent from TASK-006 and TASK-008. TASK-006 is already merged; TASK-009 consumes this engine only after TASK-007 is accepted.
 
 Do not self-merge or self-mark DONE.
