@@ -101,6 +101,35 @@ describe('CreativeBriefView', () => {
     expect(wrapper.text()).toContain('Đã lưu')
   })
 
+  it('clears saved indicator after the user edits again', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { code: 'creative_brief_not_found', message: 'Creative brief was not found.' } },
+          404,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...existingBrief, revision: 1, source_text: 'Y tuong moi' }, 201),
+      )
+
+    const wrapper = await mountCreativeBriefView()
+    await flushPromises()
+
+    await wrapper.find('[name="source_text"]').setValue('Y tuong moi')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Đã lưu Creative Brief.')
+
+    await wrapper.find('[name="source_text"]').setValue('Chinh sua sau khi luu')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Đã lưu Creative Brief.')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
+  })
+
   it('sends current revision on update and stores the incremented revision', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
@@ -254,39 +283,6 @@ describe('CreativeBriefView', () => {
 
     expect((wrapper.find('[name="source_text"]').element as HTMLTextAreaElement).value).toBe('Phien ban moi nhat')
     expect(wrapper.text()).not.toContain('Phiên bản trên máy chủ đã thay đổi')
-  })
-})
-
-describe('Creative Brief route entry', () => {
-  it('opens from project detail via navigation link', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(project))
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { error: { code: 'creative_brief_not_found', message: 'Creative brief was not found.' } },
-          404,
-        ),
-      )
-
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/projects/:id', component: { template: '<RouterLink :to="`/projects/${$route.params.id}/creative-brief`">Brief</RouterLink>' } },
-        { path: '/projects/:id/creative-brief', component: CreativeBriefView },
-      ],
-    })
-    router.push(`/projects/${projectId}`)
-    await router.isReady()
-
-    const detailWrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, i18n] } })
-    await flushPromises()
-
-    await detailWrapper.find('a').trigger('click')
-    await flushPromises()
-    await flushPromises()
-
-    expect(router.currentRoute.value.path).toBe(`/projects/${projectId}/creative-brief`)
-    expect(detailWrapper.text()).toContain('Bản nháp mới')
   })
 })
 

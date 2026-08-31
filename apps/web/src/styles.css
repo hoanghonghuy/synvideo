@@ -176,6 +176,12 @@ h1 {
   color: #6b4f12;
 }
 
+.notice.info {
+  border-color: #b8c8e4;
+  background: #f4f8ff;
+  color: #1f3f68;
+}
+
 .workspace-links {
   margin: 16px 0 0;
 }

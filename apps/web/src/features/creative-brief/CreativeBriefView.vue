@@ -21,6 +21,7 @@ const revision = ref<number | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
 const saved = ref(false)
+const dirty = ref(false)
 const isNewDraft = ref(false)
 const staleConflict = ref(false)
 const errorCode = ref('')
@@ -39,6 +40,7 @@ async function loadWorkspace() {
   loading.value = true
   errorCode.value = ''
   saved.value = false
+  dirty.value = false
   staleConflict.value = false
   try {
     project.value = await getProject(String(route.params.id))
@@ -85,6 +87,14 @@ async function reloadLatest() {
 function applyBrief(brief: CreativeBrief) {
   revision.value = brief.revision
   formValues.value = toFormState(brief)
+  dirty.value = false
+}
+
+function onDirtyChange(isDirty: boolean) {
+  dirty.value = isDirty
+  if (isDirty) {
+    saved.value = false
+  }
 }
 
 async function submit(payload: CreativeBriefPayload) {
@@ -92,6 +102,7 @@ async function submit(payload: CreativeBriefPayload) {
   errorCode.value = ''
   fieldErrors.value = {}
   saved.value = false
+  dirty.value = false
   staleConflict.value = false
   try {
     const body =
@@ -195,10 +206,16 @@ function toFormState(brief: CreativeBrief): CreativeBriefFormState {
       </p>
 
       <div
-        v-if="saved"
+        v-if="saved && !dirty"
         class="notice success"
       >
         {{ t('creativeBrief.states.saved') }}
+      </div>
+      <div
+        v-else-if="dirty"
+        class="notice info"
+      >
+        {{ t('creativeBrief.states.unsavedChanges') }}
       </div>
       <div
         v-if="staleConflict"
@@ -227,6 +244,7 @@ function toFormState(brief: CreativeBrief): CreativeBriefFormState {
         :submit-label="t('creativeBrief.actions.save')"
         :field-errors="fieldErrors"
         :disabled="loading"
+        @dirty-change="onDirtyChange"
         @submit="submit"
       />
     </template>

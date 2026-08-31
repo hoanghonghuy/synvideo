@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { i18n } from '@/locales'
+import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import ProjectDetailView from './ProjectDetailView.vue'
 
 const fetchMock = vi.fn()
@@ -55,6 +56,44 @@ describe('ProjectDetailView', () => {
     const hardCodedVietnameseDate = new Date(project.updated_at).toLocaleString('vi-VN')
     expect(wrapper.text()).toContain(expectedEnglishDate)
     expect(wrapper.text()).not.toContain(hardCodedVietnameseDate)
+  })
+
+  it('renders creative brief link and navigates to the workspace route', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { code: 'creative_brief_not_found', message: 'Creative brief was not found.' } },
+          404,
+        ),
+      )
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/projects', component: { template: '<div />' } },
+        { path: '/projects/:id', component: ProjectDetailView },
+        { path: '/projects/:id/creative-brief', component: CreativeBriefView },
+      ],
+    })
+    router.push(`/projects/${project.id}`)
+    await router.isReady()
+
+    const wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, i18n] } })
+    await flushPromises()
+
+    const link = wrapper.find('.workspace-links a')
+    expect(link.exists()).toBe(true)
+    expect(link.text()).toContain('Mở Creative Brief')
+    expect(link.attributes('href')).toBe(`/projects/${project.id}/creative-brief`)
+
+    await link.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe(`/projects/${project.id}/creative-brief`)
+    expect(wrapper.text()).toContain('Bản nháp mới')
   })
 })
 

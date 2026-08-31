@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { CreativeBriefPayload, DistributionTarget } from './api'
@@ -19,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [CreativeBriefPayload]
+  'dirty-change': [boolean]
 }>()
 
 const { t } = useI18n()
@@ -37,6 +38,8 @@ const form = reactive({
   mustAvoidText: '',
 })
 
+const baseline = ref('')
+
 watch(
   () => props.initialValues,
   (values) => {
@@ -49,8 +52,18 @@ watch(
     form.callToAction = values.call_to_action
     form.mustIncludeText = values.mustIncludeText
     form.mustAvoidText = values.mustAvoidText
+    baseline.value = serializeFormState()
+    emit('dirty-change', false)
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  form,
+  () => {
+    emit('dirty-change', serializeFormState() !== baseline.value)
+  },
+  { deep: true },
 )
 
 const isTargetSelected = computed(() => {
@@ -77,7 +90,11 @@ function splitLines(value: string): string[] {
 }
 
 function onSubmit() {
-  emit('submit', {
+  emit('submit', buildPayload())
+}
+
+function buildPayload(): CreativeBriefPayload {
+  return {
     source_text: form.sourceText,
     target_audience: form.targetAudience,
     objective: form.objective,
@@ -87,7 +104,11 @@ function onSubmit() {
     call_to_action: form.callToAction,
     must_include: splitLines(form.mustIncludeText),
     must_avoid: splitLines(form.mustAvoidText),
-  })
+  }
+}
+
+function serializeFormState(): string {
+  return JSON.stringify(buildPayload())
 }
 </script>
 

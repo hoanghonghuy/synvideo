@@ -123,6 +123,7 @@ export default {
       newDraft: 'Bản nháp mới',
       existing: 'Creative Brief hiện tại',
       saved: 'Đã lưu Creative Brief.',
+      unsavedChanges: 'Có thay đổi chưa lưu.',
       revision: 'Phiên bản {value}',
       staleConflict: 'Phiên bản trên máy chủ đã thay đổi. Tải lại dữ liệu mới nhất trước khi lưu tiếp.',
     },
