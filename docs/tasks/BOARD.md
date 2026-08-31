@@ -19,7 +19,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-008 | AI Proposal frontend workspace | CHANGES_REQUESTED | PR #20 head `41a6b7f`. Earlier state/retry blockers fixed; remaining list-load failure is falsely rendered as empty Proposal history instead of error/retry. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. TASK-010 is now accepted; remaining dependency is TASK-008 acceptance plus PM final integration-contract/live-provider gate. |
 | TASK-010 | Durable job execution foundation | DONE | Accepted/squash-merged PR #21 as `f731f4b9...`; lease heartbeat/loss, exhausted attempts, retry cap, JSON-object boundaries and real PostgreSQL lifecycle coverage accepted; CI #109 green. |
-| TASK-011 | Script domain, persistence and approval API | CHANGES_REQUESTED | PR #22 head `6fb2910` is code-approved/CI #110 green, but must sync latest `develop` after TASK-010 merge and resolve shared backend conflicts before final merge. |
+| TASK-011 | Script domain, persistence and approval API | CHANGES_REQUESTED | PR #22 head `6fb2910` is code-approved/CI #110 green; branch still has an old base SHA and must sync latest `develop` + rerun CI before final merge. |
 | TASK-012 | Script generation engine | READY | Issue #23. Provider-neutral `script_v1` candidate generation against frozen `SCRIPT_GENERATION_V1`; owns only `scriptgeneration/**`. |
 
 ## Active parallel wave — WAVE-F1-D transition
@@ -32,14 +32,14 @@ Frozen contracts:
 Current three implementation slots:
 - Dev A — TASK-008: `CHANGES_REQUESTED` on PR #20; fix Project-success/Proposal-list-failure so it renders recoverable error/retry rather than false empty history.
 - Dev B — TASK-012: `READY`; claim atomically and implement Script generation engine in a new dedicated worktree.
-- Dev C — TASK-011: `CHANGES_REQUESTED` on PR #22; code is accepted, sync latest `develop`, preserve TASK-010 + TASK-011 shared wiring, rerun CI, then final merge check.
+- Dev C — TASK-011: `CHANGES_REQUESTED` on PR #22; code is accepted, sync latest `develop`, preserve TASK-010 + TASK-011 behavior if any shared resolution is needed, rerun CI, then final merge check.
 
 TASK-010's implementation worktree should be cleaned up after confirming the merged commit, before that developer claims TASK-012.
 
 ## Isolation / merge rules
 - **Each implementation slot must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
 - TASK-008 owns Proposal frontend only; no backend edits.
-- TASK-011 owns Script persistence/API + migration `0005`; it must preserve accepted TASK-010 jobs wiring while resolving shared hotspots.
+- TASK-011 owns Script persistence/API + migration `0005`; it must preserve accepted TASK-010 jobs behavior during latest-base sync.
 - TASK-012 owns `apps/api/internal/scriptgeneration/**` only; no persistence/jobs/HTTP/frontend/provider-SDK changes.
 - TASK-009 becomes eligible only after TASK-008 is accepted and PM freezes its feature-specific generation-job request/payload/result contract against accepted TASK-010.
 - TASK-012 is independent from TASK-011 implementation because both build against frozen Script contracts and have disjoint primary write surfaces.
@@ -62,7 +62,7 @@ Still incomplete before the Proposal stage is creator-usable end to end:
 - live provider/BYOK capability.
 
 Script Stage 5–6 is now advancing in parallel:
-- TASK-011 persistence/API is code-approved but awaiting latest-develop conflict sync;
+- TASK-011 persistence/API is code-approved but awaiting latest-`develop` sync + re-CI;
 - TASK-012 generation engine is READY independently.
 
 Downstream work remains substantial: Script frontend/integration, Scene Plan, media/audio acquisition/generation, Scene Editor, render/export and publishing/channel management.
