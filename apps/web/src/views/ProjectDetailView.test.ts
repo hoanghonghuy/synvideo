@@ -10,41 +10,27 @@ const fetchMock = vi.fn()
 beforeEach(() => {
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
+  i18n.global.locale.value = 'vi'
 })
 
 describe('ProjectDetailView', () => {
-  it('renders project detail with localized date and allows updates', async () => {
-    const project = {
-      id: '11111111-1111-4111-8111-111111111111',
-      title: 'Video chi tiet',
-      description: 'Mo ta du an',
-      content_format: 'short',
-      aspect_ratio: '9:16',
-      target_duration_seconds: 60,
-      locale: 'vi',
-      status: 'active',
-      created_at: '2026-08-31T08:00:00Z',
-      updated_at: '2026-08-31T08:30:00Z',
-    }
+  const project = {
+    id: '11111111-1111-4111-8111-111111111111',
+    title: 'Video chi tiet',
+    description: 'Mo ta du an',
+    content_format: 'short',
+    aspect_ratio: '9:16',
+    target_duration_seconds: 60,
+    locale: 'vi',
+    status: 'active',
+    created_at: '2026-08-31T08:00:00Z',
+    updated_at: '2026-08-31T08:30:00Z',
+  }
 
+  it('renders project detail with localized date and allows updates', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(project))
 
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/projects', component: { template: '<div />' } },
-        { path: '/projects/:id', component: ProjectDetailView },
-      ],
-    })
-    router.push('/projects/11111111-1111-4111-8111-111111111111')
-    await router.isReady()
-
-
-    const wrapper = mount(ProjectDetailView, {
-      global: {
-        plugins: [i18n, router],
-      },
-    })
+    const wrapper = await mountDetailView()
 
     await flushPromises()
 
@@ -55,7 +41,40 @@ describe('ProjectDetailView', () => {
       expect.anything(),
     )
   })
+
+  it('formats updated time using the active i18n locale', async () => {
+    i18n.global.setLocaleMessage('en', i18n.global.getLocaleMessage('vi'))
+    i18n.global.locale.value = 'en'
+    fetchMock.mockResolvedValueOnce(jsonResponse(project))
+
+    const wrapper = await mountDetailView()
+
+    await flushPromises()
+
+    const expectedEnglishDate = i18n.global.d(new Date(project.updated_at), 'long')
+    const hardCodedVietnameseDate = new Date(project.updated_at).toLocaleString('vi-VN')
+    expect(wrapper.text()).toContain(expectedEnglishDate)
+    expect(wrapper.text()).not.toContain(hardCodedVietnameseDate)
+  })
 })
+
+async function mountDetailView() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/projects', component: { template: '<div />' } },
+      { path: '/projects/:id', component: ProjectDetailView },
+    ],
+  })
+  router.push('/projects/11111111-1111-4111-8111-111111111111')
+  await router.isReady()
+
+  return mount(ProjectDetailView, {
+    global: {
+      plugins: [i18n, router],
+    },
+  })
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return {

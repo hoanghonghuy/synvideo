@@ -16,7 +16,7 @@ export const datetimeFormats = {
   en: {
     long: {
       year: 'numeric',
-      month: 'numeric',
+      month: 'long',
       day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
@@ -24,7 +24,6 @@ export const datetimeFormats = {
     },
   },
 } as const
-
 
 export const i18n = createI18n({
   legacy: false,
