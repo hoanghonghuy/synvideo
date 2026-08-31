@@ -69,3 +69,16 @@ func TestUpdateInputRejectsInvalidStatus(t *testing.T) {
 		t.Fatalf("expected status invalid error, got %#v", validationErr.Fields)
 	}
 }
+
+func TestUpdateInputRejectsEmpty(t *testing.T) {
+	input := UpdateInput{}
+
+	err := input.NormalizeAndValidate()
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected validation error for empty update, got %T", err)
+	}
+	if validationErr.Fields["body"] != "empty" {
+		t.Fatalf("expected body empty error, got %#v", validationErr.Fields)
+	}
+}

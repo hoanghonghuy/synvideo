@@ -6,8 +6,9 @@ import { useI18n } from 'vue-i18n'
 import { ApiError, getProject, updateProject, type Project, type UpdateProjectPayload } from '@/api/projects'
 import ProjectForm from '@/components/ProjectForm.vue'
 
-const { t } = useI18n()
+const { t, d } = useI18n()
 const route = useRoute()
+
 
 const project = ref<Project | null>(null)
 const loading = ref(true)
@@ -91,8 +92,9 @@ async function submit(payload: UpdateProjectPayload) {
       </p>
       <h1>{{ project.title }}</h1>
       <p class="body-copy">
-        {{ t('projects.detail.updatedAt', { value: new Date(project.updated_at).toLocaleString('vi-VN') }) }}
+        {{ t('projects.detail.updatedAt', { value: d(new Date(project.updated_at), 'long') }) }}
       </p>
+
       <div
         v-if="saved"
         class="notice success"

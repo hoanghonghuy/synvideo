@@ -151,6 +151,26 @@ func TestUpdateProjectEndpoint(t *testing.T) {
 	}
 }
 
+func TestUpdateProjectEndpointRejectsEmptyBody(t *testing.T) {
+	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	repository := newMemoryProjectRepository()
+	service := project.NewService(repository)
+	created, err := service.Create(context.Background(), project.Principal{OwnerID: ownerID}, validCreateInput("Draft"))
+	if err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	server := newProjectTestServer(ownerID, repository)
+
+	response := performRequest(server, http.MethodPatch, "/api/v1/projects/"+created.ID.String(), `{}`)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("validation_failed")) {
+		t.Fatalf("expected validation error envelope, got %s", response.Body.String())
+	}
+}
+
 func newProjectTestServer(ownerID uuid.UUID, repository project.Repository) *http.Server {
 	cfg := config.Config{Addr: ":0", Environment: config.EnvironmentTest}
 	return New(cfg, slog.Default(), project.NewService(repository), fixedResolver{ownerID: ownerID})
@@ -248,6 +268,16 @@ func (r *memoryProjectRepository) Update(_ context.Context, ownerID uuid.UUID, i
 	if !ok || item.OwnerID != ownerID {
 		return project.Project{}, project.ErrNotFound
 	}
+	if input.Title == nil &&
+		input.Description == nil &&
+		input.ContentFormat == nil &&
+		input.AspectRatio == nil &&
+		input.TargetDurationSeconds == nil &&
+		input.Locale == nil &&
+		input.Status == nil {
+		return item, nil
+	}
+
 	if input.Title != nil {
 		item.Title = *input.Title
 	}

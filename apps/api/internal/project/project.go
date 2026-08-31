@@ -62,6 +62,16 @@ type UpdateInput struct {
 	Status                *Status
 }
 
+func (input UpdateInput) hasChanges() bool {
+	return input.Title != nil ||
+		input.Description != nil ||
+		input.ContentFormat != nil ||
+		input.AspectRatio != nil ||
+		input.TargetDurationSeconds != nil ||
+		input.Locale != nil ||
+		input.Status != nil
+}
+
 type ValidationError struct {
 	Fields map[string]string
 }
@@ -118,8 +128,13 @@ func (input *CreateInput) NormalizeAndValidate() error {
 
 func (input *UpdateInput) NormalizeAndValidate() error {
 	fields := map[string]string{}
+	if !input.hasChanges() {
+		fields["body"] = "empty"
+		return ValidationError{Fields: fields}
+	}
 
 	if input.Title != nil {
+
 		title := strings.TrimSpace(*input.Title)
 		input.Title = &title
 		if title == "" {

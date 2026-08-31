@@ -52,6 +52,23 @@ func TestServiceRejectsInvalidCursor(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateRejectsEmptyInput(t *testing.T) {
+	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	service := NewService(&recordingRepository{})
+
+	_, err := service.Update(context.Background(), Principal{OwnerID: ownerID}, uuid.New(), UpdateInput{})
+	if err == nil {
+		t.Fatal("expected empty update input to fail validation")
+	}
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected validation error, got %T", err)
+	}
+	if validationErr.Fields["body"] != "empty" {
+		t.Fatalf("expected body empty field error, got %#v", validationErr.Fields)
+	}
+}
+
 type recordingRepository struct {
 	createdOwnerID uuid.UUID
 }

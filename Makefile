@@ -17,10 +17,10 @@ dev-web:
 	npm run dev:web
 
 dev-api:
-	set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && go run ./cmd/api
+	export PATH="/usr/local/go/bin:$$PATH"; set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && go run ./cmd/api
 
 migrate:
-	set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && go run ./cmd/migrate up
+	export PATH="/usr/local/go/bin:$$PATH"; set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && go run ./cmd/migrate up
 
 infra-config:
 	docker compose -f infra/docker-compose.yml config
@@ -35,7 +35,9 @@ verify-web:
 	npm run verify:web
 
 verify-api:
-	set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" test -z "$$(gofmt -l .)" && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go vet ./... && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go test ./... && go build ./cmd/api
+	export PATH="/usr/local/go/bin:$$PATH"; set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" test -z "$$(gofmt -l .)" && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go vet ./... && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go test ./... && go build -o bin/api ./cmd/api
+
+
 
 verify-infra:
 	docker compose -f infra/docker-compose.yml config

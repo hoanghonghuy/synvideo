@@ -190,8 +190,13 @@ func decodeUpdateProjectRequest(w http.ResponseWriter, r *http.Request) (project
 		writeAPIError(w, project.ValidationError{Fields: map[string]string{"body": "invalid_json"}})
 		return project.UpdateInput{}, false
 	}
+	if len(raw) == 0 {
+		writeAPIError(w, project.ValidationError{Fields: map[string]string{"body": "empty"}})
+		return project.UpdateInput{}, false
+	}
 
 	var input project.UpdateInput
+
 	for field, value := range raw {
 		switch field {
 		case "title":

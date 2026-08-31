@@ -110,7 +110,18 @@ func (r *ProjectRepository) Get(ctx context.Context, ownerID uuid.UUID, id uuid.
 }
 
 func (r *ProjectRepository) Update(ctx context.Context, ownerID uuid.UUID, id uuid.UUID, input project.UpdateInput) (project.Project, error) {
+	if input.Title == nil &&
+		input.Description == nil &&
+		input.ContentFormat == nil &&
+		input.AspectRatio == nil &&
+		input.TargetDurationSeconds == nil &&
+		input.Locale == nil &&
+		input.Status == nil {
+		return r.Get(ctx, ownerID, id)
+	}
+
 	targetSet := input.TargetDurationSeconds != nil
+
 	var targetValue *int
 	if targetSet {
 		targetValue = *input.TargetDurationSeconds

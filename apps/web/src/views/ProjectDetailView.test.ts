@@ -1,0 +1,70 @@
+import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+import { i18n } from '@/locales'
+import ProjectDetailView from './ProjectDetailView.vue'
+
+const fetchMock = vi.fn()
+
+beforeEach(() => {
+  fetchMock.mockReset()
+  vi.stubGlobal('fetch', fetchMock)
+})
+
+describe('ProjectDetailView', () => {
+  it('renders project detail with localized date and allows updates', async () => {
+    const project = {
+      id: '11111111-1111-4111-8111-111111111111',
+      title: 'Video chi tiet',
+      description: 'Mo ta du an',
+      content_format: 'short',
+      aspect_ratio: '9:16',
+      target_duration_seconds: 60,
+      locale: 'vi',
+      status: 'active',
+      created_at: '2026-08-31T08:00:00Z',
+      updated_at: '2026-08-31T08:30:00Z',
+    }
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(project))
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/projects', component: { template: '<div />' } },
+        { path: '/projects/:id', component: ProjectDetailView },
+      ],
+    })
+    router.push('/projects/11111111-1111-4111-8111-111111111111')
+    await router.isReady()
+
+
+    const wrapper = mount(ProjectDetailView, {
+      global: {
+        plugins: [i18n, router],
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Video chi tiet')
+    expect(wrapper.text()).toContain('Cập nhật lần cuối:')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/11111111-1111-4111-8111-111111111111',
+      expect.anything(),
+    )
+  })
+})
+
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  }
+}
+
+function flushPromises() {
+  return new Promise((resolve) => window.setTimeout(resolve))
+}
