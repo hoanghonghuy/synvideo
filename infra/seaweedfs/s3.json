@@ -1,0 +1,18 @@
+{
+  "identities": [
+    {
+      "name": "synvideo-local",
+      "credentials": [
+        {
+          "accessKey": "synvideo",
+          "secretKey": "synvideo_dev_password"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write"
+      ]
+    }
+  ]
+}

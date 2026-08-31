@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Frontend build/test output
+apps/web/dist/
+apps/web/coverage/
+
+# Go build/test output
+apps/api/bin/
+*.test
+coverage.out
+
+# Local environment
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
