@@ -28,19 +28,6 @@ Recommended sibling layout (the exact parent path may vary):
     └── TASK-011/             # feature/TASK-011-...
 ```
 
-A new task can be prepared from the control checkout with the equivalent of:
-
-```bash
-BRANCH='feature/TASK-xxx-name'
-WORKTREE_ROOT="$(dirname "$(git rev-parse --show-toplevel)")/synvideo-worktrees"
-WORKTREE="$WORKTREE_ROOT/TASK-xxx"
-
-git fetch origin
-git worktree add -b "$BRANCH" "$WORKTREE" origin/develop
-```
-
-Do not start implementation yet: the remote claim must succeed first as described below.
-
 If a task branch already legitimately exists for the current agent/task (for example an active PR needing fixes), fetch first and create or locate the dedicated worktree for that existing branch; do not create a replacement branch/PR.
 
 ## Waves
@@ -71,30 +58,51 @@ Contract changes during the wave require PM/Team Lead coordination; one develope
 
 ## Atomic branch-as-lock task claiming
 
-Multiple agents may receive the generic `tiếp tục` command at the same time. The canonical remote task branch is the cross-process/cross-machine task claim, but the claim operation must be **create-if-absent**, not an ordinary ambiguous push.
+Multiple agents may receive the generic `tiếp tục` command at the same time. The canonical remote task branch is the cross-process/cross-machine task claim, but the claim operation must be an **atomic create-if-absent remote ref creation**.
 
-Why: if two agents start from the same `origin/develop` SHA, two ordinary pushes of the same branch name can both appear successful/up-to-date. That is not an exclusive lock.
+Why: if two agents start from the same `origin/develop` SHA, two ordinary pushes of the same branch name can both appear successful/up-to-date. Even an update guard may be bypassed by a no-op same-SHA push. That is not an exclusive lock.
 
-Claim workflow:
+### New-task claim workflow
 
-1. From the control checkout, fetch latest `origin/develop`, remote branches and worktree state.
+1. From the shared/control checkout on `develop`, fetch latest `origin/develop`, remote branches and worktree state.
 2. Consider only `READY` tasks whose canonical remote branch does not already exist and has no active PR.
-3. Ensure no local worktree/local branch already represents another claim for that task.
-4. Create the dedicated task worktree and canonical local task branch from latest `origin/develop`.
-5. **Atomically create the remote branch only if it does not already exist.** Use a Git/GitHub operation with create-if-absent / expected-nonexistent semantics.
-   - A Git CLI example is an explicit nonexistence lease:
+3. Confirm no local branch/worktree already represents that task. If local ownership is ambiguous, stop/report rather than deleting it.
+4. Record `BASE_SHA=$(git rev-parse origin/develop)` and the canonical `BRANCH`.
+5. **Atomically create the remote branch at `BASE_SHA` using GitHub's create-ref operation, which fails if that ref already exists.** Do this before creating the implementation worktree.
 
-     ```bash
-     git -C "$WORKTREE" push \
-       --force-with-lease="refs/heads/$BRANCH:" \
-       -u origin HEAD:"refs/heads/$BRANCH"
-     ```
+   With authenticated GitHub CLI, the equivalent is:
 
-   - A GitHub create-ref API operation that fails when the ref already exists is also valid.
-   - A plain `git push origin "$BRANCH"` is **not sufficient as the concurrency lock** when agents may race from the same base SHA.
-6. If the atomic remote claim fails because the ref already exists, do not work on the task. Since implementation has not started, remove only the just-created empty local worktree/branch, re-fetch state and select another eligible READY task. Never delete/reset the winning remote branch.
-7. After a successful claim, verify the task worktree is on the canonical branch, is clean, and its remote upstream is the claimed branch.
-8. Only then begin TDD/implementation inside that worktree.
+   ```bash
+   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   BASE_SHA=$(git rev-parse origin/develop)
+
+   gh api --method POST "repos/$REPO/git/refs" \
+     -f ref="refs/heads/$BRANCH" \
+     -f sha="$BASE_SHA"
+   ```
+
+   A GitHub connector/API `create ref/branch` operation with the same fail-if-exists semantics is also valid.
+
+   **Do not use plain `git push` as the concurrency claim.** The claim is successful only when this agent actually created the previously absent remote ref.
+6. If create-ref reports that the ref already exists, this agent lost the race. Do not work on, overwrite or delete that branch. Re-fetch state and select another eligible READY task.
+7. After a successful remote claim, fetch that branch and create the dedicated task worktree/local branch tracking it. For example:
+
+   ```bash
+   WORKTREE_ROOT="$(dirname "$(git rev-parse --show-toplevel)")/synvideo-worktrees"
+   WORKTREE="$WORKTREE_ROOT/TASK-xxx"
+
+   git fetch origin "$BRANCH"
+   git worktree add -b "$BRANCH" "$WORKTREE" "origin/$BRANCH"
+   ```
+
+8. Verify from the task worktree that:
+   - current branch is exactly the canonical task branch;
+   - `HEAD` starts from the claimed `BASE_SHA` unless PM-approved upstream synchronization happened afterward;
+   - worktree is clean;
+   - upstream is `origin/$BRANCH`.
+9. Only then begin TDD/implementation inside that dedicated worktree.
+
+If remote claim succeeds but local worktree setup fails, the task remains claimed by this agent. Fix/report the local setup; do not silently release/delete the remote claim unless PM/Team Lead explicitly decides to release it.
 
 An abandoned remote claim is released only by PM/Team Lead decision.
 
