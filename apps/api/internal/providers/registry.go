@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 )
@@ -28,6 +29,7 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(registration Registration) error {
+	registration = cloneRegistration(registration)
 	if err := validateRegistration(registration); err != nil {
 		return err
 	}
@@ -71,10 +73,10 @@ func (r *Registry) ResolveTextGenerator(providerID ProviderID, modelID ModelID) 
 		return nil, ModelMetadata{}, NewUnknownModelError(providerID, modelID)
 	}
 	if model.textGenerator == nil || !model.metadata.Supports(CapabilityTextGeneration) {
-		return nil, model.metadata, NewUnsupportedCapabilityError(providerID, modelID, CapabilityTextGeneration)
+		return nil, cloneModelMetadata(model.metadata), NewUnsupportedCapabilityError(providerID, modelID, CapabilityTextGeneration)
 	}
 
-	return model.textGenerator, model.metadata, nil
+	return model.textGenerator, cloneModelMetadata(model.metadata), nil
 }
 
 func (r *Registry) ListProviders() []ProviderMetadata {
@@ -83,7 +85,7 @@ func (r *Registry) ListProviders() []ProviderMetadata {
 
 	items := make([]ProviderMetadata, 0, len(r.providers))
 	for _, provider := range r.providers {
-		items = append(items, provider.metadata)
+		items = append(items, cloneProviderMetadata(provider.metadata))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
@@ -102,7 +104,7 @@ func (r *Registry) ListModels(providerID ProviderID) ([]ModelMetadata, error) {
 
 	items := make([]ModelMetadata, 0, len(provider.models))
 	for _, model := range provider.models {
-		items = append(items, model.metadata)
+		items = append(items, cloneModelMetadata(model.metadata))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
@@ -112,32 +114,32 @@ func (r *Registry) ListModels(providerID ProviderID) ([]ModelMetadata, error) {
 
 func validateRegistration(registration Registration) error {
 	if !registration.Provider.ID.Valid() {
-		return NewUnavailableError("Provider id is invalid.", ErrProviderUnavailable)
+		return fmt.Errorf("provider id is invalid")
 	}
 	if registration.Provider.DisplayName == "" {
-		return NewUnavailableError("Provider display name is required.", ErrProviderUnavailable)
+		return fmt.Errorf("provider display name is required")
 	}
 	if len(registration.Models) == 0 {
-		return NewUnavailableError("At least one model registration is required.", ErrProviderUnavailable)
+		return fmt.Errorf("at least one model registration is required")
 	}
 
 	for _, model := range registration.Models {
 		if model.Metadata.ProviderID != registration.Provider.ID {
-			return NewUnavailableError("Model provider id must match registration provider id.", ErrProviderUnavailable)
+			return fmt.Errorf("model provider id must match registration provider id")
 		}
 		if !model.Metadata.ID.Valid() {
-			return NewUnavailableError("Model id is invalid.", ErrProviderUnavailable)
+			return fmt.Errorf("model id is invalid")
 		}
 		if model.Metadata.DisplayName == "" {
-			return NewUnavailableError("Model display name is required.", ErrProviderUnavailable)
+			return fmt.Errorf("model display name is required")
 		}
 		for _, capability := range model.Metadata.SupportedCapabilities {
 			if !capability.Valid() {
-				return NewUnavailableError("Model capability is invalid.", ErrProviderUnavailable)
+				return fmt.Errorf("model capability is invalid")
 			}
 		}
 		if model.Metadata.Supports(CapabilityTextGeneration) && model.TextGenerator == nil {
-			return NewUnavailableError("Text generation capability requires a text generator binding.", ErrProviderUnavailable)
+			return fmt.Errorf("text generation capability requires a text generator binding")
 		}
 	}
 

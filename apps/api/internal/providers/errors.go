@@ -69,24 +69,18 @@ func NewUnsupportedCapabilityError(providerID ProviderID, modelID ModelID, capab
 	}
 }
 
-func NewUnavailableError(message string, cause error) error {
-	if message == "" {
-		message = "The selected provider is unavailable."
-	}
+func NewUnavailableError(cause error) error {
 	return &BoundaryError{
 		Category: CategoryProviderUnavailable,
-		Message:  message,
+		Message:  "The selected provider is unavailable.",
 		cause:    errors.Join(ErrProviderUnavailable, cause),
 	}
 }
 
-func NewExecutionError(message string, cause error) error {
-	if message == "" {
-		message = "The provider could not complete text generation."
-	}
+func NewExecutionError(cause error) error {
 	return &BoundaryError{
 		Category: CategoryProviderExecution,
-		Message:  message,
+		Message:  "The provider could not complete text generation.",
 		cause:    errors.Join(ErrProviderExecution, cause),
 	}
 }

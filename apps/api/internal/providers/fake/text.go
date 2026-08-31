@@ -27,11 +27,25 @@ func (g *TextGenerator) WithDelay(delay time.Duration) *TextGenerator {
 	return g
 }
 
+func cloneTextGenerationRequest(req providers.TextGenerationRequest) providers.TextGenerationRequest {
+	cloned := providers.TextGenerationRequest{
+		ProviderID: req.ProviderID,
+		ModelID:    req.ModelID,
+	}
+	if len(req.Messages) > 0 {
+		cloned.Messages = make([]providers.TextMessage, len(req.Messages))
+		copy(cloned.Messages, req.Messages)
+	}
+	return cloned
+}
+
 func (g *TextGenerator) Requests() []providers.TextGenerationRequest {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	copied := make([]providers.TextGenerationRequest, len(g.requests))
-	copy(copied, g.requests)
+	for i, req := range g.requests {
+		copied[i] = cloneTextGenerationRequest(req)
+	}
 	return copied
 }
 
@@ -51,7 +65,7 @@ func (g *TextGenerator) GenerateText(ctx context.Context, req providers.TextGene
 	}
 
 	g.mu.Lock()
-	g.requests = append(g.requests, req)
+	g.requests = append(g.requests, cloneTextGenerationRequest(req))
 	g.mu.Unlock()
 
 	inputTokens := 0

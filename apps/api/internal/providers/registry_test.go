@@ -180,7 +180,7 @@ func TestTextGenerationPropagatesContextCancellation(t *testing.T) {
 
 func TestProviderExecutionErrorDoesNotLeakSecretInPresentationMessage(t *testing.T) {
 	rawErr := errors.New("provider failed: api_key=super-secret-value")
-	providerErr := providers.NewExecutionError("Text generation failed.", rawErr)
+	providerErr := providers.NewExecutionError(rawErr)
 
 	boundaryErr, ok := providerErr.(*providers.BoundaryError)
 	if !ok {
@@ -189,11 +189,115 @@ func TestProviderExecutionErrorDoesNotLeakSecretInPresentationMessage(t *testing
 	if strings.Contains(boundaryErr.PresentationMessage(), "super-secret-value") {
 		t.Fatalf("presentation message leaked secret: %q", boundaryErr.PresentationMessage())
 	}
+	if strings.Contains(boundaryErr.Error(), "super-secret-value") {
+		t.Fatalf("error string leaked secret: %q", boundaryErr.Error())
+	}
 	if !errors.Is(providerErr, providers.ErrProviderExecution) {
 		t.Fatalf("error = %v, want ErrProviderExecution", providerErr)
 	}
 	if !errors.Is(providerErr, rawErr) {
 		t.Fatal("expected wrapped raw cause for internal diagnostics")
+	}
+}
+
+func TestRegistryMetadataIsImmutableAfterInputMutation(t *testing.T) {
+	registry := providers.NewRegistry()
+	capabilities := []providers.Capability{providers.CapabilityTextGeneration}
+	registration := providers.Registration{
+		Provider: providers.ProviderMetadata{
+			ID:          "synvideo-lab",
+			DisplayName: "SynVideo Lab",
+		},
+		Models: []providers.ModelRegistration{
+			{
+				Metadata: providers.ModelMetadata{
+					ProviderID:            "synvideo-lab",
+					ID:                    "lab-text-v1",
+					DisplayName:           "Lab Text V1",
+					SupportedCapabilities: capabilities,
+				},
+				TextGenerator: fake.NewTextGenerator("ok"),
+			},
+		},
+	}
+	if err := registry.Register(registration); err != nil {
+		t.Fatalf("register provider: %v", err)
+	}
+
+	capabilities[0] = providers.CapabilityImageGeneration
+
+	_, metadata, err := registry.ResolveTextGenerator("synvideo-lab", "lab-text-v1")
+	if err != nil {
+		t.Fatalf("resolve text generator: %v", err)
+	}
+	if !metadata.Supports(providers.CapabilityTextGeneration) {
+		t.Fatal("registry capabilities changed after mutating registration input")
+	}
+	if metadata.Supports(providers.CapabilityImageGeneration) {
+		t.Fatal("registry accepted mutated registration input capability")
+	}
+}
+
+func TestRegistryReturnedMetadataIsImmutable(t *testing.T) {
+	registry := providers.NewRegistry()
+	if err := registry.Register(providers.Registration{
+		Provider: providers.ProviderMetadata{
+			ID:          "synvideo-lab",
+			DisplayName: "SynVideo Lab",
+		},
+		Models: []providers.ModelRegistration{
+			{
+				Metadata: providers.ModelMetadata{
+					ProviderID:            "synvideo-lab",
+					ID:                    "lab-text-v1",
+					DisplayName:           "Lab Text V1",
+					SupportedCapabilities: []providers.Capability{providers.CapabilityTextGeneration},
+				},
+				TextGenerator: fake.NewTextGenerator("ok"),
+			},
+		},
+	}); err != nil {
+		t.Fatalf("register provider: %v", err)
+	}
+
+	_, metadata, err := registry.ResolveTextGenerator("synvideo-lab", "lab-text-v1")
+	if err != nil {
+		t.Fatalf("resolve text generator: %v", err)
+	}
+	metadata.SupportedCapabilities[0] = providers.CapabilityImageGeneration
+
+	_, metadataAgain, err := registry.ResolveTextGenerator("synvideo-lab", "lab-text-v1")
+	if err != nil {
+		t.Fatalf("resolve text generator again: %v", err)
+	}
+	if !metadataAgain.Supports(providers.CapabilityTextGeneration) {
+		t.Fatal("registry capabilities changed after mutating returned metadata")
+	}
+}
+
+func TestFakeTextGeneratorSnapshotsRequestsDeeply(t *testing.T) {
+	textGen := fake.NewTextGenerator("deterministic output")
+	req := providers.TextGenerationRequest{
+		ProviderID: "synvideo-lab",
+		ModelID:    "lab-text-v1",
+		Messages: []providers.TextMessage{
+			{Role: "user", Content: "before"},
+		},
+	}
+	if _, err := textGen.GenerateText(context.Background(), req); err != nil {
+		t.Fatalf("generate text: %v", err)
+	}
+
+	req.Messages[0].Content = "mutated caller slice"
+	recorded := textGen.Requests()
+	if recorded[0].Messages[0].Content != "before" {
+		t.Fatalf("recorded request mutated with caller slice: %#v", recorded[0])
+	}
+
+	recorded[0].Messages[0].Content = "mutated returned slice"
+	recordedAgain := textGen.Requests()
+	if recordedAgain[0].Messages[0].Content != "before" {
+		t.Fatalf("returned request history mutated externally: %#v", recordedAgain[0])
 	}
 }
 
