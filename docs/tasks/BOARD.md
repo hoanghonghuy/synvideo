@@ -16,7 +16,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
-| TASK-008 | AI Proposal frontend workspace | IN_PROGRESS | Issue #14. Canonical branch `feature/TASK-008-ai-proposal-web` exists as claim/lock; owner must sync latest `develop` and continue in its dedicated task worktree. |
+| TASK-008 | AI Proposal frontend workspace | CHANGES_REQUESTED | PR #20. Recoverable version/reload GET failures currently clear dirty state too early and can leave blank/incoherent selection UI; fix under TDD on the same branch/worktree. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Requires TASK-008 + TASK-010 accepted; consumes durable jobs rather than implementing another queue. |
 | TASK-010 | Durable job execution foundation | READY | Issue #18. Owns generic PostgreSQL job/lease/retry executor + migration `0004`; branch `feature/TASK-010-durable-job-foundation`. |
 | TASK-011 | Script domain, persistence and approval API | READY | Issue #19. Starts Stage 5–6 Script persistence from approved Proposal + migration `0005`; branch `feature/TASK-011-script-persistence`. |
@@ -28,7 +28,7 @@ Frozen contracts:
 - `docs/contracts/SCRIPT_V1.md`
 
 Current three implementation slots:
-- Dev A — TASK-008: `IN_PROGRESS`, Proposal frontend workspace.
+- Dev A — TASK-008: `CHANGES_REQUESTED` on PR #20; preserve dirty/recoverable state across failed version/reload GET and surface coherent visible errors.
 - Dev B — TASK-010: `READY`, durable job execution foundation.
 - Dev C — TASK-011: `READY`, Script persistence/approval foundation.
 
@@ -67,7 +67,7 @@ Downstream Creative Workflow stages after Proposal remain substantial: Script ge
 
 ## Operating rules
 - PM owns priority, dependency graph, wave composition and READY/BLOCKED/DONE transitions.
-- AI Developers may start only `READY` tasks whose dependencies are satisfied.
+- AI Developers may start only tasks explicitly marked `READY` whose dependencies are satisfied.
 - **One implementation task = one dedicated Git worktree.** The shared/control checkout should stay on `develop` while concurrent agents are active; never use `git switch` there to move among task branches.
 - Parallel agents inspect remote branches, PRs, local task branches and `git worktree list --porcelain` before claiming. Existing canonical branch/PR/task worktree means the task is claimed or ambiguous and must not be silently taken over.
 - A new remote task branch must be claimed by atomically **creating the previously absent GitHub ref** (create-ref/create-branch fail-if-exists) at the selected `origin/develop` SHA. A plain same-base `git push` is not sufficient as an exclusive lock.
