@@ -1,11 +1,24 @@
 # TASK-011 — Script domain, persistence and approval API
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-006 accepted
 Wave: WAVE-F1-C
 Branch: `feature/TASK-011-script-persistence`
 Base: `develop`
+Active PR: #22
+
+## Current review gate
+Team Lead review on PR #22 accepted the core persistence/concurrency design but found one contract/i18n blocker:
+- `Content.normalizeAndValidateFields()` counts `heading`, `body` and `notes` limits with Go `len(string)`, which counts UTF-8 bytes instead of characters. Valid Vietnamese/Japanese/etc. text can be rejected below the frozen `SCRIPT_V1` character limits, and this is inconsistent with PostgreSQL `char_length` and accepted Project/Proposal domain conventions.
+
+Required TDD fix on the same branch/worktree:
+1. exactly-at-limit multibyte Unicode heading/body/notes must pass;
+2. one-character-over-limit Unicode values must fail;
+3. ASCII behavior must remain unchanged;
+4. rerun targeted domain tests, real PostgreSQL integration/concurrency tests and full CI.
+
+CI #106 is green on reviewed head `92cbe63`. Migration `0005` is merge-order safe relative to TASK-010 `0004` because the migration runner records each filename independently.
 
 ## Goal
 Start Creative Workflow Stage 5–6 by implementing the durable Script resource from an approved Proposal: versioned editable drafts, optimistic revision concurrency, immutable approval, PostgreSQL persistence and owner-isolated read/edit/approve APIs.
@@ -62,6 +75,7 @@ This task does not generate Script text with AI and does not create Scene Plans.
 - Concurrent draft creation cannot allocate duplicate versions or leave multiple active drafts.
 - stale edit/approval cannot silently win.
 - long-form Script sections are supported; do not introduce short-only assumptions.
+- text length validation uses character/rune semantics, not UTF-8 byte length.
 
 ## TDD plan
 Start RED for at least:
@@ -74,13 +88,15 @@ Start RED for at least:
 7. concurrent CreateDraft -> unique versions + one active draft;
 8. owner A cannot list/get/update/approve/create from owner B resources;
 9. version list newest first;
-10. frozen section/length/cardinality validation, including long-form-friendly cases.
+10. frozen section/length/cardinality validation, including long-form-friendly cases;
+11. Unicode text boundaries count characters correctly for heading/body/notes.
 
 ## Acceptance criteria
 - [ ] Migration `0005_create_scripts.sql` works through current runner.
 - [ ] Script source must be an approved owner-visible Proposal.
 - [ ] Version/draft/approval invariants match `SCRIPT_V1`.
 - [ ] Owner isolation and concurrency are proven against real PostgreSQL.
+- [ ] Unicode/multibyte text respects frozen character limits.
 - [ ] Stable HTTP conflicts include `STALE_REVISION` and `SCRIPT_IMMUTABLE`.
 - [ ] No AI generation/provider call/Scene Plan/frontend implementation is introduced.
 - [ ] TDD evidence truthful and full CI green.
