@@ -1,8 +1,8 @@
 # SynVideo PM Scaffold v2
 
-Prepared for insertion into the real SynVideo `develop` branch after the existing application Git history has been pushed.
+This scaffold is installed on the SynVideo `develop` branch and defines the initial PM / AI Developer / Team Lead operating model before application implementation begins.
 
-This package intentionally contains no application source code.
+This scaffold intentionally contains no application source code.
 
 Contents:
 - lightweight `AGENTS.md` router;
@@ -11,5 +11,10 @@ Contents:
 - PM/AI Developer/Team Lead workflow and token policy;
 - architecture/review constraints;
 - open-source research map;
-- bootstrap task board/template;
+- task board/template;
 - accepted product ADRs.
+
+Branch policy:
+- `main`: stable/release-ready history;
+- `develop`: PM source of truth and integration branch;
+- implementation: dedicated task branches with PRs to `develop`.
