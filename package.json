@@ -1,0 +1,21 @@
+{
+  "name": "synvideo",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.19.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "test:web": "npm --workspace apps/web run test",
+    "typecheck:web": "npm --workspace apps/web run typecheck",
+    "verify:web": "npm --workspace apps/web run verify"
+  },
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <13"
+  }
+}

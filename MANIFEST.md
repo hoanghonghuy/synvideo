@@ -2,7 +2,7 @@
 
 This scaffold is installed on the SynVideo `develop` branch and defines the initial PM / AI Developer / Team Lead operating model before application implementation begins.
 
-This scaffold intentionally contains no application source code.
+TASK-001 adds the first runnable application scaffold while preserving the PM / AI Developer / Team Lead operating model.
 
 Contents:
 - lightweight `AGENTS.md` router;
@@ -12,7 +12,8 @@ Contents:
 - architecture/review constraints;
 - open-source research map;
 - task board/template;
-- accepted product ADRs.
+- accepted product ADRs;
+- initial Vue frontend, Go API and local infrastructure scaffold.
 
 Branch policy:
 - `main`: stable/release-ready history;

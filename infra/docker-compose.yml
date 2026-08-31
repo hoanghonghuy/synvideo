@@ -1,0 +1,78 @@
+name: synvideo
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-synvideo}
+      POSTGRES_USER: ${POSTGRES_USER:-synvideo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synvideo_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seaweed-master:
+    image: chrislusf/seaweedfs:4.44
+    command: master -ip=seaweed-master -ip.bind=0.0.0.0 -metricsPort=9324
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9324/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seaweed-volume:
+    image: chrislusf/seaweedfs:4.44
+    command: volume -ip=seaweed-volume -ip.bind=0.0.0.0 -master=seaweed-master:9333 -dir=/data -metricsPort=9325
+    volumes:
+      - seaweed-volume-data:/data
+    depends_on:
+      seaweed-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9325/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seaweed-filer:
+    image: chrislusf/seaweedfs:4.44
+    command: filer -ip=seaweed-filer -ip.bind=0.0.0.0 -master=seaweed-master:9333 -metricsPort=9326
+    volumes:
+      - seaweed-filer-data:/data
+    depends_on:
+      seaweed-master:
+        condition: service_healthy
+      seaweed-volume:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9326/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seaweed-s3:
+    image: chrislusf/seaweedfs:4.44
+    command: s3 -ip.bind=0.0.0.0 -filer=seaweed-filer:8888 -config=/etc/seaweedfs/s3.json -metricsPort=9327
+    ports:
+      - "${SEAWEEDFS_S3_PORT:-8333}:8333"
+    volumes:
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    depends_on:
+      seaweed-filer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9327/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  seaweed-volume-data:
+  seaweed-filer-data:
