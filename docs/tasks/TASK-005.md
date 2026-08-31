@@ -1,9 +1,9 @@
 # TASK-005 — AI provider capability and text-generation contracts
 
-Status: BLOCKED
+Status: READY
 Milestone: F1 Creative Workflow
 Depends on: TASK-001 accepted
-Wave gate: open with WAVE-F1-A after TASK-002 acceptance
+Wave gate: WAVE-F1-A open after TASK-002 acceptance
 Branch: `feature/TASK-005-ai-provider-contracts`
 Base: `develop`
 Wave: WAVE-F1-A
@@ -39,12 +39,12 @@ This task does not expose a public HTTP API and does not implement a real extern
 - A minimal package-level documentation/reference update if required.
 
 ### Reserved / do not touch
-- Creative Brief backend/domain/migrations owned by TASK-003.
+- Accepted Creative Brief backend/domain/migrations from TASK-003.
 - `apps/web/**` owned by TASK-004.
 - HTTP router/server composition, project persistence and Creative Brief API wiring.
 - Global config/env/secret plumbing for real vendors.
 
-The task should be merge-order independent from TASK-003/TASK-004 because it has no runtime integration with them in this wave.
+The task is merge-order independent from TASK-004 because it has no runtime integration with it in this wave.
 
 ## Scope
 - Stable provider identity type separate from model identity.
@@ -94,7 +94,7 @@ No live network calls in CI.
 - [ ] Stable error categories exist for core failure modes.
 - [ ] Deterministic fake implementation is available for future application tests.
 - [ ] No vendor SDK, API key persistence, public HTTP API or billing scope is introduced.
-- [ ] Package remains isolated from TASK-003/TASK-004 write surfaces.
+- [ ] Package remains isolated from TASK-004 write surfaces and accepted TASK-003 behavior.
 - [ ] PR contains TDD evidence and backend verification is green.
 
 ## Open-source research
