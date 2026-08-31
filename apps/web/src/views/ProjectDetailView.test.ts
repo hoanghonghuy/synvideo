@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { i18n } from '@/locales'
 import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
+import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
 import ProjectDetailView from './ProjectDetailView.vue'
 
 const fetchMock = vi.fn()
@@ -58,7 +59,7 @@ describe('ProjectDetailView', () => {
     expect(wrapper.text()).not.toContain(hardCodedVietnameseDate)
   })
 
-  it('renders creative brief link and navigates to the workspace route', async () => {
+  it('renders creative workspace links and navigates to their production routes', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
       .mockResolvedValueOnce(jsonResponse(project))
@@ -68,6 +69,8 @@ describe('ProjectDetailView', () => {
           404,
         ),
       )
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse([]))
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -75,6 +78,7 @@ describe('ProjectDetailView', () => {
         { path: '/projects', component: { template: '<div />' } },
         { path: '/projects/:id', component: ProjectDetailView },
         { path: '/projects/:id/creative-brief', component: CreativeBriefView },
+        { path: '/projects/:id/creative-proposal', component: CreativeProposalView },
       ],
     })
     router.push(`/projects/${project.id}`)
@@ -83,17 +87,32 @@ describe('ProjectDetailView', () => {
     const wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, i18n] } })
     await flushPromises()
 
-    const link = wrapper.find('.workspace-links a')
-    expect(link.exists()).toBe(true)
-    expect(link.text()).toContain('Mở Creative Brief')
-    expect(link.attributes('href')).toBe(`/projects/${project.id}/creative-brief`)
+    const links = wrapper.findAll('.workspace-links a')
+    const briefLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-brief`)
+    const proposalLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-proposal`)
+    expect(briefLink?.text()).toContain('Mở Creative Brief')
+    expect(proposalLink?.text()).toContain('Mở AI Proposal')
 
-    await link.trigger('click')
+    await briefLink?.trigger('click')
     await flushPromises()
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe(`/projects/${project.id}/creative-brief`)
     expect(wrapper.text()).toContain('Bản nháp mới')
+
+    router.push(`/projects/${project.id}`)
+    await flushPromises()
+    await flushPromises()
+
+    const proposalLinkAfterReturn = wrapper
+      .findAll('.workspace-links a')
+      .find((link) => link.attributes('href') === `/projects/${project.id}/creative-proposal`)
+    await proposalLinkAfterReturn?.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe(`/projects/${project.id}/creative-proposal`)
+    expect(wrapper.text()).toContain('Chưa có AI Proposal')
   })
 })
 
@@ -104,6 +123,7 @@ async function mountDetailView() {
       { path: '/projects', component: { template: '<div />' } },
       { path: '/projects/:id', component: ProjectDetailView },
       { path: '/projects/:id/creative-brief', component: { template: '<div />' } },
+      { path: '/projects/:id/creative-proposal', component: { template: '<div />' } },
     ],
   })
   router.push('/projects/11111111-1111-4111-8111-111111111111')
