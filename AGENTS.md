@@ -10,6 +10,13 @@ Keep this file short. Do not load the whole repository or `docs/` tree unless th
 - Open-source research: `docs/research/OPEN_SOURCE_REFERENCES.md`
 - Decisions that must not silently drift: `docs/decisions/`
 
+## Continuation command
+When the user says only `tiếp tục`, `continue`, `go on`, `làm tiếp`, `tiếp đi`, or equivalent wording without a more specific instruction, use the `synvideo-continue` skill.
+
+Continuation means: inspect repository/GitHub state and perform the next valid workflow action. Prioritize active PR review comments and failing CI before unfinished task work, and unfinished task work before taking a new `READY` task. It never authorizes inventing work, self-merging, marking a task `DONE`, or implementing directly on `main`/`develop`.
+
+See `docs/engineering/CONTINUE_PROTOCOL.md` only when the continuation state needs clarification.
+
 ## Coding workflow
 1. Start from the latest `origin/develop` when taking a new task.
 2. Read `docs/tasks/BOARD.md` and select only a `READY` task.
@@ -36,6 +43,7 @@ Never copy/adapt source unless its current license has been verified and the tas
 
 ## Skills
 Use a skill only when its description matches the work; open the `SKILL.md` then follow only the references it names.
+- `synvideo-continue`: determine and execute the next valid workflow action from repo/PR/issue state after a generic continuation command.
 - `synvideo-task-worker`: implement one READY task end-to-end.
 - `synvideo-code-review`: Team Lead review of a PR/diff against requirements and quality gates.
 - `synvideo-open-source-research`: research reuse candidates before building a subsystem.
