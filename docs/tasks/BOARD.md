@@ -16,10 +16,10 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
-| TASK-008 | AI Proposal frontend workspace | CHANGES_REQUESTED | PR #20. Recoverable version/reload GET failures currently clear dirty state too early and can leave blank/incoherent selection UI; fix under TDD on the same branch/worktree. |
+| TASK-008 | AI Proposal frontend workspace | CHANGES_REQUESTED | PR #20 head `b14e25c`. Original load-state blockers fixed; remaining blocker is mutation errors incorrectly exposing version-load Retry that can discard/switch dirty edits. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Requires TASK-008 + TASK-010 accepted; consumes durable jobs rather than implementing another queue. |
 | TASK-010 | Durable job execution foundation | CHANGES_REQUESTED | PR #21. Needs executor lease heartbeat, exhausted-final-lease terminalization, repository max-attempt enforcement and JSON-object envelope validation. |
-| TASK-011 | Script domain, persistence and approval API | READY | Issue #19. Starts Stage 5–6 Script persistence from approved Proposal + migration `0005`; branch `feature/TASK-011-script-persistence`. |
+| TASK-011 | Script domain, persistence and approval API | CHANGES_REQUESTED | PR #22 head `92cbe63`. Core persistence/concurrency is sound; fix Unicode character limits currently counted as UTF-8 bytes. |
 
 ## Active parallel wave — WAVE-F1-C
 Frozen contracts:
@@ -28,9 +28,9 @@ Frozen contracts:
 - `docs/contracts/SCRIPT_V1.md`
 
 Current three implementation slots:
-- Dev A — TASK-008: `CHANGES_REQUESTED` on PR #20; preserve dirty/recoverable state across failed version/reload GET and surface coherent visible errors.
+- Dev A — TASK-008: `CHANGES_REQUESTED` on PR #20; separate version-load retry state from PUT/approve mutation errors so dirty edits cannot be discarded or redirected by stale `failedVersion`.
 - Dev B — TASK-010: `CHANGES_REQUESTED` on PR #21; fix long-handler lease heartbeat, final-attempt crash terminalization, durable max-attempt enforcement and JSON-object envelope semantics.
-- Dev C — TASK-011: `READY`, Script persistence/approval foundation.
+- Dev C — TASK-011: `CHANGES_REQUESTED` on PR #22; use character/rune counting for Script heading/body/notes limits and add multibyte boundary regressions.
 
 Isolation / merge rules:
 - **Each implementation slot must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
@@ -38,6 +38,7 @@ Isolation / merge rules:
 - TASK-010 owns `jobs/**`, job repository and migration `0004`; no Proposal/Script semantics or public generic job API.
 - TASK-011 owns Script backend + migration `0005`; no jobs/frontend/provider generation work.
 - TASK-008, TASK-010 and TASK-011 are merge-order independent by primary write surface.
+- Migration `0005` may be accepted before TASK-010 `0004`: the migration runner records/applies each filename independently, so a later-added `0004` is not skipped.
 - TASK-009 becomes eligible only after TASK-008 and TASK-010 are accepted and PM freezes its feature-specific generation-job request/payload/result contract.
 - TASK-011 consumes already accepted Proposal approval semantics; it does not depend on live AI Proposal generation.
 - ADR 0005 forbids long provider calls inside blocking HTTP requests; TASK-009 must use TASK-010 durable jobs.
