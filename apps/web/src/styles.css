@@ -170,6 +170,42 @@ h1 {
   color: #1f6845;
 }
 
+.notice.warning {
+  border-color: #e4d2a8;
+  background: #fffbf4;
+  color: #6b4f12;
+}
+
+.workspace-links {
+  margin: 16px 0 0;
+}
+
+.checkbox-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-help {
+  color: #667679;
+}
+
+.distribution-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.distribution-fieldset legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
 .project-list {
   display: grid;
   gap: 12px;

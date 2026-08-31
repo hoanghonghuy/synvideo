@@ -64,6 +64,7 @@ async function mountDetailView() {
     routes: [
       { path: '/projects', component: { template: '<div />' } },
       { path: '/projects/:id', component: ProjectDetailView },
+      { path: '/projects/:id/creative-brief', component: { template: '<div />' } },
     ],
   })
   router.push('/projects/11111111-1111-4111-8111-111111111111')

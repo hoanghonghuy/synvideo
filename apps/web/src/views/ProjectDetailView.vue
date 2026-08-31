@@ -94,6 +94,14 @@ async function submit(payload: UpdateProjectPayload) {
       <p class="body-copy">
         {{ t('projects.detail.updatedAt', { value: d(new Date(project.updated_at), 'long') }) }}
       </p>
+      <p class="workspace-links">
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/creative-brief`"
+        >
+          {{ t('creativeBrief.actions.open') }}
+        </RouterLink>
+      </p>
 
       <div
         v-if="saved"
