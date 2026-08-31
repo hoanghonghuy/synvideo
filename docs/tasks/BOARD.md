@@ -69,9 +69,10 @@ Downstream Creative Workflow stages after Proposal remain substantial: Script ge
 - PM owns priority, dependency graph, wave composition and READY/BLOCKED/DONE transitions.
 - AI Developers may start only `READY` tasks whose dependencies are satisfied.
 - **One implementation task = one dedicated Git worktree.** The shared/control checkout should stay on `develop` while concurrent agents are active; never use `git switch` there to move among task branches.
-- Parallel agents inspect remote branches, PRs and `git worktree list --porcelain` before claiming. Existing canonical branch/PR/task worktree means the task is claimed.
-- A new remote task branch must be claimed with **atomic create-if-absent / expected-nonexistent semantics**. A plain same-base `git push` is not sufficient as an exclusive lock. Only after the atomic claim succeeds may implementation begin inside the dedicated task worktree.
-- If a claim race is lost, the losing agent removes only its just-created empty local worktree/branch, never overwrites/deletes the winning remote branch, then selects another eligible READY task.
+- Parallel agents inspect remote branches, PRs, local task branches and `git worktree list --porcelain` before claiming. Existing canonical branch/PR/task worktree means the task is claimed or ambiguous and must not be silently taken over.
+- A new remote task branch must be claimed by atomically **creating the previously absent GitHub ref** (create-ref/create-branch fail-if-exists) at the selected `origin/develop` SHA. A plain same-base `git push` is not sufficient as an exclusive lock.
+- Only after the remote claim succeeds does the agent create/attach its dedicated local worktree and begin implementation there.
+- If a claim race is lost, the losing agent never overwrites/deletes the winning remote branch; it re-fetches and selects another eligible READY task.
 - Review fixes stay on the original branch/PR and its dedicated worktree.
 - Every implementation task follows `docs/engineering/TDD_PROTOCOL.md`; RED -> GREEN -> REFACTOR evidence must be truthful and coverage-only additions must not be misrepresented as failing RED behavior.
 - A task normally moves `READY -> IN_PROGRESS -> REVIEW -> DONE`.
