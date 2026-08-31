@@ -57,7 +57,7 @@ This task provides persistence/application behavior only. It does not call an AI
 - new draft allocation cannot overwrite an approved version;
 - two concurrent draft creations cannot allocate the same version;
 - stale edit/approval cannot silently win;
-- creating a new draft may supersede an older unapproved draft atomically;
+- creating a new draft must supersede the previous active unapproved draft atomically, leaving at most one active draft per Project;
 - project/cross-owner existence remains non-disclosing.
 
 ## TDD plan
