@@ -9,6 +9,20 @@ Apply relevant sections, not every item mechanically.
 - Are approval/revision checkpoints preserved where required?
 - Does it work for intended short/long form rather than only demo inputs?
 
+## TDD / regression evidence
+- Does the PR include credible RED -> GREEN -> REFACTOR evidence for changed behavior?
+- Were meaningful tests defined before implementation rather than added only after the fact to satisfy CI?
+- Do tests assert observable behavior/risk instead of relying on snapshots or trivial coverage?
+- Are persistence/concurrency/security boundaries covered at the appropriate integration level (real PostgreSQL where required)?
+- If test-first was skipped, is the exception genuinely justified and is alternative automated verification sufficient?
+
+## Parallel-work integrity
+- Did the task stay inside its declared primary write paths and allowed shared integration files?
+- Did it avoid reserved paths owned by another task in the wave?
+- Does it still implement the frozen shared contract rather than silently redefining it?
+- If another wave PR is a runtime dependency, was merge/rebase/integration verification done in the documented order?
+- Were conflicts resolved by preserving both accepted behaviors rather than dropping another task's work?
+
 ## State/data integrity
 - Are transitions explicit and valid?
 - Can refresh/retry/restart lose accepted/generated work?
@@ -57,4 +71,4 @@ Apply relevant sections, not every item mechanically.
 - Migrations/config changes have rollback/deployment considerations.
 
 ## Verdict rule
-`APPROVE` only when acceptance criteria are satisfied and no BLOCKER/MAJOR finding remains.
+`APPROVE` only when acceptance criteria are satisfied, required TDD/regression evidence is credible, parallel-wave boundaries/contracts are respected, and no BLOCKER/MAJOR finding remains.
