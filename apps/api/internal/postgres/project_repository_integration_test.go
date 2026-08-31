@@ -193,7 +193,7 @@ func integrationPool(t *testing.T) *pgxpool.Pool {
 	if err := migrations.Apply(ctx, pool); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `TRUNCATE creative_briefs, projects`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE creative_proposals, creative_briefs, projects CASCADE`); err != nil {
 		t.Fatalf("truncate projects: %v", err)
 	}
 
