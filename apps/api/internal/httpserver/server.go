@@ -11,6 +11,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
@@ -31,11 +32,19 @@ type CreativeBriefService interface {
 	Put(ctx context.Context, principal project.Principal, projectID uuid.UUID, input creativebrief.PutInput) (creativebrief.CreativeBrief, bool, error)
 }
 
+type CreativeProposalService interface {
+	List(ctx context.Context, principal project.Principal, projectID uuid.UUID) ([]creativeproposal.CreativeProposal, error)
+	Get(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (creativeproposal.CreativeProposal, error)
+	UpdateDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input creativeproposal.PutInput) (creativeproposal.CreativeProposal, error)
+	Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (creativeproposal.CreativeProposal, error)
+}
+
 func New(
 	cfg config.Config,
 	logger *slog.Logger,
 	projectService ProjectService,
 	creativeBriefService CreativeBriefService,
+	creativeProposalService CreativeProposalService,
 	actorResolver actor.Resolver,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -52,6 +61,13 @@ func New(
 		handler := creativeBriefHandler{service: creativeBriefService, actorResolver: actorResolver}
 		mux.HandleFunc("GET /api/v1/projects/{id}/creative-brief", handler.get)
 		mux.HandleFunc("PUT /api/v1/projects/{id}/creative-brief", handler.put)
+	}
+	if creativeProposalService != nil && actorResolver != nil {
+		handler := creativeProposalHandler{service: creativeProposalService, actorResolver: actorResolver}
+		mux.HandleFunc("GET /api/v1/projects/{id}/creative-proposals", handler.list)
+		mux.HandleFunc("GET /api/v1/projects/{id}/creative-proposals/{version}", handler.get)
+		mux.HandleFunc("PUT /api/v1/projects/{id}/creative-proposals/{version}", handler.put)
+		mux.HandleFunc("POST /api/v1/projects/{id}/creative-proposals/{version}/approve", handler.approve)
 	}
 
 	return &http.Server{
