@@ -7,18 +7,26 @@ Wave: WAVE-F1-C
 Branch: `feature/TASK-011-script-persistence`
 Base: `develop`
 Active PR: #22
+Current reviewed head: `6fb2910`
 
 ## Current review gate
-Team Lead review on PR #22 accepted the core persistence/concurrency design but found one contract/i18n blocker:
-- `Content.normalizeAndValidateFields()` counts `heading`, `body` and `notes` limits with Go `len(string)`, which counts UTF-8 bytes instead of characters. Valid Vietnamese/Japanese/etc. text can be rejected below the frozen `SCRIPT_V1` character limits, and this is inconsistent with PostgreSQL `char_length` and accepted Project/Proposal domain conventions.
+The Script implementation itself is accepted on reviewed head `6fb2910`:
+- Unicode text limits now use rune/character semantics with multibyte boundary regressions;
+- approved Proposal source enforcement, version allocation, one-active-draft invariant, immutable approved history, stale revision protection and owner isolation remain sound;
+- real PostgreSQL concurrency coverage remains present;
+- CI #110 is green.
 
-Required TDD fix on the same branch/worktree:
-1. exactly-at-limit multibyte Unicode heading/body/notes must pass;
-2. one-character-over-limit Unicode values must fail;
-3. ASCII behavior must remain unchanged;
-4. rerun targeted domain tests, real PostgreSQL integration/concurrency tests and full CI.
+After TASK-010 / PR #21 merged into `develop` as `f731f4b9...`, GitHub reports PR #22 `mergeable: false` because both tasks touch shared backend composition/test hotspots.
 
-CI #106 is green on reviewed head `92cbe63`. Migration `0005` is merge-order safe relative to TASK-010 `0004` because the migration runner records each filename independently.
+Required action on the same dedicated TASK-011 worktree:
+1. fetch latest `origin/develop`;
+2. rebase or merge latest `develop` into the same branch;
+3. resolve only genuine shared-file conflicts, preserving both accepted TASK-010 jobs wiring and TASK-011 Script wiring;
+4. do not change frozen Script semantics unless conflict resolution requires it;
+5. rerun targeted Script tests + full CI;
+6. push the same PR #22 for a final conflict-delta check.
+
+This is a sync/conflict-resolution gate, not a new Script product finding.
 
 ## Goal
 Start Creative Workflow Stage 5–6 by implementing the durable Script resource from an approved Proposal: versioned editable drafts, optimistic revision concurrency, immutable approval, PostgreSQL persistence and owner-isolated read/edit/approve APIs.
@@ -48,16 +56,16 @@ This task does not generate Script text with AI and does not create Scene Plans.
 - minimal service composition in `apps/api/cmd/api/main.go`.
 
 ## Reserved / do not touch
-- `apps/api/internal/jobs/**` and migration `0004` — TASK-010.
-- `apps/web/**` — TASK-008.
-- Proposal generation integration/job routes — TASK-009.
-- provider registry/adapters.
+- accepted `apps/api/internal/jobs/**` and migration `0004` from TASK-010;
+- `apps/web/**` — TASK-008;
+- Proposal generation integration/job routes — TASK-009;
+- provider registry/adapters;
 - accepted Proposal schema/contract.
 
 ## Scope
 - Script domain types/validation matching `SCRIPT_V1`.
 - Project-scoped monotonically increasing Script versions.
-- Internal `CreateDraft` operation requiring an owner-visible **approved** Proposal source version.
+- Internal `CreateDraft` operation requiring an owner-visible approved Proposal source version.
 - Persist `source_proposal_version` and Project `content_locale` snapshot.
 - At most one active Script draft; newer draft supersedes only the previous unapproved draft atomically.
 - Draft optimistic `revision` update.
@@ -74,11 +82,10 @@ This task does not generate Script text with AI and does not create Scene Plans.
 - New draft creation never rewrites approved Script history.
 - Concurrent draft creation cannot allocate duplicate versions or leave multiple active drafts.
 - stale edit/approval cannot silently win.
-- long-form Script sections are supported; do not introduce short-only assumptions.
+- long-form Script sections are supported.
 - text length validation uses character/rune semantics, not UTF-8 byte length.
 
-## TDD plan
-Start RED for at least:
+## TDD coverage
 1. approved Proposal -> first Script draft v1/revision1/draft;
 2. non-approved Proposal -> rejected without Script creation;
 3. second draft -> monotonic version + prior active draft superseded;
@@ -86,23 +93,21 @@ Start RED for at least:
 5. current revision update increments exactly once;
 6. stale update/approval -> conflict;
 7. concurrent CreateDraft -> unique versions + one active draft;
-8. owner A cannot list/get/update/approve/create from owner B resources;
-9. version list newest first;
-10. frozen section/length/cardinality validation, including long-form-friendly cases;
-11. Unicode text boundaries count characters correctly for heading/body/notes.
+8. owner isolation;
+9. newest-first list;
+10. frozen section/length/cardinality validation;
+11. Unicode text boundaries for heading/body/notes.
 
 ## Acceptance criteria
-- [ ] Migration `0005_create_scripts.sql` works through current runner.
-- [ ] Script source must be an approved owner-visible Proposal.
-- [ ] Version/draft/approval invariants match `SCRIPT_V1`.
-- [ ] Owner isolation and concurrency are proven against real PostgreSQL.
-- [ ] Unicode/multibyte text respects frozen character limits.
-- [ ] Stable HTTP conflicts include `STALE_REVISION` and `SCRIPT_IMMUTABLE`.
-- [ ] No AI generation/provider call/Scene Plan/frontend implementation is introduced.
-- [ ] TDD evidence truthful and full CI green.
-
-## Verification
-At minimum targeted domain/service/API tests, real PostgreSQL integration/concurrency tests, gofmt, vet, `go test ./...`, backend build, full repository verification and `git diff --check`.
+- [ ] Migration `0005_create_scripts.sql` works through current runner on latest `develop`.
+- [x] Script source must be an approved owner-visible Proposal.
+- [x] Version/draft/approval invariants match `SCRIPT_V1`.
+- [x] Owner isolation and concurrency are proven against real PostgreSQL.
+- [x] Unicode/multibyte text respects frozen character limits.
+- [x] Stable HTTP conflicts include `STALE_REVISION` and `SCRIPT_IMMUTABLE`.
+- [x] No AI generation/provider call/Scene Plan/frontend implementation is introduced.
+- [ ] Final post-sync CI on latest `develop` is green.
+- [x] TDD evidence is truthful.
 
 ## Next dependencies
 A later Script generation-engine task may build independently against `SCRIPT_V1`; later integration will persist generated candidates through this task's internal `CreateDraft`. Scene Plan work starts only from an approved Script version.
