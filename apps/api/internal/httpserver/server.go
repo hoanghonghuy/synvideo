@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
 
 type statusResponse struct {
@@ -39,12 +39,20 @@ type CreativeProposalService interface {
 	Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (creativeproposal.CreativeProposal, error)
 }
 
+type ScriptService interface {
+	List(ctx context.Context, principal project.Principal, projectID uuid.UUID) ([]script.Script, error)
+	GetByVersion(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
+	UpdateDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input script.PutInput) (script.Script, error)
+	Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error)
+}
+
 func New(
 	cfg config.Config,
 	logger *slog.Logger,
 	projectService ProjectService,
 	creativeBriefService CreativeBriefService,
 	creativeProposalService CreativeProposalService,
+	scriptService ScriptService,
 	actorResolver actor.Resolver,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -69,6 +77,13 @@ func New(
 		mux.HandleFunc("PUT /api/v1/projects/{id}/creative-proposals/{version}", handler.put)
 		mux.HandleFunc("POST /api/v1/projects/{id}/creative-proposals/{version}/approve", handler.approve)
 	}
+	if scriptService != nil && actorResolver != nil {
+		handler := scriptHandler{service: scriptService, actorResolver: actorResolver}
+		mux.HandleFunc("GET /api/v1/projects/{id}/scripts", handler.list)
+		mux.HandleFunc("GET /api/v1/projects/{id}/scripts/{version}", handler.get)
+		mux.HandleFunc("PUT /api/v1/projects/{id}/scripts/{version}", handler.put)
+		mux.HandleFunc("POST /api/v1/projects/{id}/scripts/{version}/approve", handler.approve)
+	}
 
 	return &http.Server{
 		Addr:    cfg.Addr,
@@ -77,12 +92,12 @@ func New(
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, statusResponse{Status: "ok"})
+	writeProjectJSON(w, http.StatusOK, statusResponse{Status: "ok"})
 }
 
 func readinessHandler(cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, statusResponse{
+		writeProjectJSON(w, http.StatusOK, statusResponse{
 			Status:      "ready",
 			Environment: cfg.Environment,
 		})
@@ -98,10 +113,4 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 		logger.Info("api request", "method", r.Method, "path", r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, body statusResponse) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
 }
