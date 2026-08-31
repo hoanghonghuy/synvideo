@@ -47,7 +47,8 @@ Never copy/adapt source unless its current license has been verified and the tas
 ## Skills
 Use a skill only when its description matches the work; open the `SKILL.md` then follow only the references it names.
 - `synvideo-continue`: determine and execute the next valid workflow action from repo/PR/issue state after a generic continuation command.
-- `synvideo-task-worker`: implement one READY task end-to-end.
+- `synvideo-task-worker`: implement one READY task end-to-end using TDD and parallel-safe claiming.
+- `synvideo-wave-planner`: PM planning for a small batch of independent parallel tasks with frozen contracts, path ownership and merge order.
 - `synvideo-code-review`: Team Lead review of a PR/diff against requirements and quality gates.
 - `synvideo-open-source-research`: research reuse candidates before building a subsystem.
 - `synvideo-product-audit`: audit the existing codebase against the product baseline.
