@@ -1,6 +1,6 @@
 # TASK-005 — AI provider capability and text-generation contracts
 
-Status: CHANGES_REQUESTED
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-001 accepted
 Wave gate: WAVE-F1-A open after TASK-002 acceptance
@@ -88,14 +88,17 @@ Start with RED unit/contract tests before implementation, including at minimum:
 No live network calls in CI.
 
 ## Acceptance criteria
-- [ ] Provider/model/capability types are provider-neutral and documented in code.
-- [ ] Typed text-generation boundary exists and is context-aware.
-- [ ] Registry/catalog behavior is deterministic and covered by tests.
-- [ ] Stable error categories exist for core failure modes.
-- [ ] Deterministic fake implementation is available for future application tests.
-- [ ] No vendor SDK, API key persistence, public HTTP API or billing scope is introduced.
-- [ ] Package remains isolated from TASK-004 write surfaces and accepted TASK-003 behavior.
-- [ ] PR contains TDD evidence and backend verification is green.
+- [x] Provider/model/capability types are provider-neutral and documented in code.
+- [x] Typed text-generation boundary exists and is context-aware.
+- [x] Registry/catalog behavior is deterministic and covered by tests.
+- [x] Stable error categories exist for core failure modes.
+- [x] Deterministic fake implementation is available for future application tests.
+- [x] No vendor SDK, API key persistence, public HTTP API or billing scope is introduced.
+- [x] Package remains isolated from TASK-004 write surfaces and accepted TASK-003 behavior.
+- [x] PR contains TDD evidence and backend verification is green.
+
+## Acceptance record
+Accepted and squash-merged via PR #11 after Team Lead review. Final fixes deep-clone mutable provider metadata at registry boundaries, enforce safe-by-default provider presentation errors, deep-snapshot fake requests, pass race-enabled provider tests, full verification and green PR CI.
 
 ## Open-source research
 Consult only if needed for interface/capability ideas. Do not copy code without license verification. This task should normally be implemented from SynVideo's own product/architecture requirements.
