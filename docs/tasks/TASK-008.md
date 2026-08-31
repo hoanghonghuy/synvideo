@@ -7,17 +7,22 @@ Wave: WAVE-F1-B / continuing in WAVE-F1-C
 Branch: `feature/TASK-008-ai-proposal-web`
 Base: `develop`
 Active PR: #20
+Current reviewed head: `41a6b7f`
 
 ## Current review gate
-Team Lead review on PR #20 found two recoverable-load state blockers:
-- `loadVersion()` clears dirty/stale/saved/pending state and changes selected version before GET succeeds; a failed explicit reload after stale conflict can leave edited form values visible while parent state incorrectly says clean, allowing a later version switch to discard them without warning;
-- when Project + Proposal list load but the selected/newest Proposal GET fails, proposal-level error UI is not rendered because it sits inside the `selectedProposal` branch; failed user-initiated version switching can also make the highlighted selected version diverge from the Proposal content actually displayed.
+The earlier dirty/version-load blockers and mutation-vs-load retry regression are fixed correctly; CI #112 is green.
 
-Required TDD fixes on the same PR/branch:
-1. stale/dirty local edits -> explicit reload -> GET failure must preserve local values and dirty/recoverable state;
-2. list has Proposal -> version GET fails must show a localized visible error/retry state;
-3. failed version switch must keep selection/content coherent and must not claim a version was loaded when GET failed;
-4. sync latest `develop`, continue only in the dedicated TASK-008 worktree, rerun targeted frontend tests and full CI.
+One recoverable workspace-load blocker remains:
+- `loadWorkspace()` assigns `project` before calling `listCreativeProposals()`;
+- if Project GET succeeds but Proposal list GET fails, `project` remains non-null while `summaries` remains empty;
+- the template only renders the top-level load error when `loadErrorCode && !project`, so this failure is falsely rendered as the authoritative empty Proposal state with no retry.
+
+Required TDD fix on the same PR/worktree:
+1. Project GET succeeds -> Proposal list GET fails;
+2. render localized visible error + retry;
+3. do not render the empty Proposal state for that failure;
+4. retry remains failure-safe and does not regress dirty/version handling;
+5. rerun targeted frontend tests and full CI.
 
 ## Goal
 Build the creator-facing AI Proposal workspace for viewing Proposal history, editing a draft, resolving stale edits and explicitly approving a version before script generation.
@@ -47,7 +52,7 @@ Generation CTA is intentionally outside this task and is added by TASK-009. Do n
 - i18n resource additions.
 
 ## Reserved / do not touch
-- `apps/api/**` — accepted Proposal backend/generation plus TASK-010/TASK-011 work.
+- `apps/api/**` — accepted Proposal backend/generation plus downstream backend work.
 - unrelated global visual redesign/shared architecture refactors.
 - Creative Brief behavior except minimal navigation entry.
 
@@ -71,7 +76,6 @@ Generation CTA is intentionally outside this task and is added by TASK-009. Do n
 - script/scenes/media/editor.
 
 ## TDD plan
-Start RED for at least:
 1. empty state when Proposal list is empty;
 2. version history renders newest/current status accurately;
 3. draft fields are editable and PUT sends current revision;
@@ -82,14 +86,17 @@ Start RED for at least:
 8. explicit approval sends current revision and renders approved state;
 9. dirty version switch cannot silently discard edits;
 10. real Project/Creative Brief navigation reaches the production Proposal view;
-11. failed reload/version GET preserves dirty state and coherent selection while surfacing a visible error.
+11. failed reload/version GET preserves dirty state and coherent selection while surfacing a visible error;
+12. failed mutation never exposes version-load retry or stale failed-version routing;
+13. Proposal list load failure surfaces error/retry instead of false empty state.
 
 ## Acceptance criteria
 - [ ] Frontend matches `AI_PROPOSAL_V1.md` field/status semantics.
 - [ ] Version history/read-only states are clear.
 - [ ] Draft save/dirty/stale behavior is regression-tested.
 - [ ] Recoverable version/reload failures do not silently clear dirty state or leave selection/content inconsistent.
-- [ ] Proposal-level GET failures surface a localized visible error/retry state.
+- [ ] Proposal version/list load failures surface localized visible error/retry states and are not rendered as authoritative empty history.
+- [ ] Mutation failures preserve edits and never expose destructive load retry by mistake.
 - [ ] Approval is explicit and durable-looking only after server success.
 - [ ] No fake generation success or vendor/provider UI is introduced.
 - [ ] Visible copy goes through i18n.
@@ -103,9 +110,9 @@ At minimum:
 - `npm run lint:web`, `npm run typecheck:web`, `npm run test:web`, `npm run build:web`;
 - final smoke against merged TASK-006 backend;
 - full repository verification and `git diff --check`;
-- PR CI on latest `develop` after the review-fix push.
+- PR CI after the review-fix push.
 
 ## Merge order
-Independent from TASK-010 and TASK-011 by primary write surface. Final acceptance uses merged TASK-006 backend. TASK-009 remains blocked until this task is accepted.
+Independent by primary write surface. TASK-009 remains blocked until this task is accepted.
 
 Do not self-merge or self-mark DONE.
