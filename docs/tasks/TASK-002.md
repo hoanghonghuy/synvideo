@@ -1,6 +1,6 @@
 # TASK-002 — Project domain and persistence foundation
 
-Status: READY
+Status: IN_PROGRESS
 Milestone: F0 Technical Foundation
 Depends on: TASK-001 (DONE)
 Branch: `feature/TASK-002-project-persistence`
@@ -18,9 +18,20 @@ This task must establish production-quality persistence/API boundaries that late
 - `docs/product/FEATURE_MAP.md`
 - `docs/engineering/ARCHITECTURE_PRINCIPLES.md`
 - `docs/engineering/REVIEW_CHECKLIST.md`
+- `docs/engineering/TDD_PROTOCOL.md`
 - `docs/decisions/0004-i18n-from-start.md`
 
 Do not recursively load unrelated docs.
+
+## TDD adoption note
+TASK-002 was already in progress when repository-wide TDD became mandatory. Do **not** fabricate historical RED evidence for work that already existed before the rule changed.
+
+From the adoption point onward:
+- every remaining behavior/fix must follow RED -> GREEN -> REFACTOR where executable;
+- missing regression coverage for already-written behavior must still be added before acceptance;
+- PR delivery must state which work predated TDD adoption and provide truthful TDD evidence for subsequent changes.
+
+TASK-003 and later implementation tasks are fully TDD from task start.
 
 ## Domain contract
 A Project has at least:
@@ -130,6 +141,7 @@ TASK-002 is acceptable only when all are true:
 7. Migrations are versioned, repeatable on a clean local database, and exercised by CI/integration tests.
 8. No secrets, fake production identity fallback, AI generation, scene/media behavior, or platform-specific publishing logic is introduced.
 9. Existing TASK-001 health/readiness behavior and verification continue to work.
+10. Behavior implemented after TDD adoption follows `docs/engineering/TDD_PROTOCOL.md`, and already-written behavior has sufficient regression coverage before acceptance.
 
 ## Out of scope
 - Login/signup/OAuth/session UI and full authentication product.
@@ -150,6 +162,7 @@ PR description must include:
 - how the development-only principal boundary works and how production fails closed;
 - frontend flow implemented;
 - tests and commands run;
+- truthful TDD adoption/evidence note (do not claim RED cycles that predated the repository rule);
 - any dependency added and why;
 - known limitations/follow-up findings outside scope.
 
