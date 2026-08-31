@@ -115,6 +115,43 @@ func TestGeneratePropagatesContextCancellation(t *testing.T) {
 	}
 }
 
+func TestGeneratePropagatesContextCancellationDuringProviderCall(t *testing.T) {
+	textGen := fake.NewTextGenerator(validProviderJSON()).WithDelay(200 * time.Millisecond)
+	engine := proposalgeneration.NewWithGenerator(textGen)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := engine.Generate(ctx, sampleRequest(project.ContentFormatShort, nil))
+		errCh <- err
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("generate did not return after cancellation")
+	}
+}
+
+func TestGeneratePropagatesContextDeadlineDuringProviderCall(t *testing.T) {
+	textGen := fake.NewTextGenerator(validProviderJSON()).WithDelay(200 * time.Millisecond)
+	engine := proposalgeneration.NewWithGenerator(textGen)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := engine.Generate(ctx, sampleRequest(project.ContentFormatShort, nil))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
+	}
+}
+
 func TestGenerateDoesNotMutateInput(t *testing.T) {
 	engine := newTestEngine(t, validProviderJSON())
 	req := sampleRequest(project.ContentFormatShort, nil)

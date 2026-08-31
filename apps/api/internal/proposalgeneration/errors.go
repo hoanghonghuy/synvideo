@@ -1,6 +1,7 @@
 package proposalgeneration
 
 import (
+	"context"
 	"errors"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
@@ -68,6 +69,9 @@ func newInvalidOutputError(cause error) error {
 }
 
 func mapProviderError(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	switch {
 	case errors.Is(err, providers.ErrUnknownProvider),
 		errors.Is(err, providers.ErrUnknownModel),
