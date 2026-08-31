@@ -24,6 +24,9 @@ const { t } = useI18n()
         <RouterLink to="/status">
           {{ t('navigation.status') }}
         </RouterLink>
+        <RouterLink to="/projects">
+          {{ t('navigation.projects') }}
+        </RouterLink>
       </nav>
     </header>
     <main>

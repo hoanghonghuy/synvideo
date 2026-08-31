@@ -7,28 +7,43 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const (
 	defaultAddr        = ":8080"
 	defaultEnvironment = "development"
+
+	EnvironmentDevelopment = "development"
+	EnvironmentTest        = "test"
+	EnvironmentProduction  = "production"
 )
 
 var allowedEnvironments = map[string]struct{}{
-	"development": {},
-	"test":        {},
-	"production":  {},
+	EnvironmentDevelopment: {},
+	EnvironmentTest:        {},
+	EnvironmentProduction:  {},
 }
 
 type Config struct {
-	Addr        string
-	Environment string
+	Addr         string
+	Environment  string
+	DatabaseURL  string
+	LocalActorID *uuid.UUID
 }
 
 func Load() (Config, error) {
+	localActorID, err := parseOptionalUUID("SYNVIDEO_LOCAL_ACTOR_ID")
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		Addr:        getEnv("SYNVIDEO_API_ADDR", defaultAddr),
-		Environment: getEnv("SYNVIDEO_ENV", defaultEnvironment),
+		Addr:         getEnv("SYNVIDEO_API_ADDR", defaultAddr),
+		Environment:  getEnv("SYNVIDEO_ENV", defaultEnvironment),
+		DatabaseURL:  getEnv("SYNVIDEO_DATABASE_URL", ""),
+		LocalActorID: localActorID,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -41,6 +56,9 @@ func Load() (Config, error) {
 func (c Config) Validate() error {
 	if _, ok := allowedEnvironments[c.Environment]; !ok {
 		return fmt.Errorf("SYNVIDEO_ENV must be one of development, test, production: %q", c.Environment)
+	}
+	if c.Environment == EnvironmentProduction && c.LocalActorID != nil {
+		return errors.New("SYNVIDEO_LOCAL_ACTOR_ID must not be set in production")
 	}
 
 	if c.Addr == "" {
@@ -66,6 +84,9 @@ func (c Config) Validate() error {
 			return fmt.Errorf("SYNVIDEO_API_ADDR host must not contain whitespace: %q", host)
 		}
 	}
+	if c.Environment != EnvironmentTest && strings.TrimSpace(c.DatabaseURL) == "" {
+		return errors.New("SYNVIDEO_DATABASE_URL is required")
+	}
 
 	return nil
 }
@@ -76,4 +97,19 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func parseOptionalUUID(key string) (*uuid.UUID, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be a UUID: %w", key, err)
+	}
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("%s must not be the nil UUID", key)
+	}
+	return &id, nil
 }
