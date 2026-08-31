@@ -14,11 +14,29 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-003 | Creative Brief backend and persistence | DONE | Accepted and squash-merged via PR #9 after Team Lead review, real PostgreSQL owner/concurrency tests and green CI. |
 | TASK-004 | Creative Brief frontend workspace | DONE | Accepted and squash-merged via PR #10 after Team Lead review, real backend smoke, dirty/saved/error/stale regression coverage and green CI. |
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
+| TASK-006 | AI Proposal domain, persistence and approval API | READY | Issue #12. Owns Proposal domain/Postgres/API + migration `0003`; frozen `AI_PROPOSAL_V1`; branch `feature/TASK-006-ai-proposal-persistence`. |
+| TASK-007 | AI Proposal generation engine | READY | Issue #13. Owns isolated `proposalgeneration` package only; frozen generation contract; branch `feature/TASK-007-ai-proposal-generation`. |
+| TASK-008 | AI Proposal frontend workspace | READY | Issue #14. Owns Proposal web feature + minimal route/i18n/navigation; final real smoke after TASK-006 merge; branch `feature/TASK-008-ai-proposal-web`. |
+| TASK-009 | AI Proposal generation integration | BLOCKED | Issue #15. Integration gate after TASK-006/007/008 acceptance: generate/regenerate -> persist draft -> frontend -> approve. |
 
-## Parallel wave status
-`WAVE-F1-A` is complete: TASK-003, TASK-004 and TASK-005 are all accepted and merged.
+## Active parallel wave — WAVE-F1-B
+Frozen contracts:
+- `docs/contracts/AI_PROPOSAL_V1.md`
+- `docs/contracts/AI_PROPOSAL_GENERATION_V1.md`
 
-No implementation task is currently READY. PM must define the next dependency-safe wave before AI Developers claim new work. Do not invent work merely to fill capacity.
+Three implementation slots are open concurrently:
+- Dev A — TASK-006: Proposal persistence/version/approval API.
+- Dev B — TASK-007: provider-neutral Proposal generation engine.
+- Dev C — TASK-008: Proposal frontend workspace.
+
+Isolation / merge rules:
+- TASK-006 and TASK-007 are merge-order independent.
+- TASK-007 must not touch DB/router/frontend; TASK-006 must not implement generation logic.
+- TASK-008 develops against deterministic contract mocks, but final acceptance waits for TASK-006 real backend smoke.
+- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> generation HTTP endpoint -> frontend Generate/Regenerate. It stays BLOCKED until all three wave tasks are accepted.
+- Do not declare Stage 3–4 AI Proposal product-complete until TASK-009 is accepted end-to-end.
+
+See `docs/tasks/WAVE_F1_B.md` for the wave integration plan.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
