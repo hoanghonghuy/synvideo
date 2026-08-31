@@ -17,7 +17,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-006 | AI Proposal domain, persistence and approval API | READY | Issue #12. Owns Proposal domain/Postgres/API + migration `0003`; frozen `AI_PROPOSAL_V1`; branch `feature/TASK-006-ai-proposal-persistence`. |
 | TASK-007 | AI Proposal generation engine | READY | Issue #13. Owns isolated `proposalgeneration` package only; frozen generation contract; branch `feature/TASK-007-ai-proposal-generation`. |
 | TASK-008 | AI Proposal frontend workspace | READY | Issue #14. Owns Proposal web feature + minimal route/i18n/navigation; final real smoke after TASK-006 merge; branch `feature/TASK-008-ai-proposal-web`. |
-| TASK-009 | AI Proposal generation integration | BLOCKED | Issue #15. Integration gate after TASK-006/007/008 acceptance: generate/regenerate -> persist draft -> frontend -> approve. |
+| TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Async/durable integration gate after TASK-006/007/008: generation job -> validated candidate -> persist draft -> frontend status -> approve. |
 
 ## Active parallel wave — WAVE-F1-B
 Frozen contracts:
@@ -33,8 +33,9 @@ Isolation / merge rules:
 - TASK-006 and TASK-007 are merge-order independent.
 - TASK-007 must not touch DB/router/frontend; TASK-006 must not implement generation logic.
 - TASK-008 develops against deterministic contract mocks, but final acceptance waits for TASK-006 real backend smoke.
-- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> generation HTTP endpoint -> frontend Generate/Regenerate. It stays BLOCKED until all three wave tasks are accepted.
-- Do not declare Stage 3–4 AI Proposal product-complete until TASK-009 is accepted end-to-end.
+- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> async generation-job HTTP/status -> frontend Generate/Regenerate. It stays BLOCKED until all three wave tasks are accepted and PM freezes the job contract.
+- ADR 0005 forbids treating provider generation as a long blocking HTTP request; TASK-009 must use an explicit job boundary.
+- Completing TASK-009 proves workflow integration. Do not call AI Proposal production-complete unless a live provider/BYOK capability is also accepted; deterministic fakes are for tests only.
 
 See `docs/tasks/WAVE_F1_B.md` for the wave integration plan.
 
