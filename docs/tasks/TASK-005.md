@@ -1,6 +1,6 @@
 # TASK-005 — AI provider capability and text-generation contracts
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-001 accepted
 Wave gate: WAVE-F1-A open after TASK-002 acceptance
