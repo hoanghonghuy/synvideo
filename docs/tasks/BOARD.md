@@ -11,9 +11,9 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | PLAN-001 | Define Foundation milestone and first implementation task set | DONE | Initial architecture baseline and first dependency chain are defined. |
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
 | TASK-002 | Project domain and persistence foundation | IN_PROGRESS | Issue #4 / `feature/TASK-002-project-persistence`. Current shared foundation; repository-wide TDD was adopted mid-task, so remaining work/fixes are test-first and historical RED evidence must not be fabricated. |
-| TASK-003 | Creative Brief backend and persistence | BLOCKED | WAVE-F1-A. Opens after TASK-002 acceptance. Owns backend Creative Brief domain/API/persistence. |
-| TASK-004 | Creative Brief frontend workspace | BLOCKED | WAVE-F1-A. Opens after TASK-002 acceptance; consumes frozen Creative Brief V1 contract; final integration gate TASK-003. |
-| TASK-005 | AI provider capability and text-generation contracts | BLOCKED | WAVE-F1-A. Isolated provider package; opens with the wave after TASK-002 acceptance. |
+| TASK-003 | Creative Brief backend and persistence | BLOCKED | Issue #5. WAVE-F1-A. Opens after TASK-002 acceptance. Owns backend Creative Brief domain/API/persistence. |
+| TASK-004 | Creative Brief frontend workspace | BLOCKED | Issue #6. WAVE-F1-A. Opens after TASK-002 acceptance; consumes frozen Creative Brief V1 contract; final integration gate TASK-003. |
+| TASK-005 | AI provider capability and text-generation contracts | BLOCKED | Issue #7. WAVE-F1-A. Isolated provider package; opens with the wave after TASK-002 acceptance. |
 
 ## Next parallel wave — WAVE-F1-A
 When TASK-002 is accepted, PM may move TASK-003, TASK-004 and TASK-005 to `READY` **together**.
