@@ -15,7 +15,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-004 | Creative Brief frontend workspace | DONE | Accepted and squash-merged via PR #10 after Team Lead review, real backend smoke, dirty/saved/error/stale regression coverage and green CI. |
 | TASK-005 | AI provider capability and text-generation contracts | DONE | Accepted and squash-merged via PR #11 after Team Lead review, mutation-isolation fixes, safe-by-default provider errors, deep-snapshot fake requests, race tests and green CI. |
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
-| TASK-007 | AI Proposal generation engine | CHANGES_REQUESTED | PR #16. Team Lead corrected base `main` -> `develop`; in-flight context cancellation/deadline is incorrectly remapped to provider failure. Add RED regression, preserve context errors, sync latest develop and rerun CI on corrected base. |
+| TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI run #74 green on `develop`. |
 | TASK-008 | AI Proposal frontend workspace | READY | Issue #14. Owns Proposal web feature + minimal route/i18n/navigation; TASK-006 is now merged, so final real backend smoke can run when implementation is ready. |
 | TASK-009 | AI Proposal generation job integration | BLOCKED | Issue #15. Async/durable integration gate after TASK-006/007/008: generation job -> validated candidate -> persist draft -> frontend status -> approve. |
 
@@ -26,14 +26,13 @@ Frozen contracts:
 
 Current wave state:
 - Dev A — TASK-006: DONE via PR #17.
-- Dev B — TASK-007: CHANGES_REQUESTED on PR #16; fix in-flight cancellation/deadline propagation under TDD and rerun corrected-base CI.
-- Dev C — TASK-008: READY / independent frontend workspace; TASK-006 backend integration gate is now available.
+- Dev B — TASK-007: DONE via PR #16.
+- Dev C — TASK-008: READY / independent frontend workspace; TASK-006 backend integration gate is available.
 
 Isolation / merge rules:
-- TASK-006 is accepted and merged.
-- TASK-007 must not touch DB/router/frontend; TASK-006 must not implement generation logic.
-- TASK-008 develops against deterministic contract mocks and may now run its final real backend smoke against merged TASK-006.
-- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> async generation-job HTTP/status -> frontend Generate/Regenerate. It stays BLOCKED until TASK-007 and TASK-008 are accepted and PM freezes the job contract.
+- TASK-006 and TASK-007 are accepted and merged.
+- TASK-008 develops against the frozen Proposal HTTP/resource contract and may run its final real backend smoke against merged TASK-006.
+- TASK-009 is the only task that connects generation engine -> Proposal CreateDraft -> async generation-job HTTP/status -> frontend Generate/Regenerate. It stays BLOCKED until TASK-008 is accepted and PM freezes the job contract.
 - ADR 0005 forbids treating provider generation as a long blocking HTTP request; TASK-009 must use an explicit job boundary.
 - Completing TASK-009 proves workflow integration. Do not call AI Proposal production-complete unless a live provider/BYOK capability is also accepted; deterministic fakes are for tests only.
 
