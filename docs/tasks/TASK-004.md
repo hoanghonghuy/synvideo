@@ -1,9 +1,9 @@
 # TASK-004 — Creative Brief frontend workspace
 
-Status: BLOCKED
+Status: IN_PROGRESS
 Milestone: F1 Creative Workflow
 Depends on: TASK-002 accepted
-Integration gate: TASK-003 backend merged before final acceptance
+Integration gate: TASK-003 backend merged before final acceptance — satisfied via PR #9
 Branch: `feature/TASK-004-creative-brief-web`
 Base: `develop`
 Wave: WAVE-F1-A
@@ -27,7 +27,7 @@ Do not recursively load unrelated docs.
 ## Integration contract
 Consumes frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
 
-Implement client/feature tests against this contract using deterministic transport mocks while TASK-003 is in parallel. Do not change the contract from the frontend branch.
+Implement client/feature tests against this contract using deterministic transport mocks. TASK-003 backend is now merged on `develop`; before final delivery, rebase/sync this branch as needed and run the real integration/smoke pass. Do not change the contract from the frontend branch.
 
 ## Parallel safety
 ### Primary write paths
@@ -41,11 +41,9 @@ Implement client/feature tests against this contract using deterministic transpo
 - Existing API client composition only where necessary to register the feature client.
 
 ### Reserved / do not touch
-- `apps/api/**` — owned by TASK-003/TASK-005 in this wave.
+- `apps/api/**` — TASK-003 backend is accepted; TASK-005 owns the isolated provider boundary.
 - Project persistence/domain behavior from TASK-002.
 - Global visual redesign, unrelated dashboard routes or shared architecture refactors.
-
-TASK-004 may reach review in parallel with TASK-003, but final acceptance requires rebase on the merged backend task and a real integration/smoke pass against the actual API.
 
 ## Scope
 - Creative Brief form/workspace for all frozen V1 fields.
@@ -96,7 +94,7 @@ Use contract-shaped transport mocks; snapshots alone are insufficient.
 - [ ] Stale edits cannot silently overwrite newer server state.
 - [ ] Visible copy is localized through i18n.
 - [ ] Frontend lint/typecheck/test/build remain green.
-- [ ] After TASK-003 merges, branch is rebased as needed and real backend integration smoke passes before acceptance.
+- [ ] Branch is rebased/synced as needed onto merged TASK-003 backend and real backend integration smoke passes before acceptance.
 - [ ] PR contains TDD evidence.
 
 ## Open-source research
@@ -118,7 +116,7 @@ PR to `develop` from `feature/TASK-004-creative-brief-web` must include:
 - TDD evidence: RED/GREEN/REFACTOR;
 - contract-client behavior tested;
 - frontend verification;
-- final backend integration result after TASK-003 merges;
+- final backend integration result against merged TASK-003;
 - any contract issue surfaced without silently changing the frontend expectation.
 
 Do not self-merge or mark DONE.
