@@ -19,13 +19,16 @@ See `docs/engineering/CONTINUE_PROTOCOL.md` only when the continuation state nee
 
 ## Coding workflow
 1. Start from the latest `origin/develop` when taking a new task.
-2. Read `docs/tasks/BOARD.md` and select only a `READY` task.
-3. Create a dedicated branch such as `feature/TASK-012-scene-editor`.
-4. Read only the files explicitly referenced by that task.
-5. Implement only the task scope. Record unrelated findings instead of expanding scope.
-6. Run the task's required verification.
-7. Open a PR to `develop`. Never implement directly on `main` or `develop`.
-8. Do not mark a task `DONE`; Team Lead does that after acceptance review.
+2. Read `docs/tasks/BOARD.md` and select only a `READY` task whose dependencies are satisfied.
+3. Before claiming it, fetch remote branches and confirm the task's canonical remote branch does not already exist and has no active PR.
+4. Create the dedicated task branch from latest `origin/develop` and push it to origin immediately as the task claim/lock. If that push loses a race, do not work on the task; select another eligible READY task.
+5. Read only the files explicitly referenced by that task.
+6. Follow `docs/engineering/TDD_PROTOCOL.md`: RED -> GREEN -> REFACTOR for behavior changes, with meaningful regression coverage.
+7. Respect the task's declared write paths/integration contract. For parallel work follow `docs/engineering/PARALLEL_WORK_PROTOCOL.md`.
+8. Implement only the task scope. Record unrelated findings instead of expanding scope.
+9. Run the task's required verification.
+10. Open a PR to `develop`. Never implement directly on `main` or `develop`.
+11. Do not mark a task `DONE`; Team Lead does that after acceptance review.
 
 Do not continuously merge `develop` while implementing an unrelated task. Sync when starting work, when the task requires new upstream changes, and before final PR integration when necessary.
 
