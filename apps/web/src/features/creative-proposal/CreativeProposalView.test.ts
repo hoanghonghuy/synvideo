@@ -199,6 +199,44 @@ describe('CreativeProposalView', () => {
     expect((wrapper.find('[name="objective_summary"]').element as HTMLTextAreaElement).value).toBe('Muc tieu giu lai')
     expect(wrapper.text()).toContain('Vui lòng kiểm tra lại AI Proposal.')
     expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(false)
+  })
+
+  it('does not expose a load retry after a failed mutation following a failed version switch', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse([draftSummary, approvedSummary]))
+      .mockResolvedValueOnce(jsonResponse(draftProposal))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed' } }, 503))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'validation_failed',
+              message: 'Request validation failed.',
+              fields: { audience_summary: 'required' },
+            },
+          },
+          400,
+        ),
+      )
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="version-1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(true)
+
+    await wrapper.find('[name="audience_summary"]').setValue('Thay doi truoc khi luu')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect((wrapper.find('[name="audience_summary"]').element as HTMLTextAreaElement).value).toBe('Thay doi truoc khi luu')
+    expect(wrapper.text()).toContain('Vui lòng kiểm tra lại AI Proposal.')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(false)
   })
 
   it('shows stale save conflict without auto-overwrite', async () => {

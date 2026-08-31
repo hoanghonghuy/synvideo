@@ -31,7 +31,8 @@ const saved = ref(false)
 const dirty = ref(false)
 const staleConflict = ref(false)
 const confirmApproval = ref(false)
-const errorCode = ref('')
+const loadErrorCode = ref('')
+const mutationErrorCode = ref('')
 const failedVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 const formValues = ref<CreativeProposalFormState>(emptyFormState())
@@ -45,7 +46,9 @@ onMounted(() => {
 
 async function loadWorkspace() {
   loading.value = true
-  errorCode.value = ''
+  loadErrorCode.value = ''
+  mutationErrorCode.value = ''
+  failedVersion.value = null
   resetEditState()
   try {
     project.value = await getProject(String(route.params.id))
@@ -55,7 +58,7 @@ async function loadWorkspace() {
       await loadVersion(newestSummary.version, true)
     }
   } catch (error) {
-    errorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
   } finally {
     loading.value = false
   }
@@ -68,13 +71,13 @@ async function loadVersion(version: number, discardDirty = false) {
   }
 
   proposalLoading.value = true
-  errorCode.value = ''
+  loadErrorCode.value = ''
   fieldErrors.value = {}
   try {
     const proposal = await getCreativeProposal(String(route.params.id), version)
     applyProposal(proposal)
   } catch (error) {
-    errorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
     failedVersion.value = version
   } finally {
     proposalLoading.value = false
@@ -123,7 +126,9 @@ async function submit(payload: CreativeProposalEditableContent) {
     return
   }
   submitting.value = true
-  errorCode.value = ''
+  mutationErrorCode.value = ''
+  loadErrorCode.value = ''
+  failedVersion.value = null
   fieldErrors.value = {}
   saved.value = false
   staleConflict.value = false
@@ -146,7 +151,9 @@ async function approveSelected() {
     return
   }
   approving.value = true
-  errorCode.value = ''
+  mutationErrorCode.value = ''
+  loadErrorCode.value = ''
+  failedVersion.value = null
   staleConflict.value = false
   try {
     const approved = await approveCreativeProposal(
@@ -164,14 +171,14 @@ async function approveSelected() {
 
 function handleMutationError(error: unknown) {
   if (error instanceof ApiError) {
-    errorCode.value = error.code
+    mutationErrorCode.value = error.code
     fieldErrors.value = error.fields
     if (error.code === 'STALE_REVISION') {
       staleConflict.value = true
     }
     return
   }
-  errorCode.value = 'request_failed'
+  mutationErrorCode.value = 'request_failed'
 }
 
 function resetEditState() {
@@ -270,10 +277,10 @@ async function retryFailedVersion() {
       {{ t('creativeProposal.states.loading') }}
     </p>
     <div
-      v-else-if="errorCode && !project"
+      v-else-if="loadErrorCode && !project"
       class="notice error"
     >
-      <p>{{ t(`creativeProposal.errors.${errorCode}`) }}</p>
+      <p>{{ t(`creativeProposal.errors.${loadErrorCode}`) }}</p>
       <button
         class="secondary-button"
         type="button"
@@ -392,10 +399,10 @@ async function retryFailedVersion() {
               </button>
             </div>
             <div
-              v-if="errorCode && (!staleConflict || errorCode !== 'STALE_REVISION')"
+              v-if="loadErrorCode"
               class="notice error"
             >
-              <p>{{ t(`creativeProposal.errors.${errorCode}`) }}</p>
+              <p>{{ t(`creativeProposal.errors.${loadErrorCode}`) }}</p>
               <button
                 class="secondary-button"
                 data-testid="retry-proposal-load"
@@ -404,6 +411,12 @@ async function retryFailedVersion() {
               >
                 {{ t('projects.actions.retry') }}
               </button>
+            </div>
+            <div
+              v-if="mutationErrorCode"
+              class="notice error"
+            >
+              <p>{{ t(`creativeProposal.errors.${mutationErrorCode}`) }}</p>
             </div>
             <div
               v-if="isReadOnly"
@@ -461,10 +474,10 @@ async function retryFailedVersion() {
             />
           </template>
           <div
-            v-else-if="errorCode"
+            v-else-if="loadErrorCode"
             class="notice error"
           >
-            <p>{{ t(`creativeProposal.errors.${errorCode}`) }}</p>
+            <p>{{ t(`creativeProposal.errors.${loadErrorCode}`) }}</p>
             <button
               class="secondary-button"
               data-testid="retry-proposal-load"
