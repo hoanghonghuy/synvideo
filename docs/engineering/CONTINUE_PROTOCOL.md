@@ -7,6 +7,20 @@ Treat continuation as a repository-state command, not as permission to invent wo
 
 The agent must discover the next valid action from GitHub/repository state and follow the PM -> AI Developer -> PR -> Team Lead workflow.
 
+## Filesystem rule
+When implementation agents may run concurrently, **one task = one dedicated Git worktree**.
+
+The shared/control checkout stays on `develop`. Do not `git switch` that checkout between task branches. Branch-as-lock prevents duplicate task ownership; the dedicated worktree prevents branch/index/uncommitted-file collisions. Both are required.
+
+Before modifying code inspect:
+- current worktree root/branch/status;
+- `git worktree list --porcelain`;
+- the canonical task branch/PR.
+
+For an existing PR, continue in the branch's existing dedicated worktree, or attach/create one if none exists. Never reset/clean/remove another task's worktree.
+
+See `docs/engineering/PARALLEL_WORK_PROTOCOL.md` for the authoritative worktree and atomic-claim protocol.
+
 ## State machine
 
 ```text
@@ -15,6 +29,9 @@ CONTINUE
    v
 Active PR exists?
    | yes
+   v
+Locate/enter that PR branch's dedicated worktree
+   |
    v
 Requested changes / comments / failing CI?
    | yes ----------------------------> TDD/regression fix -> verify -> push -> same PR
@@ -29,7 +46,7 @@ Finish current task acceptance criteria -> verify -> push/PR
 No active PR/task
    |
    v
-Sync/fetch latest origin/develop + remote task branches
+Use control checkout on develop; sync/fetch latest origin/develop + remote branches + worktree state
    |
    v
 Read BOARD + open task issues
@@ -38,12 +55,19 @@ Read BOARD + open task issues
 READY tasks with satisfied dependencies?
    |
    v
-Skip tasks whose canonical remote branch/PR already exists (claimed by another dev)
+Skip tasks whose canonical remote branch/PR/local task worktree already exists
    |
    v
 Highest-priority unclaimed READY task?
-   | yes ----------------------------> Create canonical branch -> push immediately as claim/lock -> TDD task-worker
-   | no -----------------------------> Stop and report blocker/claimed/no executable task
+   | yes
+   v
+Create dedicated task worktree/local branch from origin/develop
+   |
+   v
+Atomically create remote branch only-if-absent as claim/lock
+   | success ------------------------> TDD task-worker inside task worktree
+   | lost race ----------------------> Remove only new empty local worktree/branch -> re-fetch -> next task
+   | no task ------------------------> Stop and report blocker/claimed/no executable task
 ```
 
 ## Priority
@@ -58,14 +82,16 @@ Never abandon an active review to start unrelated work unless the PM/task board 
 ## Parallel claim rule
 When multiple developers receive `tiếp tục` concurrently:
 
-1. Fetch remote branches before selecting work.
-2. A canonical remote task branch or active PR means that task is already claimed.
+1. Use the control checkout on `develop`; fetch remote branches and inspect worktrees before selecting work.
+2. A canonical remote task branch, active PR, or existing task worktree means that task is already claimed.
 3. Select only an unclaimed READY task whose dependencies are satisfied.
-4. Create the exact canonical task branch from latest `origin/develop`.
-5. Push it to origin immediately before implementation. This remote branch is the claim/lock.
-6. If the push loses a race, do not overwrite/take over that branch. Re-fetch and select the next eligible task.
+4. Create its exact local branch in a dedicated worktree from latest `origin/develop`.
+5. Atomically create the canonical remote branch with create-if-absent/expected-nonexistent semantics before implementation.
+6. **Do not rely on a plain same-SHA `git push` as the lock**: two agents starting from the same base can otherwise both observe apparent success/up-to-date.
+7. If the atomic claim loses a race, do not overwrite/take over/delete the winner's branch. Remove only the losing agent's newly created empty local worktree/branch, re-fetch and select the next eligible task.
+8. After a successful claim, perform all implementation and Git history changes inside the dedicated task worktree.
 
-See `docs/engineering/PARALLEL_WORK_PROTOCOL.md` for wave/path-ownership rules.
+See `docs/engineering/PARALLEL_WORK_PROTOCOL.md` for exact wave/path/worktree rules.
 
 ## TDD
 New behavior and review fixes follow `docs/engineering/TDD_PROTOCOL.md` unless a task records a justified exception.
@@ -74,7 +100,8 @@ A continuation command does not authorize test-after implementation or fake hist
 
 ## Sources to inspect
 Only inspect what is needed to resolve state:
-- current Git branch/working tree;
+- current Git worktree/branch/working tree;
+- `git worktree list --porcelain`;
 - current branch PR;
 - PR reviews/comments and checks;
 - current task issue/spec;
@@ -87,11 +114,14 @@ Do not recursively load all docs or source code.
 ## Safety rails
 Continuation does **not** authorize:
 - direct implementation commits to `develop` or `main`;
+- using one working tree for multiple concurrent implementation tasks;
+- switching a shared control checkout among concurrent task branches;
 - self-merging a PR;
 - marking a task `DONE`;
 - turning BACKLOG/BLOCKED tasks into READY;
-- taking over another developer's claimed branch;
+- taking over another developer's claimed branch/worktree;
 - broadening scope because the agent notices a nearby opportunity;
-- force-pushing without a concrete branch-history reason; use `--force-with-lease` when an intentional rebase requires it.
+- destructive reset/clean/worktree removal against another task;
+- blind force-pushing; use `--force-with-lease` when an intentional rebase requires it.
 
 If there is no valid next action, stopping with a concise status is the correct behavior.
