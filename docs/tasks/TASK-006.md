@@ -1,11 +1,12 @@
 # TASK-006 — AI Proposal domain, persistence and approval API
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-003 accepted
 Wave: WAVE-F1-B
 Branch: `feature/TASK-006-ai-proposal-persistence`
 Base: `develop`
+Accepted: squash-merged via PR #17 after Team Lead review and green PostgreSQL-backed CI.
 
 ## Goal
 Implement the durable AI Proposal resource: Project-scoped versions, editable draft revision concurrency, immutable approval, PostgreSQL persistence and owner-isolated HTTP read/edit/approve APIs.
@@ -74,23 +75,23 @@ Start RED before implementation for at least:
 10. validation rejects frozen-contract violations.
 
 ## Acceptance criteria
-- [ ] PostgreSQL migration is transactional/idempotent under existing migration runner.
-- [ ] Domain/persistence/API match `AI_PROPOSAL_V1.md` exactly.
-- [ ] `CreateDraft` exists for TASK-009 without public manual-create endpoint.
-- [ ] Draft concurrency and immutable approval are proven against real PostgreSQL.
-- [ ] Owner isolation is tested for list/get/update/approve.
-- [ ] Stable HTTP errors include `STALE_REVISION` and `PROPOSAL_IMMUTABLE`.
-- [ ] No AI provider call/vendor SDK/generation prompt is introduced.
-- [ ] TDD evidence is truthful and CI green.
+- [x] PostgreSQL migration is transactional/idempotent under existing migration runner.
+- [x] Domain/persistence/API match `AI_PROPOSAL_V1.md` exactly.
+- [x] `CreateDraft` exists for TASK-009 without public manual-create endpoint.
+- [x] Draft concurrency and immutable approval are proven against real PostgreSQL.
+- [x] Owner isolation is tested for list/get/update/approve.
+- [x] Stable HTTP errors include `STALE_REVISION` and `PROPOSAL_IMMUTABLE`.
+- [x] No AI provider call/vendor SDK/generation prompt is introduced.
+- [x] TDD evidence is truthful and CI green.
 
 ## Verification
-At minimum:
-- targeted domain/service tests;
-- real PostgreSQL integration/concurrency tests;
-- `gofmt`, `go vet ./...`, `go test ./...`, backend build;
-- full repository verification and `git diff --check`.
+Accepted PR #17 verified:
+- migration on clean PostgreSQL;
+- `go vet ./...`;
+- PostgreSQL-backed `go test ./...` including concurrent draft/update tests;
+- backend build;
+- frontend CI and compose validation;
+- Team Lead review with no blocking task-specific finding.
 
 ## Merge order
-Independent from TASK-007 implementation. TASK-008 may develop against the frozen HTTP contract but must run its final real backend smoke after TASK-006 merges.
-
-Do not self-merge or self-mark DONE.
+Independent from TASK-007 implementation. TASK-008 may develop against the frozen HTTP contract and can now run its final real backend smoke against merged TASK-006.
