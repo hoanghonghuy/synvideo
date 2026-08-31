@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,8 +54,11 @@ func (g *TextGenerator) GenerateText(ctx context.Context, req providers.TextGene
 	g.requests = append(g.requests, req)
 	g.mu.Unlock()
 
-	inputTokens := len(req.Messages)
-	outputTokens := len(g.response)
+	inputTokens := 0
+	for _, message := range req.Messages {
+		inputTokens += len(strings.Fields(message.Content))
+	}
+	outputTokens := len(strings.Fields(g.response))
 	totalTokens := inputTokens + outputTokens
 
 	return providers.TextGenerationResponse{

@@ -1,6 +1,9 @@
 package providers
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 type modelEntry struct {
 	metadata      ModelMetadata
@@ -82,6 +85,9 @@ func (r *Registry) ListProviders() []ProviderMetadata {
 	for _, provider := range r.providers {
 		items = append(items, provider.metadata)
 	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
 	return items
 }
 
@@ -98,6 +104,9 @@ func (r *Registry) ListModels(providerID ProviderID) ([]ModelMetadata, error) {
 	for _, model := range provider.models {
 		items = append(items, model.metadata)
 	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
 	return items, nil
 }
 
