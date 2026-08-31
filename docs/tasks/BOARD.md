@@ -1,6 +1,6 @@
 # SynVideo Task Board
 
-Current milestone: `F0 — TECHNICAL FOUNDATION` transitioning to `F1 — CREATIVE WORKFLOW`
+Current milestone: `F1 — CREATIVE WORKFLOW`
 
 PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, and parallel tasks must follow `docs/engineering/PARALLEL_WORK_PROTOCOL.md`.
 
@@ -10,15 +10,13 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | AUDIT-001 | Audit pre-existing codebase | CANCELLED | Not applicable: there is no pre-existing application code. |
 | PLAN-001 | Define Foundation milestone and first implementation task set | DONE | Initial architecture baseline and first dependency chain are defined. |
 | TASK-001 | Technical foundation and runnable project skeleton | DONE | Accepted and squash-merged via PR #3 after Team Lead review and green CI. |
-| TASK-002 | Project domain and persistence foundation | CHANGES_REQUESTED | PR #8 reviewed by Team Lead. Keep fixes on `feature/TASK-002-project-persistence`; remaining fixes are test-first under the adopted TDD protocol. |
-| TASK-003 | Creative Brief backend and persistence | BLOCKED | Issue #5. WAVE-F1-A. Opens after TASK-002 acceptance. Owns backend Creative Brief domain/API/persistence. |
-| TASK-004 | Creative Brief frontend workspace | BLOCKED | Issue #6. WAVE-F1-A. Opens after TASK-002 acceptance; consumes frozen Creative Brief V1 contract; final integration gate TASK-003. |
-| TASK-005 | AI provider capability and text-generation contracts | BLOCKED | Issue #7. WAVE-F1-A. Isolated provider package; opens with the wave after TASK-002 acceptance. |
+| TASK-002 | Project domain and persistence foundation | DONE | Accepted and squash-merged via PR #8 after Team Lead review, green CI and truthful TDD evidence. |
+| TASK-003 | Creative Brief backend and persistence | READY | Issue #5. WAVE-F1-A. Owns backend Creative Brief domain/API/persistence. Canonical branch `feature/TASK-003-creative-brief-api`. |
+| TASK-004 | Creative Brief frontend workspace | READY | Issue #6. WAVE-F1-A. Consumes frozen Creative Brief V1 contract; final acceptance includes backend integration after TASK-003 merges. Canonical branch `feature/TASK-004-creative-brief-web`. |
+| TASK-005 | AI provider capability and text-generation contracts | READY | Issue #7. WAVE-F1-A. Isolated provider package and merge-order independent from TASK-003/004. Canonical branch `feature/TASK-005-ai-provider-contracts`. |
 
-## Next parallel wave — WAVE-F1-A
-When TASK-002 is accepted, PM may move TASK-003, TASK-004 and TASK-005 to `READY` **together**.
-
-The wave is deliberately split by write surface:
+## Active parallel wave — WAVE-F1-A
+Up to three AI Developers may work concurrently:
 - Dev A — TASK-003: backend Creative Brief API/persistence.
 - Dev B — TASK-004: frontend Creative Brief workspace against frozen `docs/contracts/CREATIVE_BRIEF_V1.md`.
 - Dev C — TASK-005: isolated AI provider capability/text boundary.
@@ -32,7 +30,7 @@ TASK-003 and TASK-004 share a contract, not implementation files. TASK-005 is me
 - PM owns priority, dependency graph, wave composition and READY/BLOCKED/DONE transitions.
 - AI Developers may start only `READY` tasks whose dependencies are satisfied.
 - Parallel agents use the canonical remote task branch as a claim/lock: fetch first, skip tasks whose remote branch/PR already exists, create the exact branch from latest `origin/develop`, and push it immediately before implementation.
-- Every implementation task follows `docs/engineering/TDD_PROTOCOL.md` unless a justified exception is documented. TASK-002 is the one grandfathered in-progress task; no fake historical TDD evidence.
+- Every implementation task follows `docs/engineering/TDD_PROTOCOL.md`; RED -> GREEN -> REFACTOR evidence must be truthful and coverage-only additions must not be misrepresented as failing RED behavior.
 - A task normally moves `READY -> IN_PROGRESS -> REVIEW -> DONE`.
 - Team Lead may move `REVIEW -> CHANGES_REQUESTED` until acceptance criteria are satisfied.
 - Do not create parallelism by splitting tightly coupled work after implementation has already begun. Prefer contract-first tasks with isolated write paths.
