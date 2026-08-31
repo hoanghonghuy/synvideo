@@ -14,8 +14,9 @@ It is **not** a script, scene plan, media asset or render instruction set. Creat
 - `version` is a positive, monotonically increasing integer scoped to one Project.
 - Each Proposal version has a mutable `revision` only while status is `draft`.
 - Status values in V1: `draft`, `approved`, `superseded`.
+- A Project has at most one active `draft` Proposal version at a time.
 - An approved Proposal is immutable. Editing/regenerating after approval creates a new draft version; approval history must never be silently rewritten.
-- Creating a newer draft may mark an older unapproved draft `superseded`; approved versions remain approved.
+- Creating a newer draft **must** mark the previous active unapproved draft `superseded` in the same transaction; approved versions remain approved.
 - Approval requires the caller's current `revision` and must be atomic with the status transition.
 - Every Proposal records `source_brief_revision`. A later integration layer may report an approved/draft Proposal as upstream-stale when the Creative Brief revision has advanced; do not mutate the Proposal silently.
 
@@ -79,7 +80,7 @@ Semantics:
 - Atomically approves the current draft revision and sets `approved_at`.
 - Success returns `200` full approved Proposal.
 - Stale revision: `409 STALE_REVISION`.
-- Non-draft version: `409 PROPOSAL_IMMUTABLE` or idempotent success only if the exact same approved state can be proven; implementation must choose one behavior and test it consistently. V1 default is reject with `PROPOSAL_IMMUTABLE`.
+- Any non-draft version: `409 PROPOSAL_IMMUTABLE`.
 
 ## Internal create-draft service contract
 Generation integration needs a service/repository operation to create a new Proposal draft from validated structured content plus `source_brief_revision`.
@@ -89,8 +90,9 @@ This operation is **internal application behavior in WAVE-F1-B**, not a public m
 Creation semantics:
 - allocate next Project-scoped `version` atomically;
 - start `revision = 1`, `status = draft`;
-- optionally supersede a previous unapproved draft in the same transaction;
+- if an active draft exists, mark it `superseded` in the same transaction before the new draft becomes active;
 - never supersede/modify an approved version;
+- enforce at most one active draft per Project under concurrent creation;
 - return the created full Proposal.
 
 ## Frontend behavior expected by this contract
