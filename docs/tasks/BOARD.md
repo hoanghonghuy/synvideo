@@ -25,50 +25,30 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`. Re
 | TASK-014 | Scene Plan generation engine | DONE | Accepted and squash-merged PR #27. |
 | TASK-015 | Scene Plan domain and persistence foundation | DONE | PR #32 accepted on head `306d9dae...`, CI #168 green, squash-merged as `66034b8e...`; issue #30 closed. |
 | TASK-016 | Media Asset + S3-compatible storage foundation | DONE | PR #33 accepted on head `7141c02b...`, CI #167 green, squash-merged as `a12a9856...`; issue #31 closed. |
-| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | CHANGES_REQUESTED | Issue #34 / PR #35. Six prior review gates accepted on head `488467e0...`, CI #169 green; final blocker is fail-fast, adapter-equivalent deployment catalog validation + latest-develop sync. |
+| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | DONE | PR #35 accepted on head `8dd10cae...`, CI #177 green, logical review `5078306924`, squash-merged as `6fbfdbc0...`; issue #34 closed. |
 
-## Active parallel wave — WAVE-F1-G
+## Completed parallel wave — WAVE-F1-G
 
-Frozen contracts relevant to active work:
-- `docs/contracts/BYOK_TEXT_PROVIDER_RUNTIME_V1.md`;
-- accepted `AI_PROPOSAL_JOB_V1`, `OPENAI_COMPAT_TEXT_PROVIDER_V1`, `SCENE_PLAN_V1`, and `MEDIA_ASSET_STORAGE_V1`.
+TASK-017 is accepted. The creator can now securely configure supported live OpenAI-compatible text providers, and Proposal generation resolves owner credentials only at worker execution while durable jobs remain secret-free.
 
 Current implementation slots:
-- **Dev A — TASK-017 `CHANGES_REQUESTED`**: continue only on PR #35/worktree; fix deployment catalog validation/startup fail-fast behavior and sync latest `develop`.
-- **Dev B — free**: TASK-015 is merged/DONE; cleanup its worktree before claiming a new task.
-- **Dev C — free**: TASK-016 is merged/DONE; cleanup its worktree before claiming a new task.
+- **Dev A — free**: TASK-017 merged/DONE; cleanup its worktree before a new claim.
+- **Dev B — free**: TASK-015 merged/DONE; cleanup its worktree before a new claim.
+- **Dev C — free**: TASK-016 merged/DONE; cleanup its worktree before a new claim.
 
-## Why current isolation remains safe
-TASK-015 and TASK-016 are accepted and no longer occupy implementation write surfaces. TASK-017 owns the runtime/httpserver/provider-settings/frontend/config surface plus migration `0009` and must not reopen Scene Plan/media foundations.
-
-TASK-017 remains intentionally deployment-definition based: creators configure credentials/model enablement but cannot submit arbitrary base URLs in V1. This closes the real live-AI usability gap without introducing an unreviewed SSRF/custom-endpoint surface.
-
-## TASK-017 current review state
-Accepted on head `488467e0...`:
-1. strict authenticated/owner-scoped text-generation options with no global fallback;
-2. exact API-key input preservation so whitespace mistakes are rejected server-side;
-3. reuse of accepted TASK-013 OpenAI-compatible base-URL validation;
-4. real PostgreSQL same-revision concurrent update coverage;
-5. end-to-end Proposal job smoke proving owner credential isolation and secret-free durable payload/result;
-6. first-create revision must be omitted.
-
-Remaining gate:
-1. deployment provider definitions must fail catalog validation for values that TASK-013 would reject later at runtime, including non-canonical external model IDs and invalid timeout/max-response-size bounds;
-2. explicitly supplied invalid `SYNVIDEO_TEXT_PROVIDER_DEFINITIONS` must fail startup/config initialization rather than logging and continuing with nil catalog;
-3. PR #35 must sync latest `develop` after TASK-015/TASK-016 merges and rerun full CI.
+All three implementation slots are available. Do not create micro-tasks merely to occupy them; the next wave must first freeze substantial product contracts with isolated write surfaces.
 
 ## Isolation / merge rules
 - Every implementation task uses a dedicated Git worktree; the shared/control checkout remains on `develop`.
 - Maximum concurrent implementation worktrees normally equals 3.
 - Review fixes stay on their existing branch/PR/worktree.
-- TASK-017 must not modify accepted TASK-015 `sceneplan/**`/`0007` or TASK-016 `mediaasset/**`/`0008`, and must not start Script/Scene Plan/media/render/publish follow-ons.
 - New task branches must be claimed by atomically creating the absent remote ref at latest `origin/develop`; a plain same-base push is not an exclusive lock.
 - Every task follows `docs/engineering/TDD_PROTOCOL.md`; RED → GREEN → REFACTOR evidence must be truthful.
 - Merged worktrees should be cleaned before the developer claims another task.
 - Do not self-merge or self-mark DONE; Team Lead review + green CI is the merge gate.
 
 ## Planned follow-on — not READY yet
-These are the next product capabilities, but shared write surfaces/dependencies must be released and contracts frozen before implementation:
+These are the next product capabilities. Contracts and write surfaces must be frozen before implementation:
 
 1. **TASK-018 candidate — Script durable generation integration**: generic jobs + TASK-012 engine + idempotent Script draft persistence using the same owner-scoped provider runtime from TASK-017.
 2. **Script creator workspace**: Script history/edit/stale/approval plus durable Generate/Regenerate states/recovery.
@@ -91,10 +71,11 @@ Accepted capabilities now cover:
 - generic durable PostgreSQL jobs/lease/retry execution;
 - Script persistence/versioning/approval and provider-neutral generation engine;
 - live OpenAI-compatible provider adapter foundation;
+- secure creator-configurable owner-scoped BYOK runtime and localized provider settings workspace;
 - provider-neutral Scene Plan generation engine plus durable Scene Plan persistence/versioning;
 - durable media metadata and S3-compatible object-storage foundation.
 
-Current active gap is secure creator-configurable live-provider runtime in TASK-017. After TASK-017, AI Proposal becomes live-provider usable rather than merely provider-ready. The remaining F1 path is still substantial: Script durable generation/workspace, Scene Plan workspace, media/audio acquisition, Scene Editor, render/export and publishing.
+AI Proposal is now live-provider usable for configured creators. The remaining F1 path is substantial: Script durable generation/workspace, Scene Plan creator workflow, media/audio acquisition, Scene Editor, render/export and publishing/channel management.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
