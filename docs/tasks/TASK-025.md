@@ -6,9 +6,9 @@ Wave: WAVE-F1-I early slot
 Branch: `feature/TASK-025-visual-provider-foundation`
 Base: `develop`
 PR: #49
-Review head: `b0b33467ee264c6bf5b5db182371a464161aa7db`
-Logical TL review: `5080185028`
-CI: #217 green on reviewed head
+Review head: `77bd30c6e19bc212d3ec1b369908fe3ba0189833`
+Logical TL review: `5080350928`
+CI: #224 green on reviewed head
 Issue: #43
 Depends on: TASK-005 accepted; frozen `VISUAL_GENERATION_PROVIDER_V1`.
 
@@ -24,30 +24,37 @@ Establish production-grade provider-neutral image and asynchronous video generat
 
 No persistence, jobs, HTTP, runtime composition, provider settings, Media Asset code, live adapters, frontend or migrations.
 
-## Current review blockers
-Fix only on the existing PR/worktree while preserving the accepted architecture.
+## Review result on `77bd30c...`
+The previous blocker set is resolved:
+- image responses now reject video MIME and video results reject image MIME;
+- deterministic fakes snapshot arbitrary bounded public `BinaryInput` implementations rather than relying on optional cloner behavior;
+- regressions cover wrong-family MIME, reference MIME/size rejection, video cancellation, failed operations and result-unavailable behavior;
+- exact-head CI #224 is green and ownership remains providers-only.
 
-1. **Capability-specific result MIME validation.** The current shared generated MIME allowlist lets `ImageGenerationResponse.Validate()` accept `video/mp4`/`video/webm`, and video result opening can accept image MIME. Keep the shared `GeneratedBinary` abstraction, but image outputs must validate against image MIME only and video results against video MIME only. Add wrong-family regression tests in both directions.
-2. **Deterministic fake deep-copy is conditional.** `cloneImageRequest`/`cloneVideoRequest` only deep-copy reference binaries if caller inputs implement optional `BinaryInputCloner`; otherwise fake capture retains caller-owned objects. Frozen contract requires captured deep-cloned requests for any valid public `BinaryInput`. Snapshot/copy bounded input content into fake-owned immutable data or use an equivalent guarantee, and test a custom mutable `BinaryInput` without `BinaryInputCloner`.
-3. **Complete frozen boundary coverage.** Add focused tests for reference MIME/size rejection, failed video operation/result-unavailable behavior, video context cancellation, and the capability-specific result MIME gates.
+## Remaining blocker
+The visual port still has two sources of model identity. `ImageGenerationRequest` / `VideoGenerationRequest` carry `ProviderID` and `ModelID`, and image response echoes them, even though the frozen contract says provider/model identity is resolved before the capability port is called.
+
+Keeping those fields permits inconsistent calls such as resolving generator binding for model A while a request claims model B. Make the capability-specific registry binding/resolution the single source of truth: remove provider/model identity from visual request payloads and unnecessary response echo fields (or an equivalent design that makes contradictory identity impossible), then update fakes/tests.
 
 ## Accepted architecture to preserve
 - separate synchronous `ImageGenerator` from asynchronous `VideoGenerator`;
 - video `StartVideo` / `GetVideoOperation` / `OpenVideoResult` lifecycle;
 - opaque external operation IDs;
-- streaming/closable provider-neutral `GeneratedBinary`;
+- streaming/closable provider-neutral generated binaries;
+- capability-specific image/video MIME validation;
 - independent text/image/video registry bindings and multi-capability models;
 - backward-compatible legacy text resolution;
 - safe provider-neutral error categories;
+- deterministic deep-cloned fake request capture;
 - no production registration or cross-layer leakage.
 
-## Verification gate
-After fixes:
-- targeted visual tests including the new boundary regressions;
-- `go test -race ./internal/providers/...`;
-- full backend verification / vet;
+## Final verification gate
+After the identity fix:
+- update all visual fakes/tests to prove resolved binding is the only model/provider identity source;
+- targeted visual tests + `go test -race ./internal/providers/...`;
+- full backend verification/vet;
 - exact-head CI green;
-- no paths outside the frozen TASK-025 ownership boundary.
+- providers-only ownership boundary retained;
+- sync latest `develop` before final merge if needed.
 
-## Worktree protocol
-Continue only in the existing TASK-025 dedicated worktree/PR #49. Do not create a replacement branch, self-merge, or self-mark DONE.
+Continue only on the existing TASK-025 worktree/PR #49. Do not self-merge or self-mark DONE.
