@@ -1,10 +1,11 @@
 # TASK-025 — Provider-neutral visual generation foundation
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
-Planned wave: WAVE-F1-I candidate
-Branch when activated: `feature/TASK-025-visual-provider-foundation`
+Wave: WAVE-F1-I early slot
+Branch: `feature/TASK-025-visual-provider-foundation`
 Base: `develop`
+Issue: #43
 Depends on: TASK-005 provider capability foundation accepted.
 
 ## Goal
@@ -13,7 +14,7 @@ Establish production-grade provider-neutral image and asynchronous video generat
 ## Frozen contract
 `docs/contracts/VISUAL_GENERATION_PROVIDER_V1.md`.
 
-## Primary ownership when activated
+## Primary ownership
 - `apps/api/internal/providers/**` visual interfaces/types/registry extension;
 - deterministic visual provider fakes/tests only.
 
@@ -30,12 +31,24 @@ No persistence, jobs, HTTP, runtime composition, provider settings, Media Asset 
 ## Critical architecture gate
 Do not define one universal sync `Generate() -> []byte` API. Video external operation IDs must remain first-class so future durable orchestration can persist and resume paid operations after worker crash instead of blindly resubmitting.
 
+Generated provider output is not yet a durable SynVideo Media Asset in this task. Live adapters, owner runtime, jobs and ingestion are follow-on capabilities.
+
 ## TDD
-Implement every gate in `VISUAL_GENERATION_PROVIDER_V1`, with special regressions for multi-capability registry models, streaming close/cancel, opaque video lifecycle and legacy text behavior.
+Implement every gate in `VISUAL_GENERATION_PROVIDER_V1`, with special regressions for:
+- multi-capability registry models;
+- legacy text-generation registry behavior;
+- image streaming close/context/error semantics;
+- opaque async video Start/Poll/OpenResult lifecycle;
+- invalid metadata/capability registration;
+- deep-copy/immutability and deterministic list order;
+- no provider-specific SDK/schema leakage.
 
-## Activation gate
-This task has no unresolved product dependency and uses an isolated primary write surface, but stays BACKLOG while WAVE-F1-H already fills all three configured implementation slots.
+## Isolation / parallel safety
+TASK-020 is merged, releasing one implementation slot. TASK-018 remains on backend job/httpserver/runtime surfaces and TASK-019 remains on frontend Script/router/locale surfaces. Neither owns `apps/api/internal/providers/**` core visual capability work.
 
-As soon as a worktree slot is released, PM/TL may promote TASK-025 to READY even if other H tasks are still under review, provided no active task has started modifying core `providers/**`.
+Do not modify `main.go`, `httpserver/**`, `jobs/**`, provider settings/BYOK persistence, media assets/storage, Scene Plan/Script feature packages, frontend, live provider adapters or migrations.
 
-Do not self-mark READY/DONE or self-merge.
+## Worktree / claim
+Before work, confirm remote `feature/TASK-025-visual-provider-foundation` is still absent. Atomically create that remote ref from latest `origin/develop`, then use a dedicated TASK-025 worktree. Shared/control checkout remains on `develop`.
+
+Do not self-mark DONE or self-merge.
