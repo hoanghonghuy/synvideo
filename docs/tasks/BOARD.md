@@ -26,7 +26,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-018 | Script durable generation integration | DONE | PR #48 accepted; squash `6bc3c86b...`. |
 | TASK-019 | Script creator workspace | DONE | PR #47 accepted; squash `da01e58c...`. |
 | TASK-020 | Scene media binding foundation | DONE | PR #46 accepted; squash `b80b8e7b...`. |
-| TASK-021 | Scene Plan durable generation + API integration | CHANGES_REQUESTED | Issue #39 / PR #50. Reviewed head `286c583b...`, CI #231, TL review `5080593928`. Fix strict pre-provider snapshot validation, job-kind scoped status GET, then sync latest `develop`. |
+| TASK-021 | Scene Plan durable generation + API integration | CHANGES_REQUESTED | Issue #39 / PR #50. Head `3acbd7d...`, CI #236, TL review `5080837369`. Previous blockers fixed; align Proposal snapshot bounds exactly with accepted Proposal domain before provider resolution. |
 | TASK-022 | Scene Plan creator workspace | BACKLOG | Issue #40. `SCENE_PLAN_WORKSPACE_V1` frozen. Activate after TASK-021 API is accepted/stable. |
 | TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. `MEDIA_LIBRARY_API_V1` frozen. Do not run concurrently with TASK-021 because both own shared backend composition/httpserver. |
 | TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. `MEDIA_LIBRARY_WORKSPACE_V1` frozen. Activate after TASK-023 API. |
@@ -38,16 +38,17 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 
 - **Dev A — TASK-021 `CHANGES_REQUESTED`**: continue only PR #50 / existing worktree. Backend Scene Plan generation/API owns the shared runtime/httpserver hotspot until accepted.
 - **Dev B — free**: do not start TASK-022 until TASK-021 API is accepted; do not start TASK-023 because it conflicts with TASK-021 backend composition.
-- **Dev C — released after TASK-025 DONE**: clean the old TASK-025 worktree before claiming another task. TASK-026/027 are candidate follow-ons but remain BACKLOG until deliberate activation/revalidation.
+- **Dev C — released after TASK-025 DONE**: TASK-026/027 are candidate follow-ons but remain BACKLOG until deliberate activation/revalidation.
 
 ## Current review gate — TASK-021 / PR #50
 
-Do not merge until:
-1. durable Script/Proposal/Project snapshot validation is complete before credential/provider resolution; malformed approved Script snapshot data (including body/key/duplicate/size/duration/notes invariants and equivalent bounded fields) terminalizes as `GENERATION_INVALID_PAYLOAD`, with tests proving resolver/provider is not called;
-2. `GetGeneration` verifies `job.Kind == scene_plan_generation_v1` and treats other feature job IDs as not found/non-disclosed;
-3. branch is synced with latest `develop`, including TASK-025 squash `1c550f316...` and PM control-plane commits;
-4. fresh exact-head CI/race/full verify is green;
-5. already-correct source snapshot, idempotency, narration preservation, locale, owner runtime and single-executor behavior is preserved.
+Previous blockers are resolved. Do not merge until Proposal snapshot validation matches the accepted Creative Proposal domain **before credential/provider resolution**:
+1. `visual_direction` max 5000 runes;
+2. `voice_direction`, `music_direction`, `caption_direction` max 3000 runes each;
+3. `warnings` / `research_gaps` max 20 items each;
+4. every warning/gap item is trimmed/non-empty and max 1000 runes;
+5. invalid Proposal snapshot terminalizes as `GENERATION_INVALID_PAYLOAD` and a regression proves resolver/provider is not called;
+6. fresh exact-head CI/race/full verify remains green and all already-correct source snapshot/idempotency/job-kind/locale/single-executor behavior is preserved.
 
 ## Parallel safety
 
