@@ -60,6 +60,9 @@ const selectedProviderModels = computed(() => {
 const isGenerationInProgress = computed(() => {
   return activeJob.value !== null && (activeJob.value.state === 'queued' || activeJob.value.state === 'running')
 })
+const hasSucceededJobUnloaded = computed(() => {
+  return activeJob.value !== null && activeJob.value.state === 'succeeded'
+})
 
 onMounted(() => {
   void loadWorkspace()
@@ -133,6 +136,33 @@ async function startGeneration() {
   }
 }
 
+async function loadSucceededProposal() {
+  if (!activeJob.value || activeJob.value.state !== 'succeeded') {
+    return
+  }
+  generationErrorCode.value = ''
+  try {
+    summaries.value = await listCreativeProposals(projectID())
+    if (activeJob.value.proposal_version) {
+      const ok = await loadVersion(activeJob.value.proposal_version, true)
+      if (!ok) {
+        generationErrorCode.value = loadErrorCode.value || 'request_failed'
+        return
+      }
+    }
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem(`proposal_job_${projectID()}`)
+    }
+    activeJob.value = null
+  } catch (error) {
+    if (error instanceof ApiError) {
+      generationErrorCode.value = error.code
+    } else {
+      generationErrorCode.value = 'request_failed'
+    }
+  }
+}
+
 function trackJob(jobId: string) {
   if (pollTimer !== null) {
     window.clearTimeout(pollTimer)
@@ -144,14 +174,7 @@ function trackJob(jobId: string) {
       const job = await getProposalGeneration(projectID(), jobId)
       activeJob.value = job
       if (job.state === 'succeeded') {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-          window.sessionStorage.removeItem(`proposal_job_${projectID()}`)
-        }
-        summaries.value = await listCreativeProposals(projectID())
-        if (job.proposal_version) {
-          await loadVersion(job.proposal_version, true)
-        }
-        activeJob.value = null
+        await loadSucceededProposal()
         return
       }
       if (job.state === 'failed') {
@@ -204,10 +227,10 @@ async function loadWorkspace() {
   }
 }
 
-async function loadVersion(version: number, discardDirty = false) {
+async function loadVersion(version: number, discardDirty = false): Promise<boolean> {
   if (dirty.value && !discardDirty && selectedVersion.value !== version) {
     pendingVersion.value = version
-    return
+    return false
   }
 
   proposalLoading.value = true
@@ -217,9 +240,11 @@ async function loadVersion(version: number, discardDirty = false) {
   try {
     const proposal = await getCreativeProposal(String(route.params.id), version)
     applyProposal(proposal)
+    return true
   } catch (error) {
     loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
     failedVersion.value = version
+    return false
   } finally {
     proposalLoading.value = false
   }
@@ -483,7 +508,7 @@ async function retryFailedVersion() {
             class="primary-button"
             data-testid="generate-proposal-btn"
             type="button"
-            :disabled="dirty || !selectedModelId || isGenerationInProgress || generating"
+            :disabled="dirty || !selectedModelId || isGenerationInProgress || generating || hasSucceededJobUnloaded"
             @click="startGeneration"
           >
             {{ (isGenerationInProgress || generating) ? t('creativeProposal.actions.generating') : (hasProposal ? t('creativeProposal.actions.regenerate') : t('creativeProposal.actions.generate')) }}
@@ -514,7 +539,29 @@ async function retryFailedVersion() {
         </div>
 
         <div
-          v-if="generationErrorCode"
+          v-if="hasSucceededJobUnloaded"
+          class="notice info"
+          data-testid="job-succeeded-load-failed-banner"
+        >
+          <p>{{ t('creativeProposal.generation.stateSucceeded') }}</p>
+          <p
+            v-if="generationErrorCode"
+            class="state-text"
+          >
+            {{ t(`creativeProposal.errors.${generationErrorCode}`) }}
+          </p>
+          <button
+            class="secondary-button"
+            data-testid="retry-load-generated-btn"
+            type="button"
+            @click="loadSucceededProposal"
+          >
+            {{ t('creativeProposal.actions.retryLoadGenerated') }}
+          </button>
+        </div>
+
+        <div
+          v-if="generationErrorCode && !hasSucceededJobUnloaded"
           class="notice error"
           data-testid="job-error-banner"
         >

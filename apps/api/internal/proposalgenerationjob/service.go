@@ -153,7 +153,18 @@ func (s *Service) CreateGeneration(
 		return ProposalGenerationJobView{}, ErrProviderUnavailable
 	}
 
-	// 1. Verify project exists and is visible to principal
+	// 1. Check if a job with input.RequestID already exists (for idempotent replay)
+	existingJob, err := s.jobsRepo.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID)
+	if err == nil {
+		if valErr := validateExistingJob(existingJob, projectID, input); valErr != nil {
+			return ProposalGenerationJobView{}, valErr
+		}
+		return ToJobView(existingJob), nil
+	} else if !errors.Is(err, jobs.ErrJobNotFound) {
+		return ProposalGenerationJobView{}, err
+	}
+
+	// 2. Verify project exists and is visible to principal
 	proj, err := s.projects.Get(ctx, principal.OwnerID, projectID)
 	if err != nil {
 		if errors.Is(err, project.ErrNotFound) {
@@ -162,7 +173,7 @@ func (s *Service) CreateGeneration(
 		return ProposalGenerationJobView{}, err
 	}
 
-	// 2. Load current creative brief under same owner scope
+	// 3. Load current creative brief under same owner scope
 	brief, err := s.briefs.Get(ctx, principal.OwnerID, projectID)
 	if err != nil {
 		if errors.Is(err, creativebrief.ErrNotFound) {
@@ -171,32 +182,13 @@ func (s *Service) CreateGeneration(
 		return ProposalGenerationJobView{}, err
 	}
 
-	// 3. Resolve selected text-generation capability through accepted provider registry
+	// 4. Resolve selected text-generation capability through accepted provider registry
 	if s.registry == nil {
 		return ProposalGenerationJobView{}, ErrProviderUnavailable
 	}
 	generator, _, err := s.registry.ResolveTextGenerator(providers.ProviderID(input.ProviderID), providers.ModelID(input.ModelID))
 	if err != nil || generator == nil {
 		return ProposalGenerationJobView{}, ErrProviderUnavailable
-	}
-
-	// 4. Check if a job with input.RequestID already exists
-	existingJob, err := s.jobsRepo.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID)
-	if err == nil {
-		// Existing job found: verify parameters match for idempotency
-		if existingJob.Kind != JobKind {
-			return ProposalGenerationJobView{}, ErrGenerationRequestConflict
-		}
-		var existingPayload Payload
-		if err := json.Unmarshal(existingJob.Payload, &existingPayload); err != nil {
-			return ProposalGenerationJobView{}, ErrGenerationRequestConflict
-		}
-		if existingPayload.ProviderID != input.ProviderID || existingPayload.ModelID != input.ModelID {
-			return ProposalGenerationJobView{}, ErrGenerationRequestConflict
-		}
-		return ToJobView(existingJob), nil
-	} else if !errors.Is(err, jobs.ErrJobNotFound) {
-		return ProposalGenerationJobView{}, err
 	}
 
 	// 5. Build snapshot payload
@@ -240,16 +232,37 @@ func (s *Service) CreateGeneration(
 	})
 	if err != nil {
 		if errors.Is(err, jobs.ErrDuplicateJob) {
-			// Concurrent race: retrieve and inspect
+			// Concurrent race or duplicate key: retrieve and validate parameters
 			raceJob, getErr := s.jobsRepo.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID)
 			if getErr == nil {
+				if valErr := validateExistingJob(raceJob, projectID, input); valErr != nil {
+					return ProposalGenerationJobView{}, valErr
+				}
 				return ToJobView(raceJob), nil
 			}
+			return ProposalGenerationJobView{}, ErrGenerationRequestConflict
 		}
 		return ProposalGenerationJobView{}, fmt.Errorf("enqueue generation job: %w", err)
 	}
 
 	return ToJobView(enqueuedJob), nil
+}
+
+func validateExistingJob(existingJob jobs.Job, projectID uuid.UUID, input CreateProposalGenerationInput) error {
+	if existingJob.ProjectID == nil || *existingJob.ProjectID != projectID {
+		return ErrGenerationRequestConflict
+	}
+	if existingJob.Kind != JobKind {
+		return ErrGenerationRequestConflict
+	}
+	var existingPayload Payload
+	if err := json.Unmarshal(existingJob.Payload, &existingPayload); err != nil {
+		return ErrGenerationRequestConflict
+	}
+	if existingPayload.ProviderID != input.ProviderID || existingPayload.ModelID != input.ModelID {
+		return ErrGenerationRequestConflict
+	}
+	return nil
 }
 
 func (s *Service) GetGeneration(

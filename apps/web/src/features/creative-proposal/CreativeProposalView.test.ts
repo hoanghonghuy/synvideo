@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { i18n } from '@/locales'
+import type { CreativeProposal, CreativeProposalSummary } from './api'
 import CreativeProposalView from './CreativeProposalView.vue'
 
 const fetchMock = vi.fn()
@@ -21,7 +22,7 @@ const project = {
   updated_at: '2026-08-31T08:30:00Z',
 }
 
-const draftSummary = {
+const draftSummary: CreativeProposalSummary = {
   version: 2,
   revision: 4,
   status: 'draft',
@@ -31,7 +32,7 @@ const draftSummary = {
   approved_at: null,
 }
 
-const approvedSummary = {
+const approvedSummary: CreativeProposalSummary = {
   version: 1,
   revision: 2,
   status: 'approved',
@@ -41,7 +42,7 @@ const approvedSummary = {
   approved_at: '2026-08-31T08:50:00Z',
 }
 
-const draftProposal = {
+const draftProposal: CreativeProposal = {
   project_id: projectId,
   version: 2,
   revision: 4,
@@ -67,7 +68,7 @@ const draftProposal = {
   approved_at: null,
 }
 
-const approvedProposal = {
+const approvedProposal: CreativeProposal = {
   ...draftProposal,
   version: 1,
   revision: 2,
@@ -297,6 +298,77 @@ describe('CreativeProposalView', () => {
 
     expect(wrapper.text()).toContain('Proposal trên máy chủ đã thay đổi')
     expect((wrapper.find('[name="audience_summary"]').element as HTMLTextAreaElement).value).toBe('Thay doi xung dot')
+  })
+
+  it('does not expose a load retry after a failed mutation following a failed version switch', async () => {
+    mockRoute('GET', `/api/v1/projects/${projectId}`, project)
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [draftSummary, approvedSummary])
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/2`, draftProposal)
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/1`, { error: { code: 'request_failed' } }, 503)
+    mockRoute('PUT', `/api/v1/projects/${projectId}/creative-proposals/2`, { error: { code: 'validation_failed' } }, 422)
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="version-1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(true)
+
+    await wrapper.find('[name="audience_summary"]').setValue('Thay doi truoc khi luu')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect((wrapper.find('[name="audience_summary"]').element as HTMLTextAreaElement).value).toBe('Thay doi truoc khi luu')
+    expect(wrapper.text()).toContain('Vui lòng kiểm tra lại AI Proposal.')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(false)
+  })
+
+  it('preserves dirty edits when stale recovery fails to reload the latest version', async () => {
+    mockRoute('GET', `/api/v1/projects/${projectId}`, project)
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [draftSummary, approvedSummary])
+    let proposal2Calls = 0
+    mockRouteFn('GET', `/api/v1/projects/${projectId}/creative-proposals/2`, () => {
+      proposal2Calls++
+      if (proposal2Calls === 1) {
+        return jsonResponse(draftProposal)
+      }
+      return jsonResponse({ error: { code: 'request_failed' } }, 503)
+    })
+    mockRoute('PUT', `/api/v1/projects/${projectId}/creative-proposals/2`, {
+      error: { code: 'STALE_REVISION', message: 'Creative proposal revision is stale.' },
+    }, 409)
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    await wrapper.find('[name="audience_summary"]').setValue('Thay doi can bao ve')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="reload-latest-proposal"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.find('[name="audience_summary"]').element as HTMLTextAreaElement).value).toBe('Thay doi can bao ve')
+    expect(wrapper.text()).toContain('Có thay đổi chưa lưu.')
+    expect(wrapper.text()).toContain('Không thể kết nối máy chủ.')
+
+    await wrapper.find('[data-testid="version-1"]').trigger('click')
+    expect(wrapper.text()).toContain('Chọn Hủy thay đổi')
+  })
+
+  it('shows a visible retry state when the initial proposal version cannot be loaded', async () => {
+    mockRoute('GET', `/api/v1/projects/${projectId}`, project)
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [draftSummary])
+    mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/2`, { error: { code: 'request_failed' } }, 503)
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Không thể kết nối máy chủ.')
+    expect(wrapper.find('[data-testid="retry-proposal-load"]').exists()).toBe(true)
+    expect(wrapper.find('[name="audience_summary"]').exists()).toBe(false)
   })
 
   it('renders approved and superseded versions as read-only', async () => {
@@ -611,6 +683,86 @@ describe('CreativeProposalView', () => {
 
       expect(wrapper.find('[data-testid="job-progress-banner"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="job-progress-banner"]').text()).toContain('Đang tạo AI Proposal...')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('preserves succeeded generation job without re-enabling regenerate when loading the generated proposal fails transiently', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      mockRoute('GET', `/api/v1/projects/${projectId}`, project)
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [draftSummary])
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/2`, draftProposal)
+      mockRoute('GET', '/api/v1/ai/text-generation-options', sampleProviders)
+
+      const jobId = '77777777-7777-4777-8777-777777777777'
+      mockRoute('POST', `/api/v1/projects/${projectId}/creative-proposal-generations`, {
+        id: jobId,
+        state: 'queued',
+        attempt: 0,
+        max_attempts: 3,
+        error_code: null,
+        proposal_version: null,
+        created_at: '2026-08-31T09:00:00Z',
+        updated_at: '2026-08-31T09:00:00Z',
+        started_at: null,
+        finished_at: null,
+      }, 202)
+
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposal-generations/${jobId}`, {
+        id: jobId,
+        state: 'succeeded',
+        attempt: 1,
+        max_attempts: 3,
+        error_code: null,
+        proposal_version: 3,
+        created_at: '2026-08-31T09:00:00Z',
+        updated_at: '2026-08-31T09:01:00Z',
+        started_at: '2026-08-31T09:00:10Z',
+        finished_at: '2026-08-31T09:01:00Z',
+      })
+
+      // Simulate failure when fetching proposals / version 3
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/3`, { error: { code: 'request_failed' } }, 503)
+
+      const wrapper = await mountCreativeProposalView()
+      await flushPromises()
+
+      await wrapper.find('[data-testid="generate-proposal-btn"]').trigger('click')
+      await flushPromises()
+
+      // Poll triggers succeeded -> loadVersion fails with 503
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+      await flushPromises()
+
+      // Should show succeeded banner with load retry, and regenerate button must be disabled
+      expect(wrapper.find('[data-testid="job-succeeded-load-failed-banner"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="retry-load-generated-btn"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="generate-proposal-btn"]').attributes('disabled')).toBeDefined()
+
+      // Now fix route and click retry load
+      const v3Summary: CreativeProposalSummary = {
+        ...draftSummary,
+        version: 3,
+        revision: 1,
+      }
+      const v3Proposal: CreativeProposal = {
+        ...draftProposal,
+        version: 3,
+        revision: 1,
+        title_options: ['Tieu de v3 sau retry load'],
+      }
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [v3Summary, draftSummary])
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/3`, v3Proposal)
+
+      await wrapper.find('[data-testid="retry-load-generated-btn"]').trigger('click')
+      await flushPromises()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="job-succeeded-load-failed-banner"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Tieu de v3 sau retry load')
     } finally {
       vi.useRealTimers()
     }

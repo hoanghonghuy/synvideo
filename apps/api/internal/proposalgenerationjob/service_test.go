@@ -273,14 +273,89 @@ func TestService_CreateGeneration(t *testing.T) {
 			t.Fatalf("unexpected replay view: %+v", view2)
 		}
 
-		// 3. Conflict: same request_id with different model
+		// 3. Replay succeeds even if registry is empty / provider is now removed
+		emptyRegSvc := proposalgenerationjob.NewService(providers.NewRegistry(), jobsRepo, &mockProjectRepo{proj: validProj}, &mockBriefRepo{brief: validBrief})
+		view3, err := emptyRegSvc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
+			RequestID:  reqID,
+			ProviderID: "lab-provider",
+			ModelID:    "lab-model-v1",
+		})
+		if err != nil {
+			t.Fatalf("replay with removed provider must succeed: %v", err)
+		}
+		if view3.ID != reqID || view3.State != "queued" {
+			t.Fatalf("unexpected replay view with removed provider: %+v", view3)
+		}
+
+		// 4. Conflict: same request_id with different model (must return ErrGenerationRequestConflict deterministically)
 		_, err = svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
 			RequestID:  reqID,
 			ProviderID: "lab-provider",
-			ModelID:    "different-model",
+			ModelID:    "lab-model-v2",
 		})
-		if !errors.Is(err, proposalgenerationjob.ErrGenerationRequestConflict) && !errors.Is(err, proposalgenerationjob.ErrProviderUnavailable) {
-			t.Fatalf("expected conflict or provider unavailable error, got %v", err)
+		if !errors.Is(err, proposalgenerationjob.ErrGenerationRequestConflict) {
+			t.Fatalf("expected ErrGenerationRequestConflict for conflicting model, got %v", err)
+		}
+
+		// 5. Conflict: same request_id with different provider
+		_, err = svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
+			RequestID:  reqID,
+			ProviderID: "other-provider",
+			ModelID:    "lab-model-v1",
+		})
+		if !errors.Is(err, proposalgenerationjob.ErrGenerationRequestConflict) {
+			t.Fatalf("expected ErrGenerationRequestConflict for conflicting provider, got %v", err)
+		}
+	})
+
+	t.Run("concurrent duplicate race handles matching and conflicting parameters", func(t *testing.T) {
+		reqID := uuid.New()
+		racePayload, _ := json.Marshal(proposalgenerationjob.Payload{
+			SchemaVersion: proposalgenerationjob.SchemaVersion,
+			ProviderID:    "lab-provider",
+			ModelID:       "lab-model-v1",
+		})
+		existingRaceJob := jobs.Job{
+			ID:          reqID,
+			OwnerID:     ownerID,
+			ProjectID:   &projectID,
+			Kind:        proposalgenerationjob.JobKind,
+			State:       jobs.StateQueued,
+			Attempt:     0,
+			MaxAttempts: 3,
+			Payload:     racePayload,
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+		}
+
+		// Simulate Enqueue returning ErrDuplicateJob and populating the job in repo
+		jobsRepo := newMockJobsRepo()
+		jobsRepo.jobs[reqID] = existingRaceJob
+		jobsRepo.enqueueErr = jobs.ErrDuplicateJob
+
+		svc := proposalgenerationjob.NewService(reg, jobsRepo, &mockProjectRepo{proj: validProj}, &mockBriefRepo{brief: validBrief})
+
+		// Matching parameters on race -> succeeds with existing job view
+		view, err := svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
+			RequestID:  reqID,
+			ProviderID: "lab-provider",
+			ModelID:    "lab-model-v1",
+		})
+		if err != nil {
+			t.Fatalf("expected successful race resolution, got %v", err)
+		}
+		if view.ID != reqID {
+			t.Fatalf("expected job ID %s, got %s", reqID, view.ID)
+		}
+
+		// Conflicting parameters on race -> returns ErrGenerationRequestConflict
+		_, err = svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
+			RequestID:  reqID,
+			ProviderID: "lab-provider",
+			ModelID:    "lab-model-v2",
+		})
+		if !errors.Is(err, proposalgenerationjob.ErrGenerationRequestConflict) {
+			t.Fatalf("expected ErrGenerationRequestConflict for conflicting race input, got %v", err)
 		}
 	})
 }

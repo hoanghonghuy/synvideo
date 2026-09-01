@@ -141,6 +141,7 @@ export default {
       regenerate: 'Tạo lại AI Proposal',
       generating: 'Đang xử lý...',
       retryGeneration: 'Thử lại',
+      retryLoadGenerated: 'Tải phiên bản vừa tạo',
     },
     generation: {
       title: 'Tạo AI Proposal tự động',
