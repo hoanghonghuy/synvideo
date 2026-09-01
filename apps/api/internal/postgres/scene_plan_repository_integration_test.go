@@ -27,7 +27,8 @@ func TestScenePlanRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, err := projectRepo.Create(context.Background(), ownerB, validIntegrationCreateInput("Other Owner Project")); err != nil {
+	projectB, err := projectRepo.Create(context.Background(), ownerB, validIntegrationCreateInput("Other Owner Project"))
+	if err != nil {
 		t.Fatalf("create other owner project: %v", err)
 	}
 
@@ -136,6 +137,16 @@ func TestScenePlanRepositoryIntegration(t *testing.T) {
 		t.Fatalf("approved history was superseded: %s", old.Status)
 	}
 
+	if _, err := repo.UpdateDraft(context.Background(), ownerB, projectA.ID, second.Version, sceneplan.PutInput{
+		Revision: &second.Revision,
+		Content:  scenePlanContent("Scene Plan Source", "foreign owner update"),
+	}); !errors.Is(err, sceneplan.ErrNotFound) {
+		t.Fatalf("owner-isolated update error = %v", err)
+	}
+	if _, err := repo.Approve(context.Background(), ownerB, projectA.ID, second.Version, second.Revision); !errors.Is(err, sceneplan.ErrNotFound) {
+		t.Fatalf("owner-isolated approve error = %v", err)
+	}
+
 	// An unapproved and a missing source are both rejected without creating a plan.
 	draftScript, err := scriptRepo.CreateDraft(context.Background(), ownerA, projectA.ID, script.CreateDraftInput{
 		SourceProposalVersion: proposal.Version,
@@ -177,6 +188,39 @@ func TestScenePlanRepositoryIntegration(t *testing.T) {
 		Content:             validScenePlanContent("foreign owner"),
 	}); !errors.Is(err, sceneplan.ErrNotFound) {
 		t.Fatalf("owner-isolated create error = %v", err)
+	}
+
+	proposalB, err := proposalRepo.CreateDraft(context.Background(), ownerB, projectB.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Foreign Source Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create foreign source proposal: %v", err)
+	}
+	proposalB, err = proposalRepo.Approve(context.Background(), ownerB, projectB.ID, proposalB.Version, proposalB.Revision)
+	if err != nil {
+		t.Fatalf("approve foreign source proposal: %v", err)
+	}
+	scriptB, err := scriptRepo.CreateDraft(context.Background(), ownerB, projectB.ID, script.CreateDraftInput{
+		SourceProposalVersion: proposalB.Version,
+		Content:               validScriptContent("Foreign Source Script"),
+	})
+	if err != nil {
+		t.Fatalf("create foreign source script: %v", err)
+	}
+	scriptB, err = scriptRepo.Approve(context.Background(), ownerB, projectB.ID, scriptB.Version, scriptB.Revision)
+	if err != nil {
+		t.Fatalf("approve foreign source script: %v", err)
+	}
+	projectC, err := projectRepo.Create(context.Background(), ownerA, validIntegrationCreateInput("Foreign Source Target"))
+	if err != nil {
+		t.Fatalf("create foreign source target project: %v", err)
+	}
+	if _, err := repo.CreateDraft(context.Background(), ownerA, projectC.ID, sceneplan.CreateDraftInput{
+		SourceScriptVersion: scriptB.Version,
+		Content:             validScenePlanContent("Foreign Source Script"),
+	}); !errors.Is(err, sceneplan.ErrScriptSourceInvalid) {
+		t.Fatalf("foreign source error = %v", err)
 	}
 
 	concurrentDrafts := 6

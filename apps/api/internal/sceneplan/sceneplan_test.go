@@ -25,6 +25,18 @@ func TestContentValidatesAgainstApprovedScriptAndPreservesCanonicalNarration(t *
 	}
 }
 
+func TestContentAcceptsWhitespaceOnlyNarrationSegmentation(t *testing.T) {
+	content := sceneplan.Content{Scenes: []sceneplan.Scene{
+		{Key: "intro-a", ScriptSectionKey: "intro", Narration: "Xin  chao", VisualInstruction: "Mo canh", PlannedSourceType: sceneplan.SourceTypeStock, ExpectedDurationSeconds: 4},
+		{Key: "intro-b", ScriptSectionKey: "intro", Narration: " the\tgioi ", VisualInstruction: "Canh rong", PlannedSourceType: sceneplan.SourceTypeStock, ExpectedDurationSeconds: 5},
+		{Key: "main", ScriptSectionKey: "main", Narration: "Noi dung chinh", VisualInstruction: "Canh minh hoa", PlannedSourceType: sceneplan.SourceTypeGeneratedImage, ExpectedDurationSeconds: 8},
+	}}
+
+	if err := sceneplan.ValidateContentAgainstScript(&content, approvedScript()); err != nil {
+		t.Fatalf("whitespace-only segmentation should be accepted: %v", err)
+	}
+}
+
 func TestContentRejectsNarrationCoverageDrift(t *testing.T) {
 	for name, narration := range map[string]string{
 		"omitted":     "Xin chao",
