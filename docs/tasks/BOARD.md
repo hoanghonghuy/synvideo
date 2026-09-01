@@ -20,7 +20,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-009 | AI Proposal generation job integration | BLOCKED | All implementation dependencies are accepted. Remaining PM gate: freeze feature-specific job/API/idempotency contract and live-provider/BYOK boundary before READY. |
 | TASK-010 | Durable job execution foundation | DONE | Accepted/squash-merged PR #21 as `f731f4b9...`; lease heartbeat/loss, exhausted attempts, retry cap, JSON-object boundaries and real PostgreSQL lifecycle coverage accepted; CI #109 green. |
 | TASK-011 | Script domain, persistence and approval API | DONE | Accepted/squash-merged PR #22 as `87c9849e...`; Unicode character semantics, latest-develop sync and CI #123 accepted. |
-| TASK-012 | Script generation engine | IN_PROGRESS | Issue #23. Canonical branch exists and is claimed; no PR yet. Owns only `scriptgeneration/**`. |
+| TASK-012 | Script generation engine | DONE | Accepted/squash-merged PR #24 as `0a3d2fb9...`; strict `script_v1`, long-form/Unicode/context/immutability coverage accepted; CI #128 green. |
 
 ## Active parallel wave — WAVE-F1-D transition
 Frozen contracts:
@@ -31,15 +31,14 @@ Frozen contracts:
 
 Current implementation slots:
 - Dev A — available after TASK-008 DONE; do not claim BLOCKED TASK-009 until PM changes it to READY.
-- Dev B — TASK-012 `IN_PROGRESS` on canonical branch `feature/TASK-012-script-generation` in its dedicated worktree.
+- Dev B — available after TASK-012 DONE.
 - Dev C — available after TASK-011 DONE.
 
-Merged TASK-008/TASK-011 worktrees should be cleaned up before those developers claim future tasks.
+Merged TASK-008/TASK-011/TASK-012 worktrees should be cleaned up before those developers claim future tasks.
 
 ## Isolation / merge rules
 - **Each implementation slot must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
 - Maximum concurrent implementation worktrees normally equals the configured AI developer slots (currently 3). Do not create speculative spare worktrees.
-- TASK-012 owns `apps/api/internal/scriptgeneration/**` only; no persistence/jobs/HTTP/frontend/provider-SDK changes.
 - TASK-009 remains unclaimable until PM freezes its Proposal generation-job integration contract and marks it READY.
 - ADR 0005 forbids long provider calls inside blocking HTTP requests; Proposal/Script generation integration must use durable jobs.
 - AI Proposal is not production-complete until a live provider/BYOK capability is accepted; deterministic fakes remain test-only.
@@ -54,16 +53,14 @@ Accepted durable product capabilities now cover:
 - AI Proposal provider-neutral generation engine;
 - AI Proposal creator-facing history/edit/stale/approval frontend workspace;
 - generic durable PostgreSQL job/lease/retry execution foundation;
-- Script persistence/versioning/approval API from approved Proposal versions.
+- Script persistence/versioning/approval API from approved Proposal versions;
+- provider-neutral Script generation engine.
 
 Still incomplete before AI Proposal generation is creator-usable end to end:
 - TASK-009 durable Proposal generation-job integration;
 - live provider/BYOK capability.
 
-Script Stage 5–6 is advancing:
-- TASK-011 persistence/API is DONE;
-- TASK-012 generation engine is IN_PROGRESS;
-- Script frontend + durable generation integration remain future work.
+Script Stage 5–6 now has its backend persistence/approval foundation and generation engine accepted. Script frontend + durable generation integration remain future work.
 
 Downstream work remains substantial: Scene Plan, media/audio acquisition/generation, Scene Editor, render/export and publishing/channel management.
 
