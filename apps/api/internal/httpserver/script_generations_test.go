@@ -60,7 +60,7 @@ func TestCreateScriptGenerationEndpoint(t *testing.T) {
 		}
 
 		resolver := actor.NewLocalResolver(config.Config{Environment: "test", LocalActorID: &ownerID})
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, service, resolver)
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, nil, service, nil, resolver)
 
 		reqBody := `{"request_id":"` + requestID.String() + `","provider_id":"fake-provider","model_id":"fake-model"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/script-generations", bytes.NewBufferString(reqBody))
@@ -122,7 +122,7 @@ func TestCreateScriptGenerationEndpoint(t *testing.T) {
 					},
 				}
 				resolver := actor.NewLocalResolver(config.Config{Environment: "test", LocalActorID: &ownerID})
-				server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, service, resolver)
+				server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, nil, service, nil, resolver)
 
 				reqBody := `{"request_id":"` + requestID.String() + `","provider_id":"fake-provider","model_id":"fake-model"}`
 				req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/script-generations", bytes.NewBufferString(reqBody))
@@ -168,7 +168,7 @@ func TestGetScriptGenerationEndpoint(t *testing.T) {
 		}
 
 		resolver := actor.NewLocalResolver(config.Config{Environment: "test", LocalActorID: &ownerID})
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, service, resolver)
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, nil, service, nil, resolver)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/script-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestGetScriptGenerationEndpoint(t *testing.T) {
 		}
 
 		resolver := actor.NewLocalResolver(config.Config{Environment: "test", LocalActorID: &ownerID})
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, service, resolver)
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, nil, nil, nil, service, nil, resolver)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/script-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()

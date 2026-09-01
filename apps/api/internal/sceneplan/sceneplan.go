@@ -66,6 +66,7 @@ type Plan struct {
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 	ApprovedAt            *time.Time `json:"approved_at,omitempty"`
+	SourceGenerationJobID *uuid.UUID `json:"-"`
 }
 
 type Content struct {
@@ -73,7 +74,9 @@ type Content struct {
 }
 
 type CreateDraftInput struct {
-	SourceScriptVersion int
+	SourceScriptVersion   int
+	SourceGenerationJobID *uuid.UUID
+	ContentLocale         string
 	Content
 }
 

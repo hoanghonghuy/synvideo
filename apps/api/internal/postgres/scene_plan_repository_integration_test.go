@@ -2,13 +2,16 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplan"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
@@ -315,4 +318,314 @@ func scenePlanContent(narrationPrefix, visualPrefix string) sceneplan.Content {
 		{Key: "main", ScriptSectionKey: "section-1", Narration: narrationPrefix + " main body", VisualInstruction: visualPrefix + " main visual", PlannedSourceType: sceneplan.SourceTypeCreatorMedia, ExpectedDurationSeconds: 8},
 		{Key: "outro", ScriptSectionKey: "outro", Narration: narrationPrefix + " outro body", VisualInstruction: visualPrefix + " outro visual", PlannedSourceType: sceneplan.SourceTypeGeneratedImage, ExpectedDurationSeconds: 6},
 	}}
+}
+
+func TestScenePlanRepositoryIntegration_IdempotentCreateDraftFromJob(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepo := NewProjectRepository(pool)
+	jobsRepo := NewJobRepository(pool)
+	proposalRepo := NewCreativeProposalRepository(pool)
+	scriptRepo := NewScriptRepository(pool)
+	repo := NewScenePlanRepository(pool)
+
+	ownerID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Scene Plan Idempotent Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	prop, err := proposalRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Approved Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create proposal: %v", err)
+	}
+	propApproved, err := proposalRepo.Approve(context.Background(), ownerID, projectItem.ID, prop.Version, prop.Revision)
+	if err != nil {
+		t.Fatalf("approve proposal: %v", err)
+	}
+
+	scr, err := scriptRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		Content:               validScriptContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("create script: %v", err)
+	}
+	scrApproved, err := scriptRepo.Approve(context.Background(), ownerID, projectItem.ID, scr.Version, scr.Revision)
+	if err != nil {
+		t.Fatalf("approve script: %v", err)
+	}
+
+	jobID := uuid.New()
+	_, err = jobsRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          jobID,
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "scene_plan_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"scene_plan_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job: %v", err)
+	}
+
+	// First CreateDraft call creates draft v1
+	draft1, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, sceneplan.CreateDraftInput{
+		SourceScriptVersion:   scrApproved.Version,
+		SourceGenerationJobID: &jobID,
+		ContentLocale:         "vi",
+		Content:               validScenePlanContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("first CreateDraft: %v", err)
+	}
+	if draft1.Version != 1 {
+		t.Fatalf("expected version 1, got %d", draft1.Version)
+	}
+
+	// Second CreateDraft call with same job ID returns existing draft1 without creating a new version
+	draft2, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, sceneplan.CreateDraftInput{
+		SourceScriptVersion:   scrApproved.Version,
+		SourceGenerationJobID: &jobID,
+		ContentLocale:         "vi",
+		Content:               validScenePlanContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("second CreateDraft (replay): %v", err)
+	}
+	if draft2.Version != draft1.Version {
+		t.Fatalf("expected returned draft version %d, got %d", draft1.Version, draft2.Version)
+	}
+	if draft2.Revision != draft1.Revision {
+		t.Fatalf("expected returned draft revision %d, got %d", draft1.Revision, draft2.Revision)
+	}
+
+	// List versions must return exactly 1 version
+	list, err := repo.ListVersions(context.Background(), ownerID, projectItem.ID)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected exactly 1 version in list, got %d", len(list))
+	}
+}
+
+func TestScenePlanRepositoryIntegration_SnapshottedLocalePreservedOnProjectLocaleChange(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepo := NewProjectRepository(pool)
+	jobsRepo := NewJobRepository(pool)
+	proposalRepo := NewCreativeProposalRepository(pool)
+	scriptRepo := NewScriptRepository(pool)
+	repo := NewScenePlanRepository(pool)
+
+	ownerID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Scene Plan Locale Preservation Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	prop, err := proposalRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Approved Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create proposal: %v", err)
+	}
+	propApproved, err := proposalRepo.Approve(context.Background(), ownerID, projectItem.ID, prop.Version, prop.Revision)
+	if err != nil {
+		t.Fatalf("approve proposal: %v", err)
+	}
+
+	scr, err := scriptRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		Content:               validScriptContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("create script: %v", err)
+	}
+	scrApproved, err := scriptRepo.Approve(context.Background(), ownerID, projectItem.ID, scr.Version, scr.Revision)
+	if err != nil {
+		t.Fatalf("approve script: %v", err)
+	}
+
+	jobID := uuid.New()
+	_, err = jobsRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          jobID,
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "scene_plan_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"scene_plan_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job: %v", err)
+	}
+
+	// Change project's locale in DB to 'en' after job enqueue
+	if _, err := pool.Exec(context.Background(), `UPDATE projects SET locale = 'en' WHERE id = $1`, projectItem.ID.String()); err != nil {
+		t.Fatalf("update project locale: %v", err)
+	}
+
+	// Worker creates scene plan draft passing the snapshotted locale 'vi'
+	created, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, sceneplan.CreateDraftInput{
+		SourceScriptVersion:   scrApproved.Version,
+		SourceGenerationJobID: &jobID,
+		ContentLocale:         "vi",
+		Content:               validScenePlanContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("create draft with snapshotted locale: %v", err)
+	}
+
+	if created.ContentLocale != "vi" {
+		t.Fatalf("expected created content locale 'vi', got %q", created.ContentLocale)
+	}
+
+	fetched, err := repo.GetByVersion(context.Background(), ownerID, projectItem.ID, created.Version)
+	if err != nil {
+		t.Fatalf("get scene plan version: %v", err)
+	}
+	if fetched.ContentLocale != "vi" {
+		t.Fatalf("expected fetched content locale 'vi', got %q", fetched.ContentLocale)
+	}
+}
+
+func TestScenePlanRepositoryIntegration_ConcurrentCreateDraftFromJob(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepo := NewProjectRepository(pool)
+	jobsRepo := NewJobRepository(pool)
+	proposalRepo := NewCreativeProposalRepository(pool)
+	scriptRepo := NewScriptRepository(pool)
+	repo := NewScenePlanRepository(pool)
+
+	ownerID := uuid.MustParse("55555555-5555-4555-8555-555555555555")
+	projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Scene Plan Concurrency Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	prop, err := proposalRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Approved Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create proposal: %v", err)
+	}
+	propApproved, err := proposalRepo.Approve(context.Background(), ownerID, projectItem.ID, prop.Version, prop.Revision)
+	if err != nil {
+		t.Fatalf("approve proposal: %v", err)
+	}
+
+	scr, err := scriptRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		Content:               validScriptContent("Approved Script"),
+	})
+	if err != nil {
+		t.Fatalf("create script: %v", err)
+	}
+	scrApproved, err := scriptRepo.Approve(context.Background(), ownerID, projectItem.ID, scr.Version, scr.Revision)
+	if err != nil {
+		t.Fatalf("approve script: %v", err)
+	}
+
+	jobID := uuid.New()
+	_, err = jobsRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          jobID,
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "scene_plan_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"scene_plan_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job: %v", err)
+	}
+
+	const concurrency = 10
+	type result struct {
+		plan sceneplan.Plan
+		err  error
+	}
+
+	results := make(chan result, concurrency)
+	startBarrier := make(chan struct{})
+	var wg sync.WaitGroup
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-startBarrier
+			res, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, sceneplan.CreateDraftInput{
+				SourceScriptVersion:   scrApproved.Version,
+				SourceGenerationJobID: &jobID,
+				ContentLocale:         "vi",
+				Content:               validScenePlanContent("Approved Script"),
+			})
+			results <- result{plan: res, err: err}
+		}(i)
+	}
+
+	close(startBarrier)
+	wg.Wait()
+	close(results)
+
+	var expectedVersion int
+	for res := range results {
+		if res.err != nil {
+			t.Fatalf("concurrent CreateDraft failed: %v", res.err)
+		}
+		if expectedVersion == 0 {
+			expectedVersion = res.plan.Version
+		} else if res.plan.Version != expectedVersion {
+			t.Fatalf("mismatched version returned: expected %d, got %d", expectedVersion, res.plan.Version)
+		}
+		if res.plan.Status != sceneplan.StatusDraft {
+			t.Fatalf("expected draft status, got %s", res.plan.Status)
+		}
+	}
+
+	// Verify exactly 1 scene plan version in DB
+	list, err := repo.ListVersions(context.Background(), ownerID, projectItem.ID)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected exactly 1 scene plan version, got %d", len(list))
+	}
+	if list[0].Version != expectedVersion {
+		t.Fatalf("expected version %d, got %d", expectedVersion, list[0].Version)
+	}
+	if list[0].Status != sceneplan.StatusDraft {
+		t.Fatalf("expected draft status, got %s", list[0].Status)
+	}
+}
+
+func TestScenePlanRepositoryIntegration_JSONDoesNotExposeJobID(t *testing.T) {
+	jobID := uuid.New()
+	p := sceneplan.Plan{
+		ProjectID:             uuid.New(),
+		Version:               1,
+		Revision:              1,
+		Status:                sceneplan.StatusDraft,
+		SourceScriptVersion:   1,
+		SourceProposalVersion: 1,
+		ContentLocale:         "vi",
+		Scenes: []sceneplan.Scene{
+			{Key: "intro", ScriptSectionKey: "intro", Narration: "N", VisualInstruction: "V", PlannedSourceType: sceneplan.SourceTypeStock, ExpectedDurationSeconds: 5},
+		},
+		SourceGenerationJobID: &jobID,
+	}
+
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal scene plan: %v", err)
+	}
+
+	jsonStr := string(b)
+	if strings.Contains(jsonStr, jobID.String()) || strings.Contains(jsonStr, "source_generation_job_id") {
+		t.Fatalf("public JSON exposes source_generation_job_id: %s", jsonStr)
+	}
 }

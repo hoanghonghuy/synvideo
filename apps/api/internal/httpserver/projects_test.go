@@ -173,7 +173,7 @@ func TestUpdateProjectEndpointRejectsEmptyBody(t *testing.T) {
 
 func newProjectTestServer(ownerID uuid.UUID, repository project.Repository) *http.Server {
 	cfg := config.Config{Addr: ":0", Environment: config.EnvironmentTest}
-	return New(cfg, slog.Default(), project.NewService(repository), nil, nil, nil, nil, nil, nil, fixedResolver{ownerID: ownerID})
+	return New(cfg, slog.Default(), project.NewService(repository), nil, nil, nil, nil, nil, nil, nil, nil, fixedResolver{ownerID: ownerID})
 }
 
 func performRequest(server *http.Server, method string, path string, body string) *httptest.ResponseRecorder {

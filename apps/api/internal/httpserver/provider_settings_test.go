@@ -69,9 +69,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		server := New(
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil,
 			svc,
-			nil,
+			nil, nil,
 			resolver,
 		)
 
@@ -112,9 +112,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		server := New(
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil,
 			svc,
-			nil,
+			nil, nil,
 			resolver,
 		)
 
@@ -148,9 +148,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		server := New(
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil,
 			svc,
-			nil,
+			nil, nil,
 			resolver,
 		)
 
@@ -174,9 +174,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 		svc := &fakeProviderSettingsService{}
 		server := New(
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil,
 			svc,
-			nil,
+			nil, nil,
 			resolver,
 		)
 
@@ -200,9 +200,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		server := New(
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
-			nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil,
 			svc,
-			nil,
+			nil, nil,
 			resolver,
 		)
 
