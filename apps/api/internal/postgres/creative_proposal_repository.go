@@ -96,6 +96,26 @@ func (r *CreativeProposalRepository) CreateDraft(ctx context.Context, ownerID uu
 		return creativeproposal.CreativeProposal{}, fmt.Errorf("lock project for create draft: %w", err)
 	}
 
+	if input.SourceGenerationJobID != nil {
+		existingRow := tx.QueryRow(ctx, `
+			SELECT project_id::text, version, revision, status, source_brief_revision,
+				title_options, hook_options, audience_summary, objective_summary,
+				narrative_angle, estimated_duration_seconds, format_rationale,
+				structure, visual_direction, voice_direction, music_direction,
+				caption_direction, call_to_action, research_gaps, warnings,
+				created_at, updated_at, approved_at
+			FROM creative_proposals
+			WHERE project_id = $1 AND source_generation_job_id = $2
+		`, projectID.String(), input.SourceGenerationJobID.String())
+		existing, err := scanCreativeProposal(existingRow)
+		if err == nil {
+			_ = tx.Commit(ctx)
+			return existing, nil
+		} else if !errors.Is(err, creativeproposal.ErrNotFound) {
+			return creativeproposal.CreativeProposal{}, fmt.Errorf("check existing generation proposal: %w", err)
+		}
+	}
+
 	var maxVersion int
 	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(version), 0) FROM creative_proposals WHERE project_id = $1
@@ -118,20 +138,28 @@ func (r *CreativeProposalRepository) CreateDraft(ctx context.Context, ownerID uu
 		return creativeproposal.CreativeProposal{}, fmt.Errorf("marshal structure json: %w", err)
 	}
 
+	var sourceJobID *string
+	if input.SourceGenerationJobID != nil {
+		jobStr := input.SourceGenerationJobID.String()
+		sourceJobID = &jobStr
+	}
+
 	row := tx.QueryRow(ctx, `
 		INSERT INTO creative_proposals (
 			project_id, version, revision, status, source_brief_revision,
 			title_options, hook_options, audience_summary, objective_summary,
 			narrative_angle, estimated_duration_seconds, format_rationale,
 			structure, visual_direction, voice_direction, music_direction,
-			caption_direction, call_to_action, research_gaps, warnings
+			caption_direction, call_to_action, research_gaps, warnings,
+			source_generation_job_id
 		)
 		VALUES (
 			$1, $2, 1, 'draft', $3,
 			$4, $5, $6, $7,
 			$8, $9, $10,
 			$11, $12, $13, $14,
-			$15, $16, $17, $18
+			$15, $16, $17, $18,
+			$19
 		)
 		RETURNING project_id::text, version, revision, status, source_brief_revision,
 			title_options, hook_options, audience_summary, objective_summary,
@@ -158,6 +186,7 @@ func (r *CreativeProposalRepository) CreateDraft(ctx context.Context, ownerID uu
 		input.CallToAction,
 		stringSlice(input.ResearchGaps),
 		stringSlice(input.Warnings),
+		sourceJobID,
 	)
 
 	created, err := scanCreativeProposal(row)

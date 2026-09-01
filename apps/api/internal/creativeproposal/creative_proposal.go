@@ -46,6 +46,7 @@ type CreativeProposal struct {
 	CreatedAt                time.Time       `json:"created_at"`
 	UpdatedAt                time.Time       `json:"updated_at"`
 	ApprovedAt               *time.Time      `json:"approved_at"`
+	SourceGenerationJobID    *uuid.UUID      `json:"-"`
 }
 
 type Content struct {
@@ -72,7 +73,8 @@ type PutInput struct {
 }
 
 type CreateDraftInput struct {
-	SourceBriefRevision int
+	SourceBriefRevision   int
+	SourceGenerationJobID *uuid.UUID
 	Content
 }
 

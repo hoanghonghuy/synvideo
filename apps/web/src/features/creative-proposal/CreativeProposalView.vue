@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -7,12 +7,17 @@ import { ApiError, getProject, type Project } from '@/api/projects'
 import CreativeProposalForm, { type CreativeProposalFormState } from './CreativeProposalForm.vue'
 import {
   approveCreativeProposal,
+  createProposalGeneration,
   getCreativeProposal,
+  getProposalGeneration,
+  getTextGenerationOptions,
   listCreativeProposals,
   putCreativeProposal,
   type CreativeProposal,
   type CreativeProposalEditableContent,
   type CreativeProposalSummary,
+  type ProposalGenerationJob,
+  type TextGenerationOptionProvider,
 } from './api'
 
 const { t, d } = useI18n()
@@ -37,12 +42,172 @@ const failedVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 const formValues = ref<CreativeProposalFormState>(emptyFormState())
 
+const providerOptions = ref<TextGenerationOptionProvider[]>([])
+const selectedProviderId = ref('')
+const selectedModelId = ref('')
+const activeJob = ref<ProposalGenerationJob | null>(null)
+const generating = ref(false)
+const generationErrorCode = ref('')
+let pollTimer: number | null = null
+
 const isReadOnly = computed(() => selectedProposal.value?.status !== 'draft')
 const hasProposal = computed(() => summaries.value.length > 0)
+const hasAIProviders = computed(() => providerOptions.value.length > 0)
+const selectedProviderModels = computed(() => {
+  const prov = providerOptions.value.find((p) => p.id === selectedProviderId.value)
+  return prov ? prov.models : []
+})
+const isGenerationInProgress = computed(() => {
+  return activeJob.value !== null && (activeJob.value.state === 'queued' || activeJob.value.state === 'running')
+})
+const hasSucceededJobUnloaded = computed(() => {
+  return activeJob.value !== null && activeJob.value.state === 'succeeded'
+})
 
 onMounted(() => {
   void loadWorkspace()
+  void loadGenerationOptions()
+  resumeActiveJobFromSession()
 })
+
+onUnmounted(() => {
+  if (pollTimer !== null) {
+    window.clearTimeout(pollTimer)
+    pollTimer = null
+  }
+})
+
+async function loadGenerationOptions() {
+  try {
+    const res = await getTextGenerationOptions()
+    providerOptions.value = res.providers ?? []
+    const firstProvider = providerOptions.value[0]
+    if (firstProvider && !selectedProviderId.value) {
+      selectedProviderId.value = firstProvider.id
+      const firstModel = firstProvider.models[0]
+      if (firstModel) {
+        selectedModelId.value = firstModel.id
+      }
+    }
+  } catch {
+    providerOptions.value = []
+  }
+}
+
+function onProviderChange(provId: string) {
+  selectedProviderId.value = provId
+  const prov = providerOptions.value.find((p) => p.id === provId)
+  const firstModel = prov?.models[0]
+  if (firstModel) {
+    selectedModelId.value = firstModel.id
+  } else {
+    selectedModelId.value = ''
+  }
+}
+
+async function startGeneration() {
+  if (dirty.value || !selectedProviderId.value || !selectedModelId.value || isGenerationInProgress.value) {
+    return
+  }
+  generating.value = true
+  generationErrorCode.value = ''
+  mutationErrorCode.value = ''
+  loadErrorCode.value = ''
+  try {
+    const requestId = crypto.randomUUID()
+    const job = await createProposalGeneration(projectID(), {
+      request_id: requestId,
+      provider_id: selectedProviderId.value,
+      model_id: selectedModelId.value,
+    })
+    activeJob.value = job
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(`proposal_job_${projectID()}`, job.id)
+    }
+    trackJob(job.id)
+  } catch (error) {
+    if (error instanceof ApiError) {
+      generationErrorCode.value = error.code
+    } else {
+      generationErrorCode.value = 'request_failed'
+    }
+  } finally {
+    generating.value = false
+  }
+}
+
+async function loadSucceededProposal() {
+  if (!activeJob.value || activeJob.value.state !== 'succeeded') {
+    return
+  }
+  generationErrorCode.value = ''
+  try {
+    summaries.value = await listCreativeProposals(projectID())
+    if (activeJob.value.proposal_version) {
+      const ok = await loadVersion(activeJob.value.proposal_version, true)
+      if (!ok) {
+        generationErrorCode.value = loadErrorCode.value || 'request_failed'
+        return
+      }
+    }
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem(`proposal_job_${projectID()}`)
+    }
+    activeJob.value = null
+  } catch (error) {
+    if (error instanceof ApiError) {
+      generationErrorCode.value = error.code
+    } else {
+      generationErrorCode.value = 'request_failed'
+    }
+  }
+}
+
+function trackJob(jobId: string) {
+  if (pollTimer !== null) {
+    window.clearTimeout(pollTimer)
+    pollTimer = null
+  }
+
+  const poll = async () => {
+    try {
+      const job = await getProposalGeneration(projectID(), jobId)
+      activeJob.value = job
+      generationErrorCode.value = ''
+      if (job.state === 'succeeded') {
+        await loadSucceededProposal()
+        return
+      }
+      if (job.state === 'failed') {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.removeItem(`proposal_job_${projectID()}`)
+        }
+        generationErrorCode.value = job.error_code || 'request_failed'
+        return
+      }
+      pollTimer = window.setTimeout(poll, 1000)
+    } catch (error) {
+      if (error instanceof ApiError) {
+        generationErrorCode.value = error.code
+      } else {
+        generationErrorCode.value = 'request_failed'
+      }
+      pollTimer = window.setTimeout(poll, 1000)
+    }
+  }
+
+  pollTimer = window.setTimeout(poll, 1000)
+}
+
+function resumeActiveJobFromSession() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return
+  }
+  const savedJobId = window.sessionStorage.getItem(`proposal_job_${projectID()}`)
+  if (savedJobId) {
+    trackJob(savedJobId)
+  }
+}
 
 async function loadWorkspace() {
   loading.value = true
@@ -64,10 +229,10 @@ async function loadWorkspace() {
   }
 }
 
-async function loadVersion(version: number, discardDirty = false) {
+async function loadVersion(version: number, discardDirty = false): Promise<boolean> {
   if (dirty.value && !discardDirty && selectedVersion.value !== version) {
     pendingVersion.value = version
-    return
+    return false
   }
 
   proposalLoading.value = true
@@ -77,9 +242,11 @@ async function loadVersion(version: number, discardDirty = false) {
   try {
     const proposal = await getCreativeProposal(String(route.params.id), version)
     applyProposal(proposal)
+    return true
   } catch (error) {
     loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
     failedVersion.value = version
+    return false
   } finally {
     proposalLoading.value = false
   }
@@ -298,6 +465,121 @@ async function retryFailedVersion() {
       <p class="body-copy">
         {{ t('creativeProposal.description') }}
       </p>
+
+      <section class="proposal-generation-bar">
+        <div
+          v-if="hasAIProviders"
+          class="generation-controls"
+        >
+          <div class="control-group">
+            <label for="provider-select">{{ t('creativeProposal.generation.selectProvider') }}</label>
+            <select
+              id="provider-select"
+              v-model="selectedProviderId"
+              data-testid="select-provider"
+              :disabled="dirty || isGenerationInProgress || generating"
+              @change="onProviderChange(($event.target as HTMLSelectElement).value)"
+            >
+              <option
+                v-for="p in providerOptions"
+                :key="p.id"
+                :value="p.id"
+              >
+                {{ p.display_name }}
+              </option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="model-select">{{ t('creativeProposal.generation.selectModel') }}</label>
+            <select
+              id="model-select"
+              v-model="selectedModelId"
+              data-testid="select-model"
+              :disabled="dirty || isGenerationInProgress || generating"
+            >
+              <option
+                v-for="m in selectedProviderModels"
+                :key="m.id"
+                :value="m.id"
+              >
+                {{ m.display_name }}
+              </option>
+            </select>
+          </div>
+          <button
+            class="primary-button"
+            data-testid="generate-proposal-btn"
+            type="button"
+            :disabled="dirty || !selectedModelId || isGenerationInProgress || generating || hasSucceededJobUnloaded"
+            @click="startGeneration"
+          >
+            {{ (isGenerationInProgress || generating) ? t('creativeProposal.actions.generating') : (hasProposal ? t('creativeProposal.actions.regenerate') : t('creativeProposal.actions.generate')) }}
+          </button>
+        </div>
+        <div
+          v-else
+          class="notice info"
+          data-testid="no-providers-notice"
+        >
+          <p>{{ t('creativeProposal.generation.noProvidersConfigured') }}</p>
+        </div>
+
+        <div
+          v-if="dirty"
+          class="notice warning"
+          data-testid="dirty-generation-blocked"
+        >
+          <p>{{ t('creativeProposal.generation.dirtyBlocked') }}</p>
+        </div>
+
+        <div
+          v-if="isGenerationInProgress && activeJob"
+          class="notice info"
+          data-testid="job-progress-banner"
+        >
+          <p>{{ activeJob.state === 'queued' ? t('creativeProposal.generation.stateQueued') : t('creativeProposal.generation.stateRunning') }}</p>
+        </div>
+
+        <div
+          v-if="hasSucceededJobUnloaded"
+          class="notice info"
+          data-testid="job-succeeded-load-failed-banner"
+        >
+          <p>{{ t('creativeProposal.generation.stateSucceeded') }}</p>
+          <p
+            v-if="generationErrorCode"
+            class="state-text"
+          >
+            {{ t(`creativeProposal.errors.${generationErrorCode}`) }}
+          </p>
+          <button
+            class="secondary-button"
+            data-testid="retry-load-generated-btn"
+            type="button"
+            @click="loadSucceededProposal"
+          >
+            {{ t('creativeProposal.actions.retryLoadGenerated') }}
+          </button>
+        </div>
+
+        <div
+          v-if="generationErrorCode && !hasSucceededJobUnloaded"
+          class="notice error"
+          data-testid="job-error-banner"
+        >
+          <p>{{ t(`creativeProposal.errors.${generationErrorCode}`) }}</p>
+          <button
+            v-if="hasAIProviders && !isGenerationInProgress"
+            class="secondary-button"
+            data-testid="retry-generation-btn"
+            type="button"
+            :disabled="dirty"
+            @click="startGeneration"
+          >
+            {{ t('creativeProposal.actions.retryGeneration') }}
+          </button>
+        </div>
+      </section>
 
       <div
         v-if="loadErrorCode && !hasProposal"

@@ -111,7 +111,7 @@ func TestListCreativeProposalsEndpoint(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposals", nil)
 	rec := httptest.NewRecorder()
 
@@ -150,7 +150,7 @@ func TestGetCreativeProposalVersionEndpoint(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
 
 	// Success case
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposals/1", nil)
@@ -193,6 +193,39 @@ func TestGetCreativeProposalVersionEndpoint(t *testing.T) {
 	}
 }
 
+func TestCreativeProposalEndpointDoesNotExposeSourceGenerationJobID(t *testing.T) {
+	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	projectID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	jobID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+
+	proposal := sampleProposal(projectID, 1, 1, creativeproposal.StatusDraft)
+	proposal.SourceGenerationJobID = &jobID
+
+	service := fakeCreativeProposalService{
+		getFn: func(ctx context.Context, principal project.Principal, pID uuid.UUID, version int) (creativeproposal.CreativeProposal, error) {
+			return proposal, nil
+		},
+	}
+
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposals/1", nil)
+	rec := httptest.NewRecorder()
+	server.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var rawMap map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &rawMap); err != nil {
+		t.Fatalf("unmarshal json map: %v", err)
+	}
+	if _, exists := rawMap["source_generation_job_id"]; exists {
+		t.Fatalf("source_generation_job_id must not be exposed in public API response: %s", rec.Body.String())
+	}
+}
+
 func TestPutCreativeProposalEndpointUpdatesDraft(t *testing.T) {
 	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	projectID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
@@ -208,7 +241,7 @@ func TestPutCreativeProposalEndpointUpdatesDraft(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
 
 	body := map[string]any{
 		"revision":                   2,
@@ -265,7 +298,7 @@ func TestPutCreativeProposalEndpointMapsStaleAndImmutable(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
 
 	body := map[string]any{
 		"revision":          1,
@@ -313,7 +346,7 @@ func TestPutCreativeProposalEndpointRejectsServerControlledFields(t *testing.T) 
 	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	projectID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, fakeCreativeProposalService{}, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, fakeCreativeProposalService{}, nil, nil, fixedResolver{ownerID: ownerID})
 
 	for _, field := range []string{"project_id", "version", "status", "source_brief_revision", "created_at", "updated_at", "approved_at"} {
 		body := map[string]any{
@@ -359,7 +392,7 @@ func TestApproveCreativeProposalEndpoint(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, service, nil, nil, fixedResolver{ownerID: ownerID})
 
 	// Success
 	body := map[string]any{"revision": 3}

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 )
 
 func validProposalContent(title string) creativeproposal.Content {
@@ -399,5 +400,102 @@ func TestCreativeProposalRepositoryIntegrationConcurrentUpdates(t *testing.T) {
 
 	if successes != 1 || staleErrors != 1 {
 		t.Fatalf("expected 1 success and 1 stale error, got %d successes and %d stale errors", successes, staleErrors)
+	}
+}
+
+func TestCreativeProposalRepositoryIntegration_IdempotentCreateDraftFromJob(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepository := NewProjectRepository(pool)
+	jobsRepository := NewJobRepository(pool)
+	proposalRepository := NewCreativeProposalRepository(pool)
+	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+	projectItem, err := projectRepository.Create(context.Background(), ownerID, validIntegrationCreateInput("Job Idempotency Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	job1, err := jobsRepository.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "creative_proposal_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"ai_proposal_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job 1: %v", err)
+	}
+
+	// First call with job1
+	draft1, err := proposalRepository.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision:   1,
+		SourceGenerationJobID: &job1.ID,
+		Content:               validProposalContent("Generated Draft 1"),
+	})
+	if err != nil {
+		t.Fatalf("create draft with job 1: %v", err)
+	}
+	if draft1.Version != 1 || draft1.Status != creativeproposal.StatusDraft {
+		t.Fatalf("unexpected draft 1: %+v", draft1)
+	}
+
+	// Retry simulation with the exact same job1 ID
+	draft1Retry, err := proposalRepository.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision:   1,
+		SourceGenerationJobID: &job1.ID,
+		Content:               validProposalContent("Generated Draft 1 Retry Attempt"),
+	})
+	if err != nil {
+		t.Fatalf("retry create draft with job 1: %v", err)
+	}
+	if draft1Retry.Version != draft1.Version {
+		t.Fatalf("expected version %d on retry, got %d", draft1.Version, draft1Retry.Version)
+	}
+	if draft1Retry.TitleOptions[0] != "Generated Draft 1" {
+		t.Fatalf("expected original draft content, got %v", draft1Retry.TitleOptions)
+	}
+
+	// Check proposals count is still 1
+	list, err := proposalRepository.List(context.Background(), ownerID, projectItem.ID)
+	if err != nil {
+		t.Fatalf("list proposals: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected 1 proposal, got %d", len(list))
+	}
+
+	// Distinct job2 creates next version
+	job2, err := jobsRepository.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "creative_proposal_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"ai_proposal_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job 2: %v", err)
+	}
+
+	draft2, err := proposalRepository.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision:   1,
+		SourceGenerationJobID: &job2.ID,
+		Content:               validProposalContent("Generated Draft 2"),
+	})
+	if err != nil {
+		t.Fatalf("create draft with job 2: %v", err)
+	}
+	if draft2.Version != 2 || draft2.Status != creativeproposal.StatusDraft {
+		t.Fatalf("unexpected draft 2: %+v", draft2)
+	}
+
+	// Check draft 1 is now superseded
+	oldDraft1, err := proposalRepository.Get(context.Background(), ownerID, projectItem.ID, 1)
+	if err != nil {
+		t.Fatalf("get draft 1: %v", err)
+	}
+	if oldDraft1.Status != creativeproposal.StatusSuperseded {
+		t.Fatalf("expected draft 1 to be superseded, got %s", oldDraft1.Status)
 	}
 }

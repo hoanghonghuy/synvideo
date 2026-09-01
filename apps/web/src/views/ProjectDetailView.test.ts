@@ -72,6 +72,7 @@ describe('ProjectDetailView', () => {
       .mockResolvedValueOnce(jsonResponse(project))
       .mockResolvedValueOnce(jsonResponse(project))
       .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ providers: [] }))
 
     const router = createRouter({
       history: createMemoryHistory(),
