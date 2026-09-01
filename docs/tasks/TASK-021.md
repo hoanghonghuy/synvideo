@@ -1,11 +1,12 @@
 # TASK-021 — Scene Plan durable generation + API integration
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
-Planned wave: WAVE-F1-I candidate
-Branch when activated: `feature/TASK-021-scene-plan-generation-integration`
+Wave: WAVE-F1-I
+Branch: `feature/TASK-021-scene-plan-generation-integration`
 Base: `develop`
-Depends on: TASK-014, TASK-015, TASK-017 accepted; TASK-018 must be accepted before activation.
+Issue: #39
+Depends on: TASK-014, TASK-015, TASK-017, TASK-018 accepted; frozen `SCENE_PLAN_JOB_V1`.
 
 ## Goal
 Make Stage 7 Scene Plan a real durable backend workflow by integrating accepted Scene Plan generation/persistence with generic jobs, owner-scoped live text runtime, resource APIs, DB exactly-once persistence and runtime composition.
@@ -18,9 +19,9 @@ Read first:
 - `SCENE_PLAN_GENERATION_V1.md`;
 - `JOB_EXECUTION_V1.md`;
 - `BYOK_TEXT_PROVIDER_RUNTIME_V1.md`;
-- accepted TASK-018 Script job integration once merged.
+- accepted TASK-018 Script durable generation integration as the behavioral reference.
 
-## Primary ownership when activated
+## Primary ownership
 - new `apps/api/internal/sceneplangenerationjob/**` or cohesive equivalent;
 - minimal internal generation-idempotency extension to Scene Plan;
 - focused `postgres/scene_plan_repository.go` integration tests;
@@ -56,16 +57,16 @@ Do not modify:
 6. Crash after Scene Plan draft commit before MarkSuccess creates exactly one version.
 7. Approved Scene Plan history remains immutable.
 8. No second credential path/executor.
+9. Strict durable payload decode/validation happens before provider resolution.
+10. Real PostgreSQL same-generation-job concurrency proves one durable Scene Plan version.
+
+## Why READY now
+TASK-018 is accepted and TASK-019 has merged, so shared runtime/jobs/httpserver composition is free. No active task currently owns that backend hotspot. TASK-025 remains isolated to `providers/**`. The TASK-021 remote branch was absent when PM/TL promoted this task.
 
 ## TDD
-Implement every deterministic/PostgreSQL gate in `SCENE_PLAN_JOB_V1`, including duplicate enqueue race, crash-window retry, strict payload decode, source relationship errors, owner isolation and exact-head race/full verification.
+Implement every deterministic/PostgreSQL gate in `SCENE_PLAN_JOB_V1`, including duplicate enqueue race, crash-window retry, strict payload decode, source relationship errors, owner isolation, request-time source snapshots, real same-job concurrency and exact-head race/full verification.
 
-## Activation gate
-Do **not** claim this branch yet.
+## Worktree / claim
+Before work, confirm remote `feature/TASK-021-scene-plan-generation-integration` is still absent. Atomically create that remote ref from latest `origin/develop`, then use a dedicated TASK-021 worktree. Shared/control checkout remains on `develop`.
 
-Before READY:
-- TASK-018 merged and its shared `main.go/jobs/httpserver` hotspot released;
-- PM/TL rechecks Script-job integration pattern and latest `develop`;
-- no conflicting active backend task owns runtime composition.
-
-Do not self-mark READY/DONE or self-merge.
+Do not self-mark DONE or self-merge.
