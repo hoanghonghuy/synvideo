@@ -23,20 +23,31 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-012 | Script generation engine | DONE | Accepted/squash-merged PR #24 as `0a3d2fb9...`; strict `script_v1`, long-form/Unicode/context/immutability coverage accepted; CI #128 green. |
 | TASK-013 | Live OpenAI-compatible text provider adapter foundation | DONE | Accepted/squash-merged PR #29 as `177e78fc...`; secret-safe bounded OpenAI-compatible adapter, deterministic registration and CI #142 accepted. |
 | TASK-014 | Scene Plan generation engine | DONE | Accepted/squash-merged PR #27 as `6b5c9d3c...`; approved narration preservation, strict scene validation and CI #140 accepted. |
+| TASK-015 | Scene Plan domain and persistence foundation | READY | Issue #30. Frozen `SCENE_PLAN_V1`; isolated `sceneplan/**` + PostgreSQL + migration `0007`; no HTTP/frontend/jobs/media. |
+| TASK-016 | Media Asset + S3-compatible storage foundation | READY | Issue #31. Frozen `MEDIA_ASSET_STORAGE_V1`; isolated media/storage + migration `0008` + local S3-compatible integration; no HTTP/frontend/jobs/Scene Plan. |
 
-## Active parallel wave — WAVE-F1-E review/fix
+## Active parallel wave — WAVE-F1-F
+
 Frozen contracts:
 - `docs/contracts/AI_PROPOSAL_JOB_V1.md`
-- `docs/contracts/OPENAI_COMPAT_TEXT_PROVIDER_V1.md`
-- `docs/contracts/SCENE_PLAN_GENERATION_V1.md`
-- plus previously accepted/frozen Proposal, Jobs and Script contracts.
+- `docs/contracts/SCENE_PLAN_V1.md`
+- `docs/contracts/MEDIA_ASSET_STORAGE_V1.md`
+- plus accepted Proposal/Jobs/Script/Scene Plan generation/provider contracts.
 
 Current implementation slots:
-- Dev A — TASK-009 `CHANGES_REQUESTED` on PR #28; continue only in the same dedicated worktree/PR and fix the four recorded review blockers.
-- Dev B — available after TASK-013 DONE; clean merged TASK-013 worktree before claiming future work.
-- Dev C — available after TASK-014 DONE; clean merged TASK-014 worktree before claiming future work.
+- Dev A — TASK-009 `CHANGES_REQUESTED`: continue only in the existing TASK-009 worktree/PR #28 and fix the recorded review blockers.
+- Dev B — TASK-015 `READY`: Scene Plan domain/persistence foundation, canonical branch `feature/TASK-015-scene-plan-persistence`.
+- Dev C — TASK-016 `READY`: Media Asset + S3-compatible storage foundation, canonical branch `feature/TASK-016-media-asset-storage`.
 
-Do not create micro-tasks merely to fill Dev B/C. The next wave should be frozen as substantial capabilities with non-overlapping primary write surfaces.
+TASK-015 and TASK-016 branches were absent when this wave was opened. New claims must use atomic remote ref creation, then dedicated worktrees.
+
+## Why WAVE-F1-F is safe and valuable
+These are substantial capabilities, not artificial micro-tasks:
+- TASK-009 completes creator-facing durable Proposal generation and owns current `main/httpserver/Proposal web` hotspots.
+- TASK-015 establishes the full Scene Plan version/revision/approval persistence model with real PostgreSQL concurrency and approved-Script narration preservation; it deliberately has no HTTP/frontend composition.
+- TASK-016 establishes durable media metadata plus a vendor-neutral S3-compatible object-store foundation, local deterministic storage integration and failure-compensation semantics; it deliberately has no HTTP/frontend/job orchestration.
+
+Primary write surfaces do not overlap. Migrations are `0007` and `0008` and do not reference each other's new tables, so they remain merge-order independent under the accepted migration runner.
 
 ## TASK-009 current review blockers
 1. `source_generation_job_id` must remain internal persistence metadata and never appear in public Proposal JSON.
@@ -44,21 +55,27 @@ Do not create micro-tasks merely to fill Dev B/C. The next wave should be frozen
 3. Restore the TASK-008 regressions removed during the frontend test-harness refactor.
 4. A succeeded durable generation job whose Proposal list/version follow-up load transiently fails must remain recoverable without offering a Regenerate action that starts another AI job.
 
-## Planned next wave — do not claim yet
-Freeze contracts/write surfaces before changing these to READY:
-- **Secure BYOK credentials + runtime provider registration/settings**: owner-scoped credential lifecycle, secret-safe persistence/use, provider settings/catalog integration and actual TASK-013 adapter registration. This is one meaningful product capability, not a tiny `main.go` wiring patch.
-- **Script durable generation integration**: combine TASK-010 jobs + TASK-012 generation engine + TASK-011 idempotent Script draft persistence using the accepted async pattern.
-- **Script creator workspace**: history/edit/stale/approval plus durable generation action/status UI; schedule separately from other frontend-heavy integration to avoid router/i18n collisions.
-- **Scene Plan persistence/integration**: versioning/editing/source tracking and durable generation around accepted TASK-014 before asset/media generation begins.
-
 ## Isolation / merge rules
 - **Each implementation task must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
 - Maximum concurrent implementation worktrees normally equals the configured AI developer slots (currently 3). Do not create speculative spare worktrees.
+- TASK-009 must stay out of `sceneplan/**` and media/object-storage TASK-016 paths.
+- TASK-015 must not touch `main.go`, `httpserver/**`, `apps/web/**`, jobs, providers, media/storage, TASK-009 paths or migration `0008`.
+- TASK-016 must not touch `main.go`, `httpserver/**`, `apps/web/**`, jobs, Proposal/Script/Scene Plan feature packages, AI text providers, TASK-009 paths or migration `0007`.
 - Review fixes stay on the original branch/PR and its dedicated worktree.
 - Merged task worktrees should be removed before that developer claims a new task unless explicitly retained for recovery data.
-- A new remote task branch must be claimed by atomically creating the previously absent GitHub ref at the selected latest `origin/develop` SHA; plain same-base `git push` is not an exclusive lock.
+- A new remote task branch must be claimed by atomically creating the previously absent GitHub ref at latest `origin/develop`; plain same-base `git push` is not an exclusive lock.
 - Every implementation task follows `docs/engineering/TDD_PROTOCOL.md`; RED -> GREEN -> REFACTOR evidence must be truthful.
 - Do not create parallelism by splitting tightly coupled work after implementation begins. Prefer contract-first tasks with isolated write surfaces and enough product/engineering value to justify a PR.
+
+## Planned follow-on — do not claim yet
+Freeze contracts/write surfaces before changing these to READY:
+- **Secure BYOK credentials + runtime provider registration/settings**: one substantial owner-scoped capability including secret-safe lifecycle and actual TASK-013 adapter registration; wait until TASK-009 releases `main/httpserver/Proposal web` hotspots.
+- **Script durable generation integration**: jobs + TASK-012 engine + idempotent Script persistence; schedule after TASK-009 so shared runtime/httpserver wiring does not collide.
+- **Script creator workspace**: history/edit/stale/approval + durable generation actions/status; schedule separately from other frontend-heavy work.
+- **Scene Plan durable generation/API/workspace**: integrate TASK-014 engine with TASK-015 persistence once TASK-015 is accepted.
+- **Scene-level media acquisition/generation**: build on accepted TASK-015 Scene Plan + TASK-016 media/storage, keeping per-scene retries/replacements independent.
+
+Do not mark follow-ons READY merely to fill slots.
 
 ## Product progress checkpoint
 Accepted durable product capabilities currently cover:
@@ -75,11 +92,14 @@ Accepted durable product capabilities currently cover:
 - live OpenAI-compatible provider adapter foundation;
 - provider-neutral Scene Plan generation engine with approved narration preservation.
 
-Still incomplete before AI Proposal is creator-usable end to end:
-- TASK-009 review fixes and acceptance;
-- secure live-provider/BYOK runtime registration.
+WAVE-F1-F now advances:
+- TASK-009 Proposal generation integration review fixes;
+- durable Scene Plan persistence/versioning;
+- Stage 8 media/object-storage infrastructure.
 
-Downstream remains substantial: Script durable integration/workspace, Scene Plan persistence/workspace, media/audio acquisition/generation, Scene Editor, render/export and publishing/channel management.
+AI Proposal is not production-complete until TASK-009 is accepted and a secure live-provider/BYOK runtime path registers at least one live model.
+
+Downstream remains substantial: Script durable integration/workspace, Scene Plan integration/workspace, media/audio acquisition/generation, Scene Editor, render/export and publishing/channel management.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
