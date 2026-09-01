@@ -1,11 +1,18 @@
 # TASK-012 — Script generation engine
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-005 accepted; frozen `SCRIPT_V1` + `SCRIPT_GENERATION_V1`
 Wave: WAVE-F1-D
 Branch: `feature/TASK-012-script-generation`
 Base: `develop`
+Accepted PR: #24
+Squash merge: `0a3d2fb9ae82eed4b2520cf4e05377bd63e07c9d`
+
+## Acceptance record
+Team Lead logical APPROVE on head `2883cfcc` accepted the implementation after verifying frozen `SCRIPT_GENERATION_V1` behavior, isolated `scriptgeneration/**` scope, strict structured output validation, Unicode rune limits, long-form preservation, safe provider-neutral error mapping, in-flight context propagation, input immutability and CI #128 green.
+
+Formal GitHub APPROVE is unavailable because PR author/reviewer are the same account; review #5073033845 records the project Team Lead logical approval.
 
 ## Goal
 Implement the provider-neutral Script generation engine defined by `docs/contracts/SCRIPT_GENERATION_V1.md`: transform an already-approved Proposal + Project writing context into a strict validated Script candidate, without persistence, jobs, HTTP or frontend work.
@@ -72,8 +79,7 @@ This task is intentionally independent from TASK-011's persistence branch. It de
 - Raw provider errors/output are not exposed through presentation-safe engine errors.
 - Cancellation/deadline during provider execution remains a context error, not `GENERATION_PROVIDER_FAILED`.
 
-## TDD plan
-Start RED for at least:
+## TDD coverage
 1. valid provider JSON -> validated Script candidate + copied source Proposal version;
 2. prompt contains approved Proposal context, Project locale/format/duration;
 3. prompt includes research gaps/warnings as non-invention constraints;
@@ -87,20 +93,18 @@ Start RED for at least:
 11. candidate/request types do not leak provider-specific raw schemas.
 
 ## Acceptance criteria
-- [ ] Frozen `SCRIPT_GENERATION_V1` behavior is implemented without contract changes.
-- [ ] Engine uses accepted provider-neutral `TextGenerator` capability only.
-- [ ] Structured output is strict and validated against Script V1 rules.
-- [ ] Long-form and locale intent are preserved in prompt behavior.
-- [ ] Research gaps/warnings are explicit constraints against silent invention.
-- [ ] Context cancellation/deadline propagate during in-flight generation.
-- [ ] Input immutability is regression-tested.
-- [ ] No persistence/jobs/HTTP/frontend/provider-SDK scope leakage.
-- [ ] TDD evidence truthful; gofmt/vet/tests/build/full CI green.
+- [x] Frozen `SCRIPT_GENERATION_V1` behavior is implemented without contract changes.
+- [x] Engine uses accepted provider-neutral `TextGenerator` capability only.
+- [x] Structured output is strict and validated against Script V1 rules.
+- [x] Long-form and locale intent are preserved in prompt behavior.
+- [x] Research gaps/warnings are explicit constraints against silent invention.
+- [x] Context cancellation/deadline propagate during in-flight generation.
+- [x] Input immutability is regression-tested.
+- [x] No persistence/jobs/HTTP/frontend/provider-SDK scope leakage.
+- [x] TDD evidence truthful; gofmt/vet/tests/build/full CI green.
 
 ## Integration
 After TASK-011 persistence is accepted, a later Script-generation job integration task can combine TASK-010 durable jobs + TASK-012 engine + Script `CreateDraft`. This task itself stays persistence-free.
 
 ## Worktree / claim
-Follow `PARALLEL_WORK_PROTOCOL.md`: atomically create the previously absent remote branch ref, then create one dedicated TASK-012 worktree. Never implement in the shared `develop` checkout.
-
-Do not self-merge or self-mark DONE.
+The dedicated TASK-012 worktree should be cleaned up after merge before its developer claims another task.
