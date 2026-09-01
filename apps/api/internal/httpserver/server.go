@@ -55,6 +55,7 @@ func New(
 	scriptService ScriptService,
 	proposalGenerationService ProposalGenerationService,
 	textProviderSettingsService TextProviderSettingsService,
+	scriptGenerationService ScriptGenerationService,
 	actorResolver actor.Resolver,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -99,6 +100,11 @@ func New(
 		mux.HandleFunc("GET /api/v1/ai/provider-settings", handler.list)
 		mux.HandleFunc("PUT /api/v1/ai/provider-settings/{provider_id}", handler.put)
 		mux.HandleFunc("DELETE /api/v1/ai/provider-settings/{provider_id}", handler.delete)
+	}
+	if scriptGenerationService != nil && actorResolver != nil {
+		handler := scriptGenerationHandler{service: scriptGenerationService, actorResolver: actorResolver}
+		mux.HandleFunc("POST /api/v1/projects/{id}/script-generations", handler.create)
+		mux.HandleFunc("GET /api/v1/projects/{id}/script-generations/{job_id}", handler.get)
 	}
 
 	return &http.Server{

@@ -2,13 +2,16 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
@@ -413,4 +416,141 @@ func TestScriptRepositoryIntegration(t *testing.T) {
 			t.Fatalf("notes unicode runes mismatch: len=%d", len([]rune(fetched.Notes)))
 		}
 	})
+}
+
+func TestScriptRepositoryIntegration_IdempotentCreateDraftFromJob(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepo := NewProjectRepository(pool)
+	jobsRepo := NewJobRepository(pool)
+	proposalRepo := NewCreativeProposalRepository(pool)
+	repo := NewScriptRepository(pool)
+
+	ownerID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Script Idempotency Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	prop, err := proposalRepo.CreateDraft(context.Background(), ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Approved Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create proposal: %v", err)
+	}
+	propApproved, err := proposalRepo.Approve(context.Background(), ownerID, projectItem.ID, prop.Version, prop.Revision)
+	if err != nil {
+		t.Fatalf("approve proposal: %v", err)
+	}
+
+	job1, err := jobsRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "script_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"script_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job 1: %v", err)
+	}
+
+	// First call with job1
+	draft1, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		SourceGenerationJobID: &job1.ID,
+		Content:               validScriptContent("Generated Script 1"),
+	})
+	if err != nil {
+		t.Fatalf("create script draft with job 1: %v", err)
+	}
+	if draft1.Version != 1 || draft1.Status != script.StatusDraft {
+		t.Fatalf("unexpected draft 1: %+v", draft1)
+	}
+
+	// Retry simulation with the exact same job1 ID (crash window simulation)
+	draft1Retry, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		SourceGenerationJobID: &job1.ID,
+		Content:               validScriptContent("Generated Script 1 Retry Attempt"),
+	})
+	if err != nil {
+		t.Fatalf("retry create script draft with job 1: %v", err)
+	}
+	if draft1Retry.Version != draft1.Version {
+		t.Fatalf("expected version %d on retry, got %d", draft1.Version, draft1Retry.Version)
+	}
+	if draft1Retry.Sections[0].Heading != "Generated Script 1 Introduction" {
+		t.Fatalf("expected original draft content, got %s", draft1Retry.Sections[0].Heading)
+	}
+
+	// Check scripts count is still 1
+	list, err := repo.ListVersions(context.Background(), ownerID, projectItem.ID)
+	if err != nil {
+		t.Fatalf("list scripts: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected 1 script version, got %d", len(list))
+	}
+
+	// Distinct job2 creates next version
+	job2, err := jobsRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		ProjectID:   &projectItem.ID,
+		Kind:        "script_generation_v1",
+		MaxAttempts: 3,
+		Payload:     []byte(`{"schema_version":"script_generation_job_v1"}`),
+	})
+	if err != nil {
+		t.Fatalf("enqueue job 2: %v", err)
+	}
+
+	draft2, err := repo.CreateDraft(context.Background(), ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		SourceGenerationJobID: &job2.ID,
+		Content:               validScriptContent("Generated Script 2"),
+	})
+	if err != nil {
+		t.Fatalf("create draft with job 2: %v", err)
+	}
+	if draft2.Version != 2 || draft2.Status != script.StatusDraft {
+		t.Fatalf("unexpected draft 2: %+v", draft2)
+	}
+
+	// Check draft 1 is now superseded
+	oldDraft1, err := repo.GetByVersion(context.Background(), ownerID, projectItem.ID, 1)
+	if err != nil {
+		t.Fatalf("get draft 1: %v", err)
+	}
+	if oldDraft1.Status != script.StatusSuperseded {
+		t.Fatalf("expected draft 1 to be superseded, got %s", oldDraft1.Status)
+	}
+}
+
+func TestScriptRepositoryIntegration_JSONDoesNotExposeJobID(t *testing.T) {
+	jobID := uuid.New()
+	duration := 60
+	s := script.Script{
+		ProjectID:                uuid.New(),
+		Version:                  1,
+		Revision:                 1,
+		Status:                   script.StatusDraft,
+		SourceProposalVersion:    1,
+		ContentLocale:            "vi",
+		Sections:                 []script.Section{{Key: "intro", Heading: "H", Body: "B"}},
+		EstimatedDurationSeconds: &duration,
+		Notes:                    "N",
+		SourceGenerationJobID:    &jobID,
+	}
+
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal script: %v", err)
+	}
+
+	jsonStr := string(b)
+	if strings.Contains(jsonStr, jobID.String()) || strings.Contains(jsonStr, "source_generation_job_id") {
+		t.Fatalf("public JSON exposes source_generation_job_id: %s", jsonStr)
+	}
 }

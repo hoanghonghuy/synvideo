@@ -181,6 +181,24 @@ func (r *ScriptRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID, p
 		return script.Script{}, script.ErrProposalNotApproved
 	}
 
+	if input.SourceGenerationJobID != nil {
+		existingRow := tx.QueryRow(ctx, `
+			SELECT project_id::text, version, revision, status, source_proposal_version,
+				content_locale, sections, estimated_duration_seconds, notes,
+				created_at, updated_at, approved_at
+			FROM scripts
+			WHERE project_id = $1 AND source_generation_job_id = $2
+		`, projectID.String(), input.SourceGenerationJobID.String())
+		existing, err := scanScript(existingRow)
+		if err == nil {
+			_ = tx.Commit(ctx)
+			existing.SourceGenerationJobID = input.SourceGenerationJobID
+			return existing, nil
+		} else if !errors.Is(err, script.ErrNotFound) {
+			return script.Script{}, fmt.Errorf("check existing generation script: %w", err)
+		}
+	}
+
 	var maxVersion int
 	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(version), 0) FROM scripts WHERE project_id = $1
@@ -203,6 +221,12 @@ func (r *ScriptRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID, p
 		return script.Script{}, fmt.Errorf("marshal sections json: %w", err)
 	}
 
+	var sourceJobID *string
+	if input.SourceGenerationJobID != nil {
+		str := input.SourceGenerationJobID.String()
+		sourceJobID = &str
+	}
+
 	insertQuery := fmt.Sprintf(`
 		INSERT INTO scripts (
 			project_id,
@@ -214,9 +238,10 @@ func (r *ScriptRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID, p
 			sections,
 			estimated_duration_seconds,
 			notes,
+			source_generation_job_id,
 			created_at,
 			updated_at
-		) VALUES ($1, $2, 1, 'draft', $3, $4, $5, $6, $7, now(), now())
+		) VALUES ($1, $2, 1, 'draft', $3, $4, $5, $6, $7, $8, now(), now())
 		RETURNING %s;
 	`, scriptReturningFields)
 
@@ -228,12 +253,14 @@ func (r *ScriptRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID, p
 		sectionsBytes,
 		input.EstimatedDurationSeconds,
 		input.Notes,
+		sourceJobID,
 	)
 
 	created, err := scanScript(row)
 	if err != nil {
 		return script.Script{}, fmt.Errorf("insert script draft: %w", err)
 	}
+	created.SourceGenerationJobID = input.SourceGenerationJobID
 
 	if err := tx.Commit(ctx); err != nil {
 		return script.Script{}, fmt.Errorf("commit create script draft: %w", err)
