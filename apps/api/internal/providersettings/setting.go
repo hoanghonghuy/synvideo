@@ -1,0 +1,92 @@
+package providersettings
+
+import (
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
+)
+
+var (
+	ErrSettingNotFound     = errors.New("provider setting not found")
+	ErrStaleRevision       = errors.New("stale provider setting revision")
+	ErrInvalidSettingInput = errors.New("invalid provider setting input")
+	ErrDecryptionFailed    = errors.New("credential decryption failed")
+	ErrEncryptionFailed    = errors.New("credential encryption failed")
+	ErrMasterKeyMissing    = errors.New("credential encryption master key missing or invalid")
+	ErrProviderNotFound    = errors.New("provider not found in catalog")
+	ErrModelNotFound       = errors.New("model not found in catalog")
+	ErrCredentialRequired  = errors.New("api key is required for initial configuration")
+	ErrProviderDisabled    = errors.New("provider is disabled")
+	ErrModelNotEnabled     = errors.New("model is not enabled for provider")
+	ErrUnauthenticated     = errors.New("unauthenticated owner")
+)
+
+const (
+	MaxAPIKeyLength = 8192
+)
+
+// Setting represents an owner's persisted settings and encrypted credential for a provider.
+type Setting struct {
+	OwnerID          uuid.UUID
+	ProviderID       providers.ProviderID
+	Revision         int
+	Enabled          bool
+	EnabledModelIDs  []providers.ModelID
+	APIKeyCiphertext []byte
+	APIKeyNonce      []byte
+	KeyVersion       string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// ProviderSettingView is the safe, non-secret view of a provider's settings.
+type ProviderSettingView struct {
+	ID          providers.ProviderID `json:"id"`
+	DisplayName string               `json:"display_name"`
+	Configured  bool                 `json:"configured"`
+	Enabled     bool                 `json:"enabled"`
+	HasAPIKey   bool                 `json:"has_api_key"`
+	Revision    int                  `json:"revision"`
+	Models      []ModelSettingView   `json:"models"`
+}
+
+// ModelSettingView is the safe view of a model under a provider.
+type ModelSettingView struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+	Enabled     bool              `json:"enabled"`
+}
+
+// ProviderSettingsListResponse is the response body for GET /api/v1/ai/provider-settings.
+type ProviderSettingsListResponse struct {
+	Providers []ProviderSettingView `json:"providers"`
+}
+
+// TextGenerationOptionModel is a model option for text generation.
+type TextGenerationOptionModel struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// TextGenerationOptionProvider is a provider option with available models.
+type TextGenerationOptionProvider struct {
+	ID          providers.ProviderID        `json:"id"`
+	DisplayName string                      `json:"display_name"`
+	Models      []TextGenerationOptionModel `json:"models"`
+}
+
+// TextGenerationOptionsResponse is the response for GET /api/v1/ai/text-generation-options.
+type TextGenerationOptionsResponse struct {
+	Providers []TextGenerationOptionProvider `json:"providers"`
+}
+
+// PutSettingInput is the request body for PUT /api/v1/ai/provider-settings/{provider_id}.
+type PutSettingInput struct {
+	Revision        *int                `json:"revision,omitempty"`
+	Enabled         bool                `json:"enabled"`
+	EnabledModelIDs []providers.ModelID `json:"enabled_model_ids"`
+	APIKey          *string             `json:"api_key,omitempty"`
+}

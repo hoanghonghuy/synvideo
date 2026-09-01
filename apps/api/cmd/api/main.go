@@ -20,9 +20,8 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/postgres"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
-	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgeneration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
-	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
 
@@ -38,6 +37,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var server *http.Server
 	var projectService *project.Service
 	var creativeBriefService *creativebrief.Service
 	var creativeProposalService *creativeproposal.Service
@@ -59,15 +59,54 @@ func main() {
 		proposalRepo := postgres.NewCreativeProposalRepository(pool)
 		scriptRepo := postgres.NewScriptRepository(pool)
 		jobsRepo := postgres.NewJobRepository(pool)
+		settingsRepo := postgres.NewTextProviderSettingRepository(pool)
+
+		var cipher providersettings.Cipher
+		if cfg.CredentialEncryptionKey != "" {
+			var cipherErr error
+			cipher, cipherErr = providersettings.NewAESGCMCipher(cfg.CredentialEncryptionKey, cfg.CredentialKeyVersion)
+			if cipherErr != nil {
+				logger.Error("credential cipher initialization failed", "error", cipherErr)
+			}
+		}
+
+		var catalog *providersettings.Catalog
+		if cfg.TextProviderDefinitions != "" {
+			var catErr error
+			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(cfg.TextProviderDefinitions))
+			if catErr != nil {
+				logger.Error("text provider definitions parsing failed", "error", catErr)
+			}
+		} else {
+			catalog, _ = providersettings.NewCatalog([]providersettings.ProviderDefinition{
+				{
+					ProviderID:  "openai",
+					DisplayName: "OpenAI",
+					BaseURL:     "https://api.openai.com/v1",
+					Models: []providersettings.ModelDefinition{
+						{ModelID: "gpt-5-mini", DisplayName: "GPT-5 mini", ExternalModelID: "gpt-5-mini"},
+						{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o"},
+					},
+				},
+				{
+					ProviderID:  "openrouter",
+					DisplayName: "OpenRouter",
+					BaseURL:     "https://openrouter.ai/api/v1",
+					Models: []providersettings.ModelDefinition{
+						{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet"},
+					},
+				},
+			})
+		}
+
+		providerSettingsService := providersettings.NewService(catalog, settingsRepo, cipher, http.DefaultClient)
 
 		projectService = project.NewService(projectRepo)
 		creativeBriefService = creativebrief.NewService(briefRepo)
 		creativeProposalService = creativeproposal.NewService(proposalRepo)
 		scriptService = script.NewService(scriptRepo)
 
-		providerRegistry := providers.NewRegistry()
-		generationEngine := proposalgeneration.New(providerRegistry)
-		proposalJobHandler := proposalgenerationjob.NewHandler(generationEngine, proposalRepo)
+		proposalJobHandler := proposalgenerationjob.NewHandlerWithResolver(providerSettingsService, proposalRepo)
 
 		jobsRegistry := jobs.NewRegistry()
 		if err := jobsRegistry.Register(proposalgenerationjob.JobKind, proposalJobHandler); err != nil {
@@ -86,10 +125,11 @@ func main() {
 			}
 		}()
 
-		proposalGenerationService = proposalgenerationjob.NewService(providerRegistry, jobsRepo, projectRepo, briefRepo)
+		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, providerSettingsService, actor.NewLocalResolver(cfg))
+	} else {
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, nil, actor.NewLocalResolver(cfg))
 	}
-
-	server := httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, actor.NewLocalResolver(cfg))
 	errCh := make(chan error, 1)
 
 	go func() {

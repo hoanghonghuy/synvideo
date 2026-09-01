@@ -54,6 +54,7 @@ func New(
 	creativeProposalService CreativeProposalService,
 	scriptService ScriptService,
 	proposalGenerationService ProposalGenerationService,
+	textProviderSettingsService TextProviderSettingsService,
 	actorResolver actor.Resolver,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -92,6 +93,12 @@ func New(
 			mux.HandleFunc("POST /api/v1/projects/{id}/creative-proposal-generations", handler.create)
 			mux.HandleFunc("GET /api/v1/projects/{id}/creative-proposal-generations/{job_id}", handler.get)
 		}
+	}
+	if textProviderSettingsService != nil && actorResolver != nil {
+		handler := providerSettingsHandler{service: textProviderSettingsService, actorResolver: actorResolver}
+		mux.HandleFunc("GET /api/v1/ai/provider-settings", handler.list)
+		mux.HandleFunc("PUT /api/v1/ai/provider-settings/{provider_id}", handler.put)
+		mux.HandleFunc("DELETE /api/v1/ai/provider-settings/{provider_id}", handler.delete)
 	}
 
 	return &http.Server{

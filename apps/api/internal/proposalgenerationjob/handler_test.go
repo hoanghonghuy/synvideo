@@ -278,3 +278,64 @@ func TestHandler_GenerationErrors(t *testing.T) {
 		}
 	})
 }
+
+type mockResolver struct {
+	resolveFn func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error)
+}
+
+func (m *mockResolver) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+	if m.resolveFn != nil {
+		return m.resolveFn(ctx, ownerID, providerID, modelID)
+	}
+	return nil, providers.ErrProviderUnavailable
+}
+
+func TestHandler_WithResolver(t *testing.T) {
+	t.Run("resolves owner generator dynamically and produces draft", func(t *testing.T) {
+		var resolvedOwnerID uuid.UUID
+		res := &mockResolver{
+			resolveFn: func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+				resolvedOwnerID = ownerID
+				return fake.NewTextGenerator(validProposalJSON()), nil
+			},
+		}
+		mockRepo := &mockProposalRepo{
+			createdDraft: creativeproposal.CreativeProposal{Version: 3},
+		}
+		handler := proposalgenerationjob.NewHandlerWithResolver(res, mockRepo)
+
+		job := sampleJob(validPayload())
+		out, err := handler.Handle(context.Background(), job)
+		if err != nil {
+			t.Fatalf("handle with resolver: %v", err)
+		}
+		if resolvedOwnerID != job.OwnerID {
+			t.Fatalf("expected resolved owner %v, got %v", job.OwnerID, resolvedOwnerID)
+		}
+
+		var result proposalgenerationjob.Result
+		if err := json.Unmarshal(out, &result); err != nil {
+			t.Fatalf("unmarshal result: %v", err)
+		}
+		if result.ProposalVersion != 3 {
+			t.Fatalf("expected ProposalVersion 3, got %d", result.ProposalVersion)
+		}
+	})
+
+	t.Run("credential unavailable at execution maps to retryable GENERATION_PROVIDER_UNAVAILABLE", func(t *testing.T) {
+		res := &mockResolver{
+			resolveFn: func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+				return nil, providers.ErrProviderUnavailable
+			},
+		}
+		mockRepo := &mockProposalRepo{}
+		handler := proposalgenerationjob.NewHandlerWithResolver(res, mockRepo)
+
+		job := sampleJob(validPayload())
+		_, err := handler.Handle(context.Background(), job)
+		var retryErr *jobs.RetryableJobError
+		if !errors.As(err, &retryErr) || retryErr.Code != "GENERATION_PROVIDER_UNAVAILABLE" {
+			t.Fatalf("expected retryable GENERATION_PROVIDER_UNAVAILABLE, got: %v", err)
+		}
+	})
+}

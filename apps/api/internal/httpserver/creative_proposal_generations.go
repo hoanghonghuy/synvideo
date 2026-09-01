@@ -16,6 +16,7 @@ import (
 
 type ProposalGenerationService interface {
 	GetTextGenerationOptions(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error)
+	GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error)
 	CreateGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, input proposalgenerationjob.CreateProposalGenerationInput) (proposalgenerationjob.ProposalGenerationJobView, error)
 	GetGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, jobID uuid.UUID) (proposalgenerationjob.ProposalGenerationJobView, error)
 }
@@ -45,6 +46,18 @@ type proposalGenerationJobResponse struct {
 }
 
 func (h creativeProposalGenerationHandler) getTextGenerationOptions(w http.ResponseWriter, r *http.Request) {
+	if h.actorResolver != nil {
+		if principal, err := h.actorResolver.Resolve(r); err == nil && principal.OwnerID != uuid.Nil {
+			resp, err := h.service.GetTextGenerationOptionsForOwner(r.Context(), principal.OwnerID)
+			if err != nil {
+				writeProposalGenerationAPIError(w, err)
+				return
+			}
+			writeProjectJSON(w, http.StatusOK, resp)
+			return
+		}
+	}
+
 	resp, err := h.service.GetTextGenerationOptions(r.Context())
 	if err != nil {
 		writeProposalGenerationAPIError(w, err)

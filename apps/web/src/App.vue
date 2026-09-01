@@ -27,6 +27,9 @@ const { t } = useI18n()
         <RouterLink to="/projects">
           {{ t('navigation.projects') }}
         </RouterLink>
+        <RouterLink to="/settings/ai-providers">
+          {{ t('navigation.providerSettings') }}
+        </RouterLink>
       </nav>
     </header>
     <main>

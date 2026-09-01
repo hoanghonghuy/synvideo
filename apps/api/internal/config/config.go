@@ -27,10 +27,13 @@ var allowedEnvironments = map[string]struct{}{
 }
 
 type Config struct {
-	Addr         string
-	Environment  string
-	DatabaseURL  string
-	LocalActorID *uuid.UUID
+	Addr                    string
+	Environment             string
+	DatabaseURL             string
+	LocalActorID            *uuid.UUID
+	CredentialEncryptionKey string
+	CredentialKeyVersion    string
+	TextProviderDefinitions string
 }
 
 func Load() (Config, error) {
@@ -39,11 +42,19 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	byokKey := getEnv("SYNVIDEO_CREDENTIAL_ENCRYPTION_KEY", "")
+	if byokKey == "" {
+		byokKey = getEnv("SYNVIDEO_BYOK_ENCRYPTION_KEY", "")
+	}
+
 	cfg := Config{
-		Addr:         getEnv("SYNVIDEO_API_ADDR", defaultAddr),
-		Environment:  getEnv("SYNVIDEO_ENV", defaultEnvironment),
-		DatabaseURL:  getEnv("SYNVIDEO_DATABASE_URL", ""),
-		LocalActorID: localActorID,
+		Addr:                    getEnv("SYNVIDEO_API_ADDR", defaultAddr),
+		Environment:             getEnv("SYNVIDEO_ENV", defaultEnvironment),
+		DatabaseURL:             getEnv("SYNVIDEO_DATABASE_URL", ""),
+		LocalActorID:            localActorID,
+		CredentialEncryptionKey: byokKey,
+		CredentialKeyVersion:    getEnv("SYNVIDEO_CREDENTIAL_KEY_VERSION", "v1"),
+		TextProviderDefinitions: getEnv("SYNVIDEO_TEXT_PROVIDER_DEFINITIONS", ""),
 	}
 
 	if err := cfg.Validate(); err != nil {

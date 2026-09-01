@@ -29,6 +29,13 @@ func (f fakeProposalGenService) GetTextGenerationOptions(ctx context.Context) (p
 	return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
 }
 
+func (f fakeProposalGenService) GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+	if f.getOptionsFn != nil {
+		return f.getOptionsFn(ctx)
+	}
+	return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
+}
+
 func (f fakeProposalGenService) CreateGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, input proposalgenerationjob.CreateProposalGenerationInput) (proposalgenerationjob.ProposalGenerationJobView, error) {
 	if f.createGenFn != nil {
 		return f.createGenFn(ctx, principal, projectID, input)
@@ -60,7 +67,7 @@ func TestGetTextGenerationOptionsEndpoint(t *testing.T) {
 		},
 	}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil)
+	server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/ai/text-generation-options", nil)
 	rec := httptest.NewRecorder()
 	server.Handler.ServeHTTP(rec, req)
@@ -100,7 +107,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -130,7 +137,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrCreativeBriefRequired
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -157,7 +164,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrProviderUnavailable
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -184,7 +191,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrGenerationRequestConflict
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -211,7 +218,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrProjectNotFound
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -252,7 +259,7 @@ func TestGetProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposal-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()
@@ -278,7 +285,7 @@ func TestGetProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposal-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()
