@@ -7,8 +7,10 @@ import (
 )
 
 type modelEntry struct {
-	metadata      ModelMetadata
-	textGenerator TextGenerator
+	metadata       ModelMetadata
+	textGenerator  TextGenerator
+	imageGenerator ImageGenerator
+	videoGenerator VideoGenerator
 }
 
 type providerEntry struct {
@@ -50,13 +52,55 @@ func (r *Registry) Register(registration Registration) error {
 			return NewDuplicateRegistrationError(registration.Provider.ID)
 		}
 		entry.models[model.Metadata.ID] = modelEntry{
-			metadata:      model.Metadata,
-			textGenerator: model.TextGenerator,
+			metadata:       model.Metadata,
+			textGenerator:  model.TextGenerator,
+			imageGenerator: model.ImageGenerator,
+			videoGenerator: model.VideoGenerator,
 		}
 	}
 
 	r.providers[registration.Provider.ID] = entry
 	return nil
+}
+
+func (r *Registry) ResolveImageGenerator(providerID ProviderID, modelID ModelID) (ImageGenerator, ModelMetadata, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	model, metadata, err := r.resolveModel(providerID, modelID)
+	if err != nil {
+		return nil, metadata, err
+	}
+	if model.imageGenerator == nil || !metadata.Supports(CapabilityImageGeneration) {
+		return nil, metadata, NewUnsupportedCapabilityError(providerID, modelID, CapabilityImageGeneration)
+	}
+	return model.imageGenerator, metadata, nil
+}
+
+func (r *Registry) ResolveVideoGenerator(providerID ProviderID, modelID ModelID) (VideoGenerator, ModelMetadata, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	model, metadata, err := r.resolveModel(providerID, modelID)
+	if err != nil {
+		return nil, metadata, err
+	}
+	if model.videoGenerator == nil || !metadata.Supports(CapabilityVideoGeneration) {
+		return nil, metadata, NewUnsupportedCapabilityError(providerID, modelID, CapabilityVideoGeneration)
+	}
+	return model.videoGenerator, metadata, nil
+}
+
+func (r *Registry) resolveModel(providerID ProviderID, modelID ModelID) (modelEntry, ModelMetadata, error) {
+	provider, ok := r.providers[providerID]
+	if !ok {
+		return modelEntry{}, ModelMetadata{}, NewUnknownProviderError(providerID)
+	}
+	model, ok := provider.models[modelID]
+	if !ok {
+		return modelEntry{}, ModelMetadata{}, NewUnknownModelError(providerID, modelID)
+	}
+	return model, cloneModelMetadata(model.metadata), nil
 }
 
 func (r *Registry) ResolveTextGenerator(providerID ProviderID, modelID ModelID) (TextGenerator, ModelMetadata, error) {
@@ -133,13 +177,30 @@ func validateRegistration(registration Registration) error {
 		if model.Metadata.DisplayName == "" {
 			return fmt.Errorf("model display name is required")
 		}
+		seenCapabilities := make(map[Capability]struct{}, len(model.Metadata.SupportedCapabilities))
 		for _, capability := range model.Metadata.SupportedCapabilities {
 			if !capability.Valid() {
 				return fmt.Errorf("model capability is invalid")
 			}
+			if _, exists := seenCapabilities[capability]; exists {
+				return fmt.Errorf("model capability is duplicated")
+			}
+			seenCapabilities[capability] = struct{}{}
 		}
 		if model.Metadata.Supports(CapabilityTextGeneration) && model.TextGenerator == nil {
 			return fmt.Errorf("text generation capability requires a text generator binding")
+		}
+		if model.Metadata.Supports(CapabilityImageGeneration) && model.ImageGenerator == nil {
+			return fmt.Errorf("image generation capability requires an image generator binding")
+		}
+		if model.Metadata.Supports(CapabilityVideoGeneration) && model.VideoGenerator == nil {
+			return fmt.Errorf("video generation capability requires a video generator binding")
+		}
+		if model.ImageGenerator != nil && !model.Metadata.Supports(CapabilityImageGeneration) {
+			return fmt.Errorf("image generator binding requires image generation capability")
+		}
+		if model.VideoGenerator != nil && !model.Metadata.Supports(CapabilityVideoGeneration) {
+			return fmt.Errorf("video generator binding requires video generation capability")
 		}
 	}
 

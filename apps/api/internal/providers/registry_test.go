@@ -121,6 +121,7 @@ func TestRegistryReturnsUnknownModelDistinctFromUnsupportedCapability(t *testing
 					DisplayName:           "Image Only V1",
 					SupportedCapabilities: []providers.Capability{providers.CapabilityImageGeneration},
 				},
+				ImageGenerator: fake.NewImageGenerator([]byte("image")),
 			},
 		},
 	}); err != nil {

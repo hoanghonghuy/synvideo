@@ -1,15 +1,16 @@
 # TASK-025 — Provider-neutral visual generation foundation
 
-Status: CHANGES_REQUESTED
+Status: DONE
 Milestone: F1 Creative Workflow
 Wave: WAVE-F1-I early slot
 Branch: `feature/TASK-025-visual-provider-foundation`
 Base: `develop`
 PR: #49
-Review head: `77bd30c6e19bc212d3ec1b369908fe3ba0189833`
-Logical TL review: `5080350928`
-CI: #224 green on reviewed head
-Issue: #43
+Accepted head: `e090ed3e56d201200e8f8f9d3e8efec2c9f9d42f`
+Logical TL review: `5080539748`
+CI: #230 green on accepted head
+Squash merge: `1c550f3165efc5a541177deebd40bedbfd2ba16c`
+Issue: #43 completed
 Depends on: TASK-005 accepted; frozen `VISUAL_GENERATION_PROVIDER_V1`.
 
 ## Goal
@@ -18,43 +19,23 @@ Establish production-grade provider-neutral image and asynchronous video generat
 ## Frozen contract
 `docs/contracts/VISUAL_GENERATION_PROVIDER_V1.md`.
 
-## Primary ownership
-- `apps/api/internal/providers/**` visual interfaces/types/registry extension;
-- deterministic visual provider fakes/tests only.
-
-No persistence, jobs, HTTP, runtime composition, provider settings, Media Asset code, live adapters, frontend or migrations.
-
-## Review result on `77bd30c...`
-The previous blocker set is resolved:
-- image responses now reject video MIME and video results reject image MIME;
-- deterministic fakes snapshot arbitrary bounded public `BinaryInput` implementations rather than relying on optional cloner behavior;
-- regressions cover wrong-family MIME, reference MIME/size rejection, video cancellation, failed operations and result-unavailable behavior;
-- exact-head CI #224 is green and ownership remains providers-only.
-
-## Remaining blocker
-The visual port still has two sources of model identity. `ImageGenerationRequest` / `VideoGenerationRequest` carry `ProviderID` and `ModelID`, and image response echoes them, even though the frozen contract says provider/model identity is resolved before the capability port is called.
-
-Keeping those fields permits inconsistent calls such as resolving generator binding for model A while a request claims model B. Make the capability-specific registry binding/resolution the single source of truth: remove provider/model identity from visual request payloads and unnecessary response echo fields (or an equivalent design that makes contradictory identity impossible), then update fakes/tests.
-
-## Accepted architecture to preserve
-- separate synchronous `ImageGenerator` from asynchronous `VideoGenerator`;
-- video `StartVideo` / `GetVideoOperation` / `OpenVideoResult` lifecycle;
-- opaque external operation IDs;
-- streaming/closable provider-neutral generated binaries;
+## Accepted result
+- separate synchronous `ImageGenerator` and asynchronous `VideoGenerator`;
+- video `StartVideo` / `GetVideoOperation` / `OpenVideoResult` lifecycle with opaque operation IDs;
+- streaming/closable provider-neutral generated binaries and bounded reference inputs;
 - capability-specific image/video MIME validation;
 - independent text/image/video registry bindings and multi-capability models;
-- backward-compatible legacy text resolution;
-- safe provider-neutral error categories;
-- deterministic deep-cloned fake request capture;
-- no production registration or cross-layer leakage.
+- backward-compatible text resolution;
+- safe provider-neutral visual error categories;
+- deterministic fake request capture that snapshots arbitrary bounded `BinaryInput` values;
+- cancellation, failed-operation, result-unavailable, reference-bound and wrong-MIME regressions;
+- capability-specific registry binding is the single provider/model identity boundary: visual request/response payloads do not duplicate resolved provider/model identity;
+- no persistence/jobs/http/runtime/media/frontend/live-adapter leakage.
 
-## Final verification gate
-After the identity fix:
-- update all visual fakes/tests to prove resolved binding is the only model/provider identity source;
-- targeted visual tests + `go test -race ./internal/providers/...`;
-- full backend verification/vet;
-- exact-head CI green;
-- providers-only ownership boundary retained;
-- sync latest `develop` before final merge if needed.
+## Verification
+- exact-head CI #230 green;
+- provider race tests and full backend verification green;
+- logical TL APPROVE review `5080539748`;
+- squash merged into `develop` as `1c550f3165efc5a541177deebd40bedbfd2ba16c`.
 
-Continue only on the existing TASK-025 worktree/PR #49. Do not self-merge or self-mark DONE.
+TASK-025 is complete. Follow-on live image/TTS adapter work must build on this accepted contract rather than reintroduce vendor identity into core request types.

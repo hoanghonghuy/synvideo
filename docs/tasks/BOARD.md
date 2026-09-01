@@ -23,52 +23,52 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-015 | Scene Plan domain and persistence foundation | DONE | Accepted PR #32. |
 | TASK-016 | Media Asset + S3-compatible storage foundation | DONE | Accepted PR #33. |
 | TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | DONE | Accepted PR #35. |
-| TASK-018 | Script durable generation integration | DONE | PR #48 accepted head `c5e682d8...`, CI #215, squash `6bc3c86b...`. |
-| TASK-019 | Script creator workspace | DONE | PR #47 accepted head `a9f0c5ad...`, CI #223, TL review `5080349001`, squash `da01e58c...`; Issue #37 completed. |
+| TASK-018 | Script durable generation integration | DONE | PR #48 accepted; squash `6bc3c86b...`. |
+| TASK-019 | Script creator workspace | DONE | PR #47 accepted; squash `da01e58c...`. |
 | TASK-020 | Scene media binding foundation | DONE | PR #46 accepted; squash `b80b8e7b...`. |
-| TASK-021 | Scene Plan durable generation + API integration | READY | Issue #39. `SCENE_PLAN_JOB_V1` frozen. Backend hotspot is free; remote branch absent at promotion. |
+| TASK-021 | Scene Plan durable generation + API integration | CHANGES_REQUESTED | Issue #39 / PR #50. Reviewed head `286c583b...`, CI #231, TL review `5080593928`. Fix strict pre-provider snapshot validation, job-kind scoped status GET, then sync latest `develop`. |
 | TASK-022 | Scene Plan creator workspace | BACKLOG | Issue #40. `SCENE_PLAN_WORKSPACE_V1` frozen. Activate after TASK-021 API is accepted/stable. |
 | TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. `MEDIA_LIBRARY_API_V1` frozen. Do not run concurrently with TASK-021 because both own shared backend composition/httpserver. |
 | TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. `MEDIA_LIBRARY_WORKSPACE_V1` frozen. Activate after TASK-023 API. |
-| TASK-025 | Provider-neutral visual generation foundation | CHANGES_REQUESTED | Issue #43 / PR #49. Head `77bd30c6...`, CI #224, TL review `5080350928`. Prior MIME/deep-copy/test blockers fixed; remove duplicated ProviderID/ModelID from visual port request/response identity. |
-| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. Depends on accepted TASK-025; revalidate current Images API before READY. |
-| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. Depends on accepted TASK-025; never silently truncate narration. |
+| TASK-025 | Provider-neutral visual generation foundation | DONE | Issue #43 completed. PR #49 accepted head `e090ed3e...`, CI #230, TL review `5080539748`, squash `1c550f316...`. |
+| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. TASK-025 prerequisite is now satisfied; revalidate current Images API before READY and schedule only on an isolated provider-adapter slot. |
+| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. TASK-025 prerequisite is now satisfied; never silently truncate narration. |
 
-## Current implementation slots
+## Current implementation / review slots
 
-- **Dev A — TASK-021 `READY`**: may atomically claim `feature/TASK-021-scene-plan-generation-integration` from latest `origin/develop`. Owns Scene Plan durable generation/API + minimal runtime composition.
-- **Dev B — free**: do not fill with a task that conflicts with TASK-021 or depends on unfinished TASK-025. TASK-022 waits for TASK-021; TASK-023 conflicts with TASK-021 backend hotspot.
-- **Dev C — TASK-025 `CHANGES_REQUESTED`**: continue only PR #49 / existing worktree, providers-only.
+- **Dev A — TASK-021 `CHANGES_REQUESTED`**: continue only PR #50 / existing worktree. Backend Scene Plan generation/API owns the shared runtime/httpserver hotspot until accepted.
+- **Dev B — free**: do not start TASK-022 until TASK-021 API is accepted; do not start TASK-023 because it conflicts with TASK-021 backend composition.
+- **Dev C — released after TASK-025 DONE**: clean the old TASK-025 worktree before claiming another task. TASK-026/027 are candidate follow-ons but remain BACKLOG until deliberate activation/revalidation.
 
-## Current review gate — TASK-025 / PR #49
+## Current review gate — TASK-021 / PR #50
 
-Previous review blockers are resolved. Remaining gate:
-1. registry/model resolution must be the single source of provider/model identity;
-2. remove `ProviderID` / `ModelID` from visual port request payloads and unnecessary response echo fields, or an equivalent design that makes contradictory identity impossible;
-3. update fakes/tests accordingly while preserving image sync vs video async Start/Poll/OpenResult architecture;
-4. sync latest `develop` if needed and obtain exact-head green CI before merge.
+Do not merge until:
+1. durable Script/Proposal/Project snapshot validation is complete before credential/provider resolution; malformed approved Script snapshot data (including body/key/duplicate/size/duration/notes invariants and equivalent bounded fields) terminalizes as `GENERATION_INVALID_PAYLOAD`, with tests proving resolver/provider is not called;
+2. `GetGeneration` verifies `job.Kind == scene_plan_generation_v1` and treats other feature job IDs as not found/non-disclosed;
+3. branch is synced with latest `develop`, including TASK-025 squash `1c550f316...` and PM control-plane commits;
+4. fresh exact-head CI/race/full verify is green;
+5. already-correct source snapshot, idempotency, narration preservation, locale, owner runtime and single-executor behavior is preserved.
 
 ## Parallel safety
 
 - TASK-021 and TASK-023 both need shared backend `main.go` / `httpserver` composition; only one runs at a time.
 - TASK-022 and TASK-024 both use frontend router/locale/project-workspace integration; sequence them.
-- TASK-025 is isolated under provider-core visual abstractions.
-- TASK-026 and TASK-027 remain blocked until TASK-025 is accepted.
+- TASK-025 provider-neutral visual core is accepted; TASK-026 and TASK-027 may be activated later on deliberately isolated surfaces after current-provider API revalidation.
 - Do not create micro-tasks merely to fill an implementation slot.
 
 ## Next activation path
 
-1. TASK-021 Scene Plan durable generation/API.
+1. Fix/accept TASK-021 Scene Plan durable generation/API.
 2. After TASK-021 acceptance, activate TASK-022 Scene Plan creator workspace.
 3. Then TASK-023 Media Library + Scene Binding API, followed by TASK-024 workspace.
-4. When TASK-025 is accepted, revalidate and schedule TASK-026 OpenAI Image adapter and TASK-027 TTS foundation on independent provider surfaces as slots allow.
+4. With TASK-025 accepted, revalidate and schedule TASK-026 OpenAI Image adapter and TASK-027 TTS foundation on independent provider surfaces as implementation slots permit.
 5. Follow with secure multi-capability runtime/settings, durable per-scene visual/audio acquisition jobs, generated-output ingestion into Media Asset + Scene binding, captions/music, Scene Editor, render/export, publishing/channel management and production hardening/E2E.
 
 ## Product checkpoint
 
-Stage 5 Script is now creator-usable end to end: persistence/approval, provider-neutral generation engine, durable owner-scoped BYOK generation backend and creator workspace are all accepted.
+Stage 5 Script is creator-usable end to end. Provider-neutral visual image/video capability ports are also accepted. Scene Plan already has generation engine + persistence foundation; TASK-021 is converting it into the durable creator-facing backend Stage 7 capability.
 
-Accepted foundations also include Scene Plan generation + persistence, Media Asset S3-compatible storage and approved Scene Plan → primary visual Media Asset binding with replacement history. The current critical path is Stage 7 Scene Plan durable generation/workspace, then Media Library/assignment and visual/audio acquisition.
+Accepted foundations also include Media Asset S3-compatible storage and approved Scene Plan → primary visual Media Asset binding with replacement history. The current critical path remains Scene Plan durable generation/workspace, then Media Library/assignment and visual/audio acquisition.
 
 ## Architecture gates
 
