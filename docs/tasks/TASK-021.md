@@ -1,10 +1,14 @@
 # TASK-021 — Scene Plan durable generation + API integration
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Wave: WAVE-F1-I
 Branch: `feature/TASK-021-scene-plan-generation-integration`
 Base: `develop`
+PR: #50
+Review head: `286c583b0594e6d7a0663255281642808798181d`
+Logical TL review: `5080593928`
+CI: #231 green on reviewed head
 Issue: #39
 Depends on: TASK-014, TASK-015, TASK-017, TASK-018 accepted; frozen `SCENE_PLAN_JOB_V1`.
 
@@ -14,39 +18,36 @@ Make Stage 7 Scene Plan a real durable backend workflow by integrating accepted 
 ## Frozen contract
 `docs/contracts/SCENE_PLAN_JOB_V1.md`.
 
-Read first:
-- `SCENE_PLAN_V1.md`;
-- `SCENE_PLAN_GENERATION_V1.md`;
-- `JOB_EXECUTION_V1.md`;
-- `BYOK_TEXT_PROVIDER_RUNTIME_V1.md`;
-- accepted TASK-018 Script durable generation integration as the behavioral reference.
-
 ## Primary ownership
-- new `apps/api/internal/sceneplangenerationjob/**` or cohesive equivalent;
-- minimal internal generation-idempotency extension to Scene Plan;
+- `apps/api/internal/sceneplangenerationjob/**` or cohesive equivalent;
+- minimal Scene Plan generation-idempotency extension;
 - focused `postgres/scene_plan_repository.go` integration tests;
 - migration exactly `0012_add_scene_plan_generation_idempotency.sql`;
-- Scene Plan resource + generation HTTP handler/tests;
+- Scene Plan resource + generation HTTP handlers/tests;
 - minimal `httpserver/server.go` and `cmd/api/main.go` composition;
 - executor registration/tests.
 
-## Mandatory isolation
-Do not modify:
-- Scene Plan frontend workspace (TASK-022);
-- Media Library/Scene Media Binding APIs (TASK-023);
-- visual/TTS provider packages (TASK-025/026/027);
-- media storage semantics;
-- render/publish.
+## Already-correct behavior to preserve
+- request-time highest approved Script selection;
+- exact matching approved Proposal snapshot;
+- replay before current source/provider/credential checks;
+- no provider call in HTTP POST;
+- owner-scoped runtime and worker-time credential resolution;
+- strict unknown/trailing durable JSON decode;
+- request-time Project/Script/Proposal snapshots and locale preservation;
+- DB generation-job idempotency with real PostgreSQL same-job concurrency;
+- approved Scene Plan history/version semantics;
+- internal generation job ID omitted from public Scene Plan JSON;
+- safe feature-specific status/result shape;
+- Proposal + Script + Scene Plan handlers registered in one generic executor loop;
+- Scene Plan resource list/get/PUT/approve API.
 
-## Required capability
-- resource list/get/PUT/approve routes from frozen contract;
-- `POST /scene-plan-generations` + feature job GET;
-- highest approved Script + exact matching approved Proposal request-time snapshot;
-- owner runtime validation/worker credential resolution;
-- job kind `scene_plan_generation_v1`;
-- DB-idempotent Scene Plan draft persistence by generation job ID;
-- safe status/result with exact returned Scene Plan version;
-- Proposal + Script + Scene Plan job kinds on one generic executor.
+## Current review blockers
+Fix only on existing PR #50/worktree.
+
+1. **Complete strict durable snapshot validation before provider resolution.** `validatePayload` must reject malformed approved Script snapshot fields/invariants before `ResolveTextGenerator`, not merely IDs/enums/version linkage. At minimum cover blank section body, invalid/duplicate/oversized section keys, heading/body bounds, estimated-duration/notes bounds and equivalent bounded immutable snapshot fields required by the accepted source contracts. Invalid payload must terminalize as `GENERATION_INVALID_PAYLOAD`. Add tests that prove the resolver/provider is not called for malformed snapshots.
+2. **Kind-scope the feature status endpoint.** `GetGeneration` must require `job.Kind == scene_plan_generation_v1`. A Proposal/Script job UUID in the same owner/project must be treated as not found/non-disclosed through `/scene-plan-generations/{job_id}`.
+3. **Sync latest `develop`.** TASK-025 merged during this review as `1c550f3165efc5a541177deebd40bedbfd2ba16c`; rebase/sync latest `develop`, resolve only genuine conflicts, and rerun exact-head CI.
 
 ## Critical gates
 1. No provider call in POST.
@@ -59,14 +60,16 @@ Do not modify:
 8. No second credential path/executor.
 9. Strict durable payload decode/validation happens before provider resolution.
 10. Real PostgreSQL same-generation-job concurrency proves one durable Scene Plan version.
+11. Capability-specific job status endpoint does not disclose another feature's job kind.
 
-## Why READY now
-TASK-018 is accepted and TASK-019 has merged, so shared runtime/jobs/httpserver composition is free. No active task currently owns that backend hotspot. TASK-025 remains isolated to `providers/**`. The TASK-021 remote branch was absent when PM/TL promoted this task.
+## Mandatory isolation
+Do not modify Scene Plan frontend, Media Library/Scene Media Binding APIs, visual/TTS provider behavior, media storage semantics, render or publish.
 
-## TDD
-Implement every deterministic/PostgreSQL gate in `SCENE_PLAN_JOB_V1`, including duplicate enqueue race, crash-window retry, strict payload decode, source relationship errors, owner isolation, request-time source snapshots, real same-job concurrency and exact-head race/full verification.
+## Final merge gate
+- fix the two code blockers above;
+- add focused deterministic regressions;
+- sync latest `develop`;
+- full race/verify and fresh exact-head CI green;
+- Team Lead delta review before squash merge.
 
-## Worktree / claim
-Before work, confirm remote `feature/TASK-021-scene-plan-generation-integration` is still absent. Atomically create that remote ref from latest `origin/develop`, then use a dedicated TASK-021 worktree. Shared/control checkout remains on `develop`.
-
-Do not self-mark DONE or self-merge.
+Continue only on the existing TASK-021 branch/PR. Do not create a replacement branch, self-merge, or self-mark DONE.
