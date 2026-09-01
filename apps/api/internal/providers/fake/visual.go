@@ -128,7 +128,7 @@ func (g *ImageGenerator) GenerateImage(ctx context.Context, req providers.ImageG
 		}
 		outputs = append(outputs, providers.GeneratedImage{Binary: binary})
 	}
-	response := providers.ImageGenerationResponse{ProviderID: req.ProviderID, ModelID: req.ModelID, Outputs: outputs}
+	response := providers.ImageGenerationResponse{Outputs: outputs}
 	if err := response.Validate(); err != nil {
 		return providers.ImageGenerationResponse{}, err
 	}

@@ -98,8 +98,6 @@ func (b *memoryBinary) Clone() BinaryInput {
 
 // ImageGenerationRequest contains provider-neutral image generation input.
 type ImageGenerationRequest struct {
-	ProviderID      ProviderID
-	ModelID         ModelID
 	Prompt          string
 	NegativePrompt  string
 	AspectRatio     string
@@ -133,11 +131,9 @@ func (r ImageGenerationRequest) Validate() error {
 
 // ImageGenerationResponse carries one or more provider-neutral image streams.
 type ImageGenerationResponse struct {
-	ProviderID ProviderID
-	ModelID    ModelID
-	RequestID  string
-	Outputs    []GeneratedImage
-	Usage      UsageMetadata
+	RequestID string
+	Outputs   []GeneratedImage
+	Usage     UsageMetadata
 }
 
 type GeneratedImage struct {
@@ -184,8 +180,6 @@ type ImageGenerator interface {
 
 // VideoGenerationRequest contains provider-neutral asynchronous video input.
 type VideoGenerationRequest struct {
-	ProviderID      ProviderID
-	ModelID         ModelID
 	Prompt          string
 	ReferenceImage  BinaryInput
 	AspectRatio     string

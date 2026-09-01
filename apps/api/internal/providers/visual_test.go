@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -47,8 +48,6 @@ func TestImageGenerationRequestValidationAndDeepCopy(t *testing.T) {
 
 	gen := fake.NewImageGenerator([]byte("image bytes"))
 	req := providers.ImageGenerationRequest{
-		ProviderID:      "fake",
-		ModelID:         "image-v1",
 		Prompt:          "before",
 		ReferenceImages: []providers.BinaryInput{fake.NewBinaryInput("image/png", []byte("reference"))},
 	}
@@ -60,6 +59,20 @@ func TestImageGenerationRequestValidationAndDeepCopy(t *testing.T) {
 	requests := gen.Requests()
 	if len(requests) != 1 || requests[0].Prompt != "before" || requests[0].ReferenceImages[0].MIMEType() != "image/png" {
 		t.Fatalf("captured request was not deeply cloned: %#v", requests)
+	}
+}
+
+func TestVisualPortPayloadsDoNotDuplicateResolvedProviderIdentity(t *testing.T) {
+	for _, payload := range []reflect.Type{
+		reflect.TypeOf(providers.ImageGenerationRequest{}),
+		reflect.TypeOf(providers.VideoGenerationRequest{}),
+		reflect.TypeOf(providers.ImageGenerationResponse{}),
+	} {
+		for _, field := range []string{"ProviderID", "ModelID"} {
+			if _, ok := payload.FieldByName(field); ok {
+				t.Errorf("%s unexpectedly contains resolved identity field %s", payload.Name(), field)
+			}
+		}
 	}
 }
 
