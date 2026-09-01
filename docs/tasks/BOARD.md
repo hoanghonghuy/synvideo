@@ -26,86 +26,81 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-015 | Scene Plan domain and persistence foundation | DONE | Accepted PR #32; squash `66034b8e...`. |
 | TASK-016 | Media Asset + S3-compatible storage foundation | DONE | Accepted PR #33; squash `a12a9856...`. |
 | TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | DONE | Accepted PR #35; squash `6fbfdbc0...`. |
-| TASK-018 | Script durable generation integration | CHANGES_REQUESTED | Issue #36 / PR #48. CI #207 green on reviewed head `95e958f7...`; TL review `5079858129`. Fix request-time locale persistence, strict durable snapshot validation, real PG same-job concurrency proof, frozen status shape; sync `develop`. |
-| TASK-019 | Script creator workspace | CHANGES_REQUESTED | Issue #37 / PR #47. CI #206 green on reviewed head `33b0d14a...`; TL review `5079860958`. Fix UUID fallback, stale-revision reconcile UX and missing frozen regression coverage; sync `develop`. |
+| TASK-018 | Script durable generation integration | DONE | Issue #36 completed. PR #48 accepted head `c5e682d8...`, CI #215, TL review `5080177556`, squash `6bc3c86b...`. |
+| TASK-019 | Script creator workspace | REVIEW | Issue #37 / PR #47. Functional delta logically approved head `5270f245...`, CI #216, TL review `5080179535`; rebase/sync latest `develop` after TASK-018 merge and rerun CI before merge. |
 | TASK-020 | Scene media binding foundation | DONE | Issue #38 completed. PR #46 accepted head `3924f069...`, CI #205, TL review `5079847789`, squash `b80b8e7b...`. |
-| TASK-021 | Scene Plan durable generation + API integration | BACKLOG | Issue #39. Contract `SCENE_PLAN_JOB_V1` frozen. Activate after TASK-018 releases backend runtime/jobs/httpserver hotspot and revalidate against accepted Script-job pattern. |
-| TASK-022 | Scene Plan creator workspace | BACKLOG | Issue #40. Contract `SCENE_PLAN_WORKSPACE_V1` frozen. Activate after TASK-019 releases router/locale/navigation and TASK-021 API is stable. |
-| TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. Contract `MEDIA_LIBRARY_API_V1` frozen. TASK-020 prerequisite is now satisfied; still wait for shared backend runtime/httpserver surface to be free. |
-| TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. Contract `MEDIA_LIBRARY_WORKSPACE_V1` frozen. Activate after TASK-023 API and frontend shared surface are available. |
-| TASK-025 | Provider-neutral visual generation foundation | READY | Issue #43. Contract `VISUAL_GENERATION_PROVIDER_V1` frozen. Isolated `providers/**` image + async video ports/registry/fakes; no persistence/jobs/HTTP/runtime/media/frontend. Remote task branch was absent at READY promotion. |
-| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. Contract `OPENAI_IMAGE_PROVIDER_V1` frozen. Depends on TASK-025; revalidate official Images API immediately before READY. Intentionally excludes deprecated Sora Video API. |
-| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. Contract `TTS_PROVIDER_V1` frozen. Depends on TASK-025; explicit input-too-long errors, never silent narration truncation. |
+| TASK-021 | Scene Plan durable generation + API integration | BACKLOG | Issue #39. `SCENE_PLAN_JOB_V1` frozen. Backend hotspot is now released by TASK-018; revalidate/promote when an implementation slot is deliberately assigned. |
+| TASK-022 | Scene Plan creator workspace | BACKLOG | Issue #40. `SCENE_PLAN_WORKSPACE_V1` frozen. Activate after TASK-019 releases frontend shared surface and TASK-021 API is accepted/stable. |
+| TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. `MEDIA_LIBRARY_API_V1` frozen. TASK-020 prerequisite satisfied; compete with TASK-021 for shared backend runtime/httpserver slot, so do not run both on the same hotspot. |
+| TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. `MEDIA_LIBRARY_WORKSPACE_V1` frozen. Activate after TASK-023 API and frontend shared surface are available. |
+| TASK-025 | Provider-neutral visual generation foundation | CHANGES_REQUESTED | Issue #43 / PR #49. Head `b0b33467...`, CI #217, TL review `5080185028`. Fix capability-specific result MIME validation, unconditional fake deep-copy of BinaryInput references, and frozen boundary tests. |
+| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. `OPENAI_IMAGE_PROVIDER_V1` frozen. Depends on accepted TASK-025; revalidate official Images API immediately before READY. |
+| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. `TTS_PROVIDER_V1` frozen. Depends on accepted TASK-025; explicit input-too-long errors, never silent narration truncation. |
 
-## Current implementation slots
+## Current implementation/review slots
 
-- **Dev A — TASK-018 `CHANGES_REQUESTED`**: continue only PR #48 / existing worktree. Backend Script generation integration owns `scriptgenerationjob/**`, Script generation persistence, `0010`, Script generation HTTP and minimal runtime composition.
-- **Dev B — TASK-019 `CHANGES_REQUESTED`**: continue only PR #47 / existing worktree. Frontend Script workspace owns `features/script/**` plus minimal router/locale/project navigation.
-- **Dev C — TASK-025 `READY`**: new work may atomically claim `feature/TASK-025-visual-provider-foundation` from latest `origin/develop`; owns only provider-neutral visual capability/registry/fakes.
+- **Dev A — released after TASK-018 DONE.** Backend runtime/jobs/httpserver hotspot is free. TASK-021 is the preferred next critical-path backend candidate, but only promote/claim it deliberately after reviewing current `develop` and TASK-019 sync impact.
+- **Dev B — TASK-019 `REVIEW`.** Continue only PR #47 / existing worktree. No more product behavior redesign is requested; sync/rebase latest `develop`, resolve genuine conflicts only, rerun CI and submit the new head for delta verification.
+- **Dev C — TASK-025 `CHANGES_REQUESTED`.** Continue only PR #49 / existing worktree. Owns `providers/**` visual foundation fixes only.
 
-TASK-020 work is merged and no longer occupies an implementation slot. Its old worktree should be cleaned by the worker before taking another task.
+One implementation slot is currently free because TASK-018 merged. Do not automatically fill it with a micro-task. The next substantial candidate is TASK-021 because it advances Stage 6 and now has its backend hotspot released.
 
 ## Current review gates
 
-### TASK-018 / PR #48
-Do not merge until all frozen `SCRIPT_JOB_V1` gates are satisfied:
-1. generated Script persists the request-time Project locale snapshot even if Project locale changes after enqueue;
-2. durable payload rejects trailing JSON and structurally invalid snapshot identities/enums before provider resolution;
-3. real PostgreSQL concurrent same-generation-job persistence proves exactly one durable Script version;
-4. public job status matches the frozen safe V1 field set;
-5. branch is synced with latest `develop` and exact-head CI is green.
-
 ### TASK-019 / PR #47
-Do not merge until all frozen `SCRIPT_WORKSPACE_V1` gates are satisfied:
-1. every explicit generation/retry sends a fresh valid UUID, including environments without `crypto.randomUUID`;
-2. stale revision preserves local edits and exposes an explicit confirmed reload/reconcile path;
-3. missing high-risk deterministic tests are added: provider-empty guidance, read-only history, save/approval flows, terminal failure preservation, terminal Retry fresh ID, no-secret recovery persistence;
-4. branch is synced with latest `develop` and exact-head CI is green.
+Functional review is already accepted. Final merge gate only:
+1. sync/rebase onto latest `develop` including accepted TASK-018 and PM/control-plane commits;
+2. keep the already-approved Script workspace behavior intact;
+3. exact new head is mergeable and CI green;
+4. Team Lead verifies rebase/conflict delta before squash merge.
 
-## Parallel safety
+### TASK-025 / PR #49
+Do not merge until:
+1. Image generation outputs reject video MIME and video results reject image MIME;
+2. fake request capture deep-copies any valid caller-provided `BinaryInput`, without relying on optional `BinaryInputCloner`;
+3. deterministic tests cover wrong-family output MIME, reference MIME/size rejection, failed video operation/result-unavailable behavior and video cancellation;
+4. providers-only ownership boundary remains intact;
+5. exact-head CI is green.
 
-TASK-018, TASK-019 and TASK-025 have disjoint primary write surfaces:
-- TASK-018: backend jobs/runtime/httpserver + Script generation persistence;
-- TASK-019: frontend Script workspace/router/locale;
-- TASK-025: provider-neutral core visual interfaces/registry/fakes.
+## Parallel safety and activation
 
-TASK-021 is intentionally not READY while TASK-018 owns `main.go` / jobs registry / `httpserver`. TASK-022 is intentionally not READY while TASK-019 owns router/locale/navigation. TASK-023 also waits for the backend composition surface even though its TASK-020 data prerequisite is now accepted. This avoids fake parallelism and low-value split tasks.
+- TASK-021 and TASK-023 both need shared backend composition/httpserver work, so only one should own that hotspot at a time.
+- TASK-022 and TASK-024 both need frontend router/locale/project workspace integration, so sequence them rather than creating fake parallelism.
+- TASK-025 is isolated in provider-core visual abstractions; TASK-026/027 remain blocked on its acceptance.
+- Prefer substantial creator/downstream capabilities over 1–2 line wiring tasks.
 
-## Lookahead activation sequence
-
-The next intended promotion sequence is dependency/write-surface driven rather than numeric-only:
-
-1. When TASK-018 merges: revalidate/promote TASK-021 (Scene Plan durable generation/API). TASK-023 may also become backend-ready, but only one task may own shared runtime/httpserver at a time.
-2. When TASK-019 merges: frontend shared surface is free; TASK-022 becomes candidate READY once TASK-021 API is stable. TASK-024 waits for TASK-023.
-3. When TASK-025 merges: revalidate current live provider APIs, then TASK-026 (OpenAI image adapter) and TASK-027 (TTS foundation) can be scheduled on independent adapter/core surfaces as slots allow.
-4. After Scene Plan + Media API foundations: add secure multi-capability provider runtime/settings, durable per-scene visual generation/acquisition jobs, and generated-output ingestion into Media Asset + Scene binding.
-5. Then add per-scene voice/TTS orchestration with deterministic chunk/stitch/timing, stock acquisition, captions/music composition.
-6. Then Scene Editor → render/export → Channel Hub/publishing → production hardening/E2E.
+Recommended critical-path activation after current reviews:
+1. finish TASK-019 final sync/merge;
+2. fix/merge TASK-025;
+3. use the free backend slot for TASK-021 Scene Plan durable generation + API integration;
+4. once TASK-019 is merged and TASK-021 API stabilizes, TASK-022 becomes the next creator-facing Stage 6 workspace;
+5. TASK-023/024 then expose Media Library + scene assignment before visual generation orchestration;
+6. after TASK-025, revalidate and schedule TASK-026 image adapter / TASK-027 TTS on independent provider surfaces as slots permit.
 
 ## Generative media architecture gates
 
-- Provider capabilities already include text, image, video, TTS, transcription and music; do not introduce vendor-specific capabilities into core domain types.
-- Image generation may be synchronous/streaming, but video generation must expose an async Start/Poll/OpenResult lifecycle with opaque external operation identity.
-- Future paid video orchestration must persist the external provider operation ID before polling/resume so a worker crash cannot blindly resubmit and duplicate generation/cost.
-- Provider output URLs are not durable SynVideo asset identity; accepted generated bytes must be ingested into `MediaAsset` storage with provenance.
-- Generation and Scene binding remain separate operations so failed acquisition does not destroy the currently selected asset.
+- Core provider capabilities stay provider-neutral; do not leak vendor schemas/SDK types into product domain contracts.
+- Image generation may be synchronous/streaming; video generation must retain an async Start/Poll/OpenResult lifecycle with opaque external operation identity.
+- Future paid video orchestration must persist external provider operation ID before polling/resume so worker crashes do not blindly resubmit and duplicate cost.
+- Provider output URLs are not durable SynVideo asset identity; accepted generated bytes must be ingested into Media Asset storage with provenance.
+- Generation and Scene binding remain separate so failed acquisition does not destroy the current selected asset.
 - Credentials/ciphertext/base URLs/raw upstream responses never enter durable jobs or public domain resources.
-- TTS providers must return explicit input-limit errors; never silently truncate approved narration. Later orchestration owns deterministic chunk/stitch/timing.
+- TTS input limits return explicit errors; later orchestration owns deterministic chunk/stitch/timing rather than silent truncation.
 
 See `docs/research/GENERATIVE_MEDIA_ARCHITECTURE_2026-09.md` and `docs/tasks/PLANNING_F1_I_J.md`.
 
 ## Product progress checkpoint
 
-Accepted through TASK-020 includes:
+Accepted through TASK-020 plus TASK-018 now includes:
 - runnable Vue/Go/PostgreSQL foundation and CI/local infrastructure;
 - Project + Creative Brief + AI Proposal end-to-end creator workflow;
-- durable jobs and secure owner-scoped live text BYOK runtime;
-- Script persistence/approval + provider-neutral generation engine;
+- durable PostgreSQL jobs and secure owner-scoped live text BYOK runtime;
+- Script persistence/approval, provider-neutral generation engine and durable live generation backend;
 - Scene Plan provider-neutral generation engine + durable versioned persistence;
 - Media Asset metadata + S3-compatible object storage;
 - approved Scene Plan → primary visual Media Asset binding with replacement history.
 
-Current critical gap remains **Stage 5 Script end-to-end usability** until TASK-018 and TASK-019 are accepted. In parallel, TASK-025 starts the visual-provider foundation without colliding with those fixes.
+The immediate creator-facing gap is now only TASK-019 final merge for complete Stage 5 Script usability. After that, critical path advances to Scene Plan durable generation/workspace, then Media Library/assignment, visual/audio acquisition, Scene Editor, render/export and publishing.
 
 ## Isolation / merge rules
 
