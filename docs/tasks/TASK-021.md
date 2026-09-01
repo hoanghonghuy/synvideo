@@ -6,9 +6,9 @@ Wave: WAVE-F1-I
 Branch: `feature/TASK-021-scene-plan-generation-integration`
 Base: `develop`
 PR: #50
-Review head: `286c583b0594e6d7a0663255281642808798181d`
-Logical TL review: `5080593928`
-CI: #231 green on reviewed head
+Review head: `3acbd7d470d9ba6971489d15e6725c4ab1f91ccb`
+Logical TL review: `5080837369`
+CI: #236 green on reviewed head
 Issue: #39
 Depends on: TASK-014, TASK-015, TASK-017, TASK-018 accepted; frozen `SCENE_PLAN_JOB_V1`.
 
@@ -40,14 +40,24 @@ Make Stage 7 Scene Plan a real durable backend workflow by integrating accepted 
 - internal generation job ID omitted from public Scene Plan JSON;
 - safe feature-specific status/result shape;
 - Proposal + Script + Scene Plan handlers registered in one generic executor loop;
-- Scene Plan resource list/get/PUT/approve API.
+- Scene Plan resource list/get/PUT/approve API;
+- complete accepted Script snapshot validation before provider resolution;
+- resolver-not-called proof for invalid Script payload;
+- Scene Plan generation status endpoint hides foreign job kinds;
+- branch synced with accepted TASK-025 and exact-head CI #236 green.
 
-## Current review blockers
+## Current review blocker
 Fix only on existing PR #50/worktree.
 
-1. **Complete strict durable snapshot validation before provider resolution.** `validatePayload` must reject malformed approved Script snapshot fields/invariants before `ResolveTextGenerator`, not merely IDs/enums/version linkage. At minimum cover blank section body, invalid/duplicate/oversized section keys, heading/body bounds, estimated-duration/notes bounds and equivalent bounded immutable snapshot fields required by the accepted source contracts. Invalid payload must terminalize as `GENERATION_INVALID_PAYLOAD`. Add tests that prove the resolver/provider is not called for malformed snapshots.
-2. **Kind-scope the feature status endpoint.** `GetGeneration` must require `job.Kind == scene_plan_generation_v1`. A Proposal/Script job UUID in the same owner/project must be treated as not found/non-disclosed through `/scene-plan-generations/{job_id}`.
-3. **Sync latest `develop`.** TASK-025 merged during this review as `1c550f3165efc5a541177deebd40bedbfd2ba16c`; rebase/sync latest `develop`, resolve only genuine conflicts, and rerun exact-head CI.
+**Align Proposal snapshot validation exactly with the accepted Creative Proposal domain before provider resolution.** The current validator is too permissive for several fields:
+- `visual_direction`: max 5000 runes (current value is correct);
+- `voice_direction`: max 3000 runes, not 5000;
+- `music_direction`: max 3000 runes, not 5000;
+- `caption_direction`: max 3000 runes, not 5000;
+- `warnings`: max 20 items, each trimmed/non-empty and max 1000 runes;
+- `research_gaps`: max 20 items, each trimmed/non-empty and max 1000 runes.
+
+A corrupted durable snapshot that could never be a valid approved Proposal must terminalize as `GENERATION_INVALID_PAYLOAD` before `ResolveTextGenerator` is called. Add deterministic regressions for 3001-rune voice/music/caption values, 21 warning/gap items, blank item and 1001-rune item; include at least one invalid Proposal case in the resolver-not-called proof.
 
 ## Critical gates
 1. No provider call in POST.
@@ -61,14 +71,15 @@ Fix only on existing PR #50/worktree.
 9. Strict durable payload decode/validation happens before provider resolution.
 10. Real PostgreSQL same-generation-job concurrency proves one durable Scene Plan version.
 11. Capability-specific job status endpoint does not disclose another feature's job kind.
+12. Proposal snapshot bounds match the accepted Proposal domain exactly.
 
 ## Mandatory isolation
 Do not modify Scene Plan frontend, Media Library/Scene Media Binding APIs, visual/TTS provider behavior, media storage semantics, render or publish.
 
 ## Final merge gate
-- fix the two code blockers above;
-- add focused deterministic regressions;
-- sync latest `develop`;
+- fix the single Proposal snapshot-validation blocker above;
+- add focused deterministic regressions including resolver-not-called proof;
+- preserve current synced base and all accepted behavior;
 - full race/verify and fresh exact-head CI green;
 - Team Lead delta review before squash merge.
 
