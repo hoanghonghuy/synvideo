@@ -23,47 +23,42 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`. Re
 | TASK-012 | Script generation engine | DONE | Accepted and squash-merged PR #24. |
 | TASK-013 | Live OpenAI-compatible text provider adapter foundation | DONE | Accepted and squash-merged PR #29. |
 | TASK-014 | Scene Plan generation engine | DONE | Accepted and squash-merged PR #27. |
-| TASK-015 | Scene Plan domain and persistence foundation | CHANGES_REQUESTED | Issue #30 / PR #32. Core implementation + CI green; add missing owner/foreign-source/whitespace TDD gates from Team Lead review. |
-| TASK-016 | Media Asset + S3-compatible storage foundation | CHANGES_REQUESTED | Issue #31 / PR #33. Fix owner↔project persistence invariant, object-key identity binding, and cross-owner Open/Delete regression. |
-| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | READY | Issue #34. Frozen `BYOK_TEXT_PROVIDER_RUNTIME_V1`; migration `0009`; provider settings/runtime + Proposal live-provider integration + settings UI. |
+| TASK-015 | Scene Plan domain and persistence foundation | DONE | PR #32 accepted on head `306d9dae...`, CI #168 green, squash-merged as `66034b8e...`; issue #30 closed. |
+| TASK-016 | Media Asset + S3-compatible storage foundation | DONE | PR #33 accepted on head `7141c02b...`, CI #167 green, squash-merged as `a12a9856...`; issue #31 closed. |
+| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | CHANGES_REQUESTED | Issue #34 / PR #35. Review fixes pushed on head `488467e0...`; awaiting Team Lead delta re-review after the prior six security/runtime/TDD gates. |
 
 ## Active parallel wave — WAVE-F1-G
 
 Frozen contracts relevant to active work:
-- `docs/contracts/SCENE_PLAN_V1.md`;
-- `docs/contracts/MEDIA_ASSET_STORAGE_V1.md`;
 - `docs/contracts/BYOK_TEXT_PROVIDER_RUNTIME_V1.md`;
-- accepted `AI_PROPOSAL_JOB_V1` and `OPENAI_COMPAT_TEXT_PROVIDER_V1`.
+- accepted `AI_PROPOSAL_JOB_V1`, `OPENAI_COMPAT_TEXT_PROVIDER_V1`, `SCENE_PLAN_V1`, and `MEDIA_ASSET_STORAGE_V1`.
 
 Current implementation slots:
-- **Dev A — TASK-017 `READY`**: atomically claim `feature/TASK-017-byok-provider-runtime` from latest `origin/develop`, then implement only the frozen BYOK/runtime task.
-- **Dev B — TASK-015 `CHANGES_REQUESTED`**: continue only on PR #32/worktree and fix current Team Lead review gates.
-- **Dev C — TASK-016 `CHANGES_REQUESTED`**: continue only on PR #33/worktree and fix current Team Lead review gates.
+- **Dev A — TASK-017 `CHANGES_REQUESTED`**: continue only on PR #35/worktree; fix commit `488467e0...` is pushed and awaits Team Lead delta review.
+- **Dev B — free**: TASK-015 is merged/DONE; cleanup its worktree before claiming a new task.
+- **Dev C — free**: TASK-016 is merged/DONE; cleanup its worktree before claiming a new task.
 
-## Why WAVE-F1-G is safe
-TASK-015 remains isolated to Scene Plan domain/PostgreSQL/migration `0007`. TASK-016 remains isolated to media/storage/PostgreSQL/migration `0008`. TASK-017 owns the now-released runtime/httpserver/provider-settings/frontend surface and migration `0009`. The migrations do not depend on each other's newly-created tables.
+## Why current isolation remains safe
+TASK-015 and TASK-016 are now accepted and no longer occupy implementation write surfaces. TASK-017 owns the runtime/httpserver/provider-settings/frontend surface plus migration `0009` and must not reopen Scene Plan/media foundations.
 
-TASK-017 is intentionally deployment-definition based: creators configure credentials/model enablement but cannot submit arbitrary base URLs in V1. This closes the real live-AI usability gap without introducing an unreviewed SSRF/custom-endpoint surface.
+TASK-017 remains intentionally deployment-definition based: creators configure credentials/model enablement but cannot submit arbitrary base URLs in V1. This closes the real live-AI usability gap without introducing an unreviewed SSRF/custom-endpoint surface.
 
-## Current review gates
+## TASK-017 current review state
+Previous Team Lead review on head `94d49abf...` requested:
+1. strict authenticated/owner-scoped text-generation options with no global fallback;
+2. exact API-key input preservation so whitespace mistakes are rejected server-side;
+3. reuse of accepted TASK-013 OpenAI-compatible base-URL validation;
+4. real PostgreSQL same-revision concurrent update coverage;
+5. end-to-end Proposal job smoke proving owner credential isolation and secret-free durable payload/result;
+6. first-create revision must be omitted.
 
-### TASK-015 / PR #32
-1. Real PostgreSQL cross-owner `UpdateDraft` and `Approve` non-disclosure regressions.
-2. True foreign-owner Script source rejection for `CreateDraft`.
-3. Explicit whitespace-only narration segmentation acceptance regression.
-
-### TASK-016 / PR #33
-1. Persisted media owner must match the actual Project owner.
-2. Canonical object-key project/asset UUIDs must equal `MediaAsset.ProjectID` / `MediaAsset.ID`, not merely parse as UUIDs.
-3. Foreign owner/project `Open` and `Delete` must fail before any object-store call.
+Fix commit `488467e0...` claims all six are addressed. Team Lead must review that delta and CI before TASK-017 can merge.
 
 ## Isolation / merge rules
 - Every implementation task uses a dedicated Git worktree; the shared/control checkout remains on `develop`.
 - Maximum concurrent implementation worktrees normally equals 3.
 - Review fixes stay on their existing branch/PR/worktree.
-- TASK-015 must not touch `main.go`, `httpserver/**`, `apps/web/**`, jobs, providers or media/storage.
-- TASK-016 must not touch `main.go`, `httpserver/**`, `apps/web/**`, jobs, Proposal/Script/Scene Plan packages or AI text providers.
-- TASK-017 must not touch TASK-015 `sceneplan/**`/`0007` or TASK-016 `mediaasset/**`/`0008`, and must not start Script/Scene Plan/media/render/publish follow-ons.
+- TASK-017 must not modify accepted TASK-015 `sceneplan/**`/`0007` or TASK-016 `mediaasset/**`/`0008`, and must not start Script/Scene Plan/media/render/publish follow-ons.
 - New task branches must be claimed by atomically creating the absent remote ref at latest `origin/develop`; a plain same-base push is not an exclusive lock.
 - Every task follows `docs/engineering/TDD_PROTOCOL.md`; RED → GREEN → REFACTOR evidence must be truthful.
 - Merged worktrees should be cleaned before the developer claims another task.
@@ -93,14 +88,10 @@ Accepted capabilities now cover:
 - generic durable PostgreSQL jobs/lease/retry execution;
 - Script persistence/versioning/approval and provider-neutral generation engine;
 - live OpenAI-compatible provider adapter foundation;
-- provider-neutral Scene Plan generation engine.
+- provider-neutral Scene Plan generation engine plus durable Scene Plan persistence/versioning;
+- durable media metadata and S3-compatible object-storage foundation.
 
-Current wave advances three gaps in parallel:
-- finish durable Scene Plan persistence/versioning;
-- finish durable media/object-storage foundation;
-- make live AI credentials/provider runtime safely creator-configurable.
-
-After TASK-017, AI Proposal is live-provider usable rather than merely provider-ready. The remaining F1 path is still substantial: Script durable generation/workspace, Scene Plan workspace, media/audio acquisition, Scene Editor, render/export and publishing.
+Current active gap is secure creator-configurable live-provider runtime in TASK-017. After TASK-017, AI Proposal becomes live-provider usable rather than merely provider-ready. The remaining F1 path is still substantial: Script durable generation/workspace, Scene Plan workspace, media/audio acquisition, Scene Editor, render/export and publishing.
 
 ## Allowed statuses
 `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
