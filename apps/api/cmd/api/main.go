@@ -76,6 +76,7 @@ func main() {
 			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(cfg.TextProviderDefinitions))
 			if catErr != nil {
 				logger.Error("text provider definitions parsing failed", "error", catErr)
+				os.Exit(1)
 			}
 		} else {
 			catalog, _ = providersettings.NewCatalog([]providersettings.ProviderDefinition{

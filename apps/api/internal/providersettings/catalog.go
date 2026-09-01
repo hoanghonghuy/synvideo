@@ -65,6 +65,12 @@ func NewCatalog(defs []ProviderDefinition) (*Catalog, error) {
 		if strings.TrimSpace(p.DisplayName) == "" {
 			return nil, fmt.Errorf("provider %q display_name cannot be empty", p.ProviderID)
 		}
+		if p.Timeout < 0 {
+			return nil, fmt.Errorf("provider %q timeout cannot be negative", p.ProviderID)
+		}
+		if p.MaxResponseBytes < 0 {
+			return nil, fmt.Errorf("provider %q max_response_bytes cannot be negative", p.ProviderID)
+		}
 		if _, exists := byProviderID[p.ProviderID]; exists {
 			return nil, fmt.Errorf("duplicate provider_id in catalog: %q", p.ProviderID)
 		}
@@ -87,8 +93,8 @@ func NewCatalog(defs []ProviderDefinition) (*Catalog, error) {
 			if strings.TrimSpace(m.DisplayName) == "" {
 				return nil, fmt.Errorf("provider %q model %q display_name cannot be empty", p.ProviderID, m.ModelID)
 			}
-			if strings.TrimSpace(m.ExternalModelID) == "" {
-				return nil, fmt.Errorf("provider %q model %q external_model_id cannot be empty", p.ProviderID, m.ModelID)
+			if strings.TrimSpace(m.ExternalModelID) == "" || m.ExternalModelID != strings.TrimSpace(m.ExternalModelID) {
+				return nil, fmt.Errorf("provider %q model %q external_model_id is invalid: %q", p.ProviderID, m.ModelID, m.ExternalModelID)
 			}
 			if _, exists := modelsMap[m.ModelID]; exists {
 				return nil, fmt.Errorf("provider %q duplicate model_id: %q", p.ProviderID, m.ModelID)

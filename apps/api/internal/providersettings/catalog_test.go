@@ -187,4 +187,51 @@ func TestCatalog_ValidationErrors(t *testing.T) {
 			t.Fatal("expected error for empty models list")
 		}
 	})
+
+	t.Run("negative timeout", func(t *testing.T) {
+		_, err := providersettings.NewCatalog([]providersettings.ProviderDefinition{
+			{
+				ProviderID:  "openai",
+				DisplayName: "OpenAI",
+				BaseURL:     "https://api.openai.com/v1",
+				Timeout:     -5,
+				Models:      []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1"}},
+			},
+		})
+		if err == nil {
+			t.Fatal("expected error for negative timeout")
+		}
+	})
+
+	t.Run("negative max_response_bytes", func(t *testing.T) {
+		_, err := providersettings.NewCatalog([]providersettings.ProviderDefinition{
+			{
+				ProviderID:       "openai",
+				DisplayName:      "OpenAI",
+				BaseURL:          "https://api.openai.com/v1",
+				MaxResponseBytes: -100,
+				Models:           []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1"}},
+			},
+		})
+		if err == nil {
+			t.Fatal("expected error for negative max_response_bytes")
+		}
+	})
+
+	t.Run("external_model_id with leading or trailing whitespace", func(t *testing.T) {
+		jsonConfig := `[
+			{
+				"provider_id": "openai",
+				"display_name": "OpenAI",
+				"base_url": "https://api.openai.com/v1",
+				"models": [
+					{"model_id": "m1", "display_name": "M1", "external_model_id": "  gpt-4o  "}
+				]
+			}
+		]`
+		_, err := providersettings.NewCatalogFromJSON([]byte(jsonConfig))
+		if err == nil {
+			t.Fatal("expected error for external_model_id with whitespace")
+		}
+	})
 }
