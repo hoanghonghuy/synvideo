@@ -1,11 +1,26 @@
 # TASK-014 — Scene Plan generation engine
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-005, TASK-011 and TASK-012 accepted; frozen `SCENE_PLAN_GENERATION_V1`
 Wave: WAVE-F1-E
 Branch: `feature/TASK-014-scene-plan-generation`
 Base: `develop`
+Accepted PR: #27
+Squash merge: `6b5c9d3c76681addd1dcb1791a93c62c41770158`
+
+## Acceptance record
+Team Lead logical APPROVE on head `acb8cc21` with CI #140 green.
+
+Accepted behavior:
+- isolated `apps/api/internal/sceneplangeneration/**` scope;
+- strict `scene_plan_v1` provider-neutral structured generation;
+- Project locale/format/aspect/duration and Proposal production directions preserved;
+- scene cardinality/key/source-type/duration/Unicode validation;
+- Script section reference/order/contiguity validation;
+- approved Script narration may be segmented but cannot be silently rewritten/added/omitted because canonicalized scene coverage must equal the approved section body;
+- long-form support, safe provider errors, in-flight context cancellation/deadline and deep input immutability;
+- no persistence/jobs/HTTP/frontend/media scope leakage.
 
 ## Goal
 Implement provider-neutral Scene Plan candidate generation from an already-approved Script plus matching source Proposal production direction, before any media generation occurs.
@@ -23,7 +38,7 @@ This is a substantial downstream capability but remains isolated from persistenc
 - accepted `providers.TextGenerator` and Script/Proposal domain conventions.
 
 ## Frozen contract
-`docs/contracts/SCENE_PLAN_GENERATION_V1.md` is authoritative.
+`SCENE_PLAN_GENERATION_V1.md` is authoritative.
 
 ## Primary ownership
 - `apps/api/internal/sceneplangeneration/**`;
@@ -77,20 +92,18 @@ Truthful RED -> GREEN -> REFACTOR covers at least:
 14. no provider-specific raw schema leakage.
 
 ## Acceptance criteria
-- [ ] Frozen Scene Plan generation contract implemented without drift.
-- [ ] Approved Script narration cannot silently change at Scene Plan generation.
-- [ ] Long-form, locale, aspect and production direction survive prompt construction.
-- [ ] Strict validated candidate only; no application-side invention of missing scenes/narration.
-- [ ] Provider-neutral capability only; no vendor SDK.
-- [ ] Context/error/immutability regression coverage complete.
-- [ ] gofmt/vet/race/tests/build/full CI green.
-- [ ] No persistence/jobs/HTTP/frontend/media scope leakage.
-- [ ] TDD evidence truthful.
+- [x] Frozen Scene Plan generation contract implemented without drift.
+- [x] Approved Script narration cannot silently change at Scene Plan generation.
+- [x] Long-form, locale, aspect and production direction survive prompt construction.
+- [x] Strict validated candidate only; no application-side invention of missing scenes/narration.
+- [x] Provider-neutral capability only; no vendor SDK.
+- [x] Context/error/immutability regression coverage complete.
+- [x] gofmt/vet/race/tests/build/full CI green.
+- [x] No persistence/jobs/HTTP/frontend/media scope leakage.
+- [x] TDD evidence truthful.
 
 ## Follow-on
 Later Scene Plan persistence/integration will own versioning/editing, durable generation orchestration, downstream stale propagation and Scene Editor/media handoff.
 
-## Worktree / claim
-Atomically claim the remote task branch, then work only in a dedicated TASK-014 worktree.
-
-Do not self-merge or self-mark DONE.
+## Worktree cleanup
+The TASK-014 implementation worktree should be removed after confirming the merged commit before this developer claims another task.
