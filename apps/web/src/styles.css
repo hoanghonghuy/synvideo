@@ -419,6 +419,134 @@ h1 {
   margin: 0;
 }
 
+.script-workspace {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 28px;
+  margin-top: 32px;
+}
+
+.script-history {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.script-history h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.script-version-button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid #d7ddd5;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  color: #1d2527;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.script-version-button.active {
+  border-color: #27634e;
+  background: #f4fbf7;
+}
+
+.script-version-button span {
+  font-weight: 700;
+}
+
+.script-version-button small,
+.script-meta {
+  color: #647275;
+}
+
+.script-editor {
+  min-width: 0;
+}
+
+.script-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.script-meta p {
+  margin: 0;
+}
+
+.script-generation-bar {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.generation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.control-group {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  color: #253235;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.control-group select {
+  min-height: 40px;
+  border: 1px solid #cbd6d0;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #1d2527;
+  font: inherit;
+}
+
+.script-form {
+  display: grid;
+  gap: 18px;
+  max-width: 760px;
+  margin-top: 24px;
+}
+
+.script-section-fieldset {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d7ddd5;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.script-section-fieldset legend {
+  padding: 0 6px;
+  color: #27634e;
+  font-weight: 700;
+}
+
+.script-section-fieldset:disabled {
+  opacity: 0.82;
+}
+
+.script-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
 .proposal-structure-fieldset legend {
   margin-bottom: 8px;
   font-weight: 700;
@@ -502,4 +630,3 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
-

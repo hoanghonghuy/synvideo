@@ -107,6 +107,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           {{ t('creativeProposal.actions.open') }}
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/script`"
+        >
+          {{ t('script.actions.open') }}
+        </RouterLink>
       </p>
 
       <div
