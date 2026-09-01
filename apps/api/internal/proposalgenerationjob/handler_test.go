@@ -175,6 +175,35 @@ func TestHandler_InvalidPayload(t *testing.T) {
 			t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD, got %v", err)
 		}
 	})
+
+	t.Run("unknown fields in payload terminalizes as GENERATION_INVALID_PAYLOAD before engine work", func(t *testing.T) {
+		payloadMap := map[string]any{
+			"schema_version": proposalgenerationjob.SchemaVersion,
+			"provider_id":    "fake-provider",
+			"model_id":       "fake-model",
+			"project": map[string]any{
+				"id":                      "22222222-2222-4222-8222-222222222222",
+				"content_format":          "short",
+				"aspect_ratio":            "9:16",
+				"target_duration_seconds": 60,
+				"locale":                  "vi",
+			},
+			"brief": map[string]any{
+				"revision":    2,
+				"source_text": "Create an AI launch video",
+			},
+			"unknown_field": "injected_payload_field",
+		}
+		rawJSON, _ := json.Marshal(payloadMap)
+		job := sampleJob(validPayload())
+		job.Payload = rawJSON
+
+		_, err := handler.Handle(context.Background(), job)
+		var termErr *jobs.TerminalJobError
+		if !errors.As(err, &termErr) || termErr.Code != "GENERATION_INVALID_PAYLOAD" {
+			t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD for unknown fields, got %v", err)
+		}
+	})
 }
 
 func TestHandler_GenerationErrors(t *testing.T) {

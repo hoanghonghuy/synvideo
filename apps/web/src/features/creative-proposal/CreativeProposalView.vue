@@ -173,6 +173,7 @@ function trackJob(jobId: string) {
     try {
       const job = await getProposalGeneration(projectID(), jobId)
       activeJob.value = job
+      generationErrorCode.value = ''
       if (job.state === 'succeeded') {
         await loadSucceededProposal()
         return
@@ -191,6 +192,7 @@ function trackJob(jobId: string) {
       } else {
         generationErrorCode.value = 'request_failed'
       }
+      pollTimer = window.setTimeout(poll, 1000)
     }
   }
 

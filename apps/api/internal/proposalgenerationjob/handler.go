@@ -1,6 +1,7 @@
 package proposalgenerationjob
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,8 +30,10 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	}
 
 	var payload Payload
-	if err := json.Unmarshal(job.Payload, &payload); err != nil {
-		return nil, jobs.NewTerminalError("GENERATION_INVALID_PAYLOAD", fmt.Errorf("unmarshal payload: %w", err))
+	dec := json.NewDecoder(bytes.NewReader(job.Payload))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&payload); err != nil {
+		return nil, jobs.NewTerminalError("GENERATION_INVALID_PAYLOAD", fmt.Errorf("decode payload: %w", err))
 	}
 	if payload.SchemaVersion != SchemaVersion {
 		return nil, jobs.NewTerminalError("GENERATION_INVALID_PAYLOAD", fmt.Errorf("unexpected schema_version: %q", payload.SchemaVersion))

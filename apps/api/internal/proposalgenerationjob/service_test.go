@@ -42,9 +42,10 @@ func (m *mockBriefRepo) Get(ctx context.Context, ownerID uuid.UUID, projectID uu
 }
 
 type mockJobsRepo struct {
-	jobs          map[uuid.UUID]jobs.Job
-	enqueuedInput jobs.EnqueueInput
-	enqueueErr    error
+	jobs                map[uuid.UUID]jobs.Job
+	enqueuedInput       jobs.EnqueueInput
+	enqueueErr          error
+	getByIDForProjectFn func(ctx context.Context, ownerID uuid.UUID, projectID uuid.UUID, id uuid.UUID) (jobs.Job, error)
 }
 
 func newMockJobsRepo() *mockJobsRepo {
@@ -86,6 +87,9 @@ func (m *mockJobsRepo) GetByID(ctx context.Context, ownerID uuid.UUID, id uuid.U
 }
 
 func (m *mockJobsRepo) GetByIDForProject(ctx context.Context, ownerID uuid.UUID, projectID uuid.UUID, id uuid.UUID) (jobs.Job, error) {
+	if m.getByIDForProjectFn != nil {
+		return m.getByIDForProjectFn(ctx, ownerID, projectID, id)
+	}
 	j, ok := m.jobs[id]
 	if !ok || j.OwnerID != ownerID || j.ProjectID == nil || *j.ProjectID != projectID {
 		return jobs.Job{}, jobs.ErrJobNotFound
@@ -127,6 +131,15 @@ func registerFakeRegistry(t *testing.T) *providers.Registry {
 				},
 				TextGenerator: fake.NewTextGenerator("{}"),
 			},
+			{
+				Metadata: providers.ModelMetadata{
+					ProviderID:            "lab-provider",
+					ID:                    "lab-model-v2",
+					DisplayName:           "Lab Model V2",
+					SupportedCapabilities: []providers.Capability{providers.CapabilityTextGeneration},
+				},
+				TextGenerator: fake.NewTextGenerator("{}"),
+			},
 		},
 	})
 	if err != nil {
@@ -154,10 +167,10 @@ func TestService_GetTextGenerationOptions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if len(resp.Providers) != 1 {
-			t.Fatalf("expected 1 provider, got %d", len(resp.Providers))
+		if len(resp.Providers) != 1 || len(resp.Providers[0].Models) != 2 {
+			t.Fatalf("expected 1 provider with 2 models, got %d providers: %+v", len(resp.Providers), resp.Providers)
 		}
-		if resp.Providers[0].ID != "lab-provider" || resp.Providers[0].Models[0].ID != "lab-model-v1" {
+		if resp.Providers[0].ID != "lab-provider" || resp.Providers[0].Models[0].ID != "lab-model-v1" || resp.Providers[0].Models[1].ID != "lab-model-v2" {
 			t.Fatalf("unexpected provider/model: %+v", resp.Providers[0])
 		}
 	})
@@ -328,14 +341,20 @@ func TestService_CreateGeneration(t *testing.T) {
 			UpdatedAt:   time.Now().UTC(),
 		}
 
-		// Simulate Enqueue returning ErrDuplicateJob and populating the job in repo
+		// 1. Matching winner: first GetByIDForProject returns ErrJobNotFound, Enqueue returns ErrDuplicateJob, second GetByIDForProject returns winner
+		getCallCount := 0
 		jobsRepo := newMockJobsRepo()
-		jobsRepo.jobs[reqID] = existingRaceJob
 		jobsRepo.enqueueErr = jobs.ErrDuplicateJob
+		jobsRepo.getByIDForProjectFn = func(ctx context.Context, oID uuid.UUID, pID uuid.UUID, id uuid.UUID) (jobs.Job, error) {
+			getCallCount++
+			if getCallCount == 1 {
+				return jobs.Job{}, jobs.ErrJobNotFound
+			}
+			return existingRaceJob, nil
+		}
 
 		svc := proposalgenerationjob.NewService(reg, jobsRepo, &mockProjectRepo{proj: validProj}, &mockBriefRepo{brief: validBrief})
 
-		// Matching parameters on race -> succeeds with existing job view
 		view, err := svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
 			RequestID:  reqID,
 			ProviderID: "lab-provider",
@@ -347,8 +366,26 @@ func TestService_CreateGeneration(t *testing.T) {
 		if view.ID != reqID {
 			t.Fatalf("expected job ID %s, got %s", reqID, view.ID)
 		}
+		if getCallCount != 2 {
+			t.Fatalf("expected exactly 2 GetByIDForProject calls for duplicate race, got %d", getCallCount)
+		}
+		if jobsRepo.enqueuedInput.ID != reqID {
+			t.Fatalf("expected Enqueue to be called with ID %s, got %s", reqID, jobsRepo.enqueuedInput.ID)
+		}
 
-		// Conflicting parameters on race -> returns ErrGenerationRequestConflict
+		// 2. Conflicting winner: first GetByIDForProject returns ErrJobNotFound, Enqueue returns ErrDuplicateJob, second GetByIDForProject returns winner with different model
+		getCallCount = 0
+		jobsRepo = newMockJobsRepo()
+		jobsRepo.enqueueErr = jobs.ErrDuplicateJob
+		jobsRepo.getByIDForProjectFn = func(ctx context.Context, oID uuid.UUID, pID uuid.UUID, id uuid.UUID) (jobs.Job, error) {
+			getCallCount++
+			if getCallCount == 1 {
+				return jobs.Job{}, jobs.ErrJobNotFound
+			}
+			return existingRaceJob, nil
+		}
+		svc = proposalgenerationjob.NewService(reg, jobsRepo, &mockProjectRepo{proj: validProj}, &mockBriefRepo{brief: validBrief})
+
 		_, err = svc.CreateGeneration(context.Background(), principal, projectID, proposalgenerationjob.CreateProposalGenerationInput{
 			RequestID:  reqID,
 			ProviderID: "lab-provider",
@@ -356,6 +393,9 @@ func TestService_CreateGeneration(t *testing.T) {
 		})
 		if !errors.Is(err, proposalgenerationjob.ErrGenerationRequestConflict) {
 			t.Fatalf("expected ErrGenerationRequestConflict for conflicting race input, got %v", err)
+		}
+		if getCallCount != 2 {
+			t.Fatalf("expected exactly 2 GetByIDForProject calls for conflicting duplicate race, got %d", getCallCount)
 		}
 	})
 }

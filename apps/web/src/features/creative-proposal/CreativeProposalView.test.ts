@@ -767,6 +767,98 @@ describe('CreativeProposalView', () => {
       vi.useRealTimers()
     }
   })
+
+  it('recovers from transient status polling failure by continuing to poll the same job ID without creating a new job', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      mockRoute('GET', `/api/v1/projects/${projectId}`, project)
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [draftSummary])
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/2`, draftProposal)
+      mockRoute('GET', '/api/v1/ai/text-generation-options', sampleProviders)
+
+      const jobId = '66666666-7777-4666-8777-666666666666'
+      mockRoute('POST', `/api/v1/projects/${projectId}/creative-proposal-generations`, {
+        id: jobId,
+        state: 'queued',
+        attempt: 0,
+        max_attempts: 3,
+        error_code: null,
+        proposal_version: null,
+        created_at: '2026-08-31T09:00:00Z',
+        updated_at: '2026-08-31T09:00:00Z',
+        started_at: null,
+        finished_at: null,
+      }, 202)
+
+      let pollCount = 0
+      mockRouteFn('GET', `/api/v1/projects/${projectId}/creative-proposal-generations/${jobId}`, () => {
+        pollCount++
+        if (pollCount === 1) {
+          // Poll 1 fails with 503
+          return jsonResponse({ error: { code: 'request_failed' } }, 503)
+        }
+        // Poll 2 succeeds with succeeded state
+        return jsonResponse({
+          id: jobId,
+          state: 'succeeded',
+          attempt: 1,
+          max_attempts: 3,
+          error_code: null,
+          proposal_version: 3,
+          created_at: '2026-08-31T09:00:00Z',
+          updated_at: '2026-08-31T09:01:00Z',
+          started_at: '2026-08-31T09:00:10Z',
+          finished_at: '2026-08-31T09:01:00Z',
+        })
+      })
+
+      const v3Summary: CreativeProposalSummary = {
+        ...draftSummary,
+        version: 3,
+        revision: 1,
+      }
+      const v3Proposal: CreativeProposal = {
+        ...draftProposal,
+        version: 3,
+        revision: 1,
+        title_options: ['Tieu de v3 sau polling recovery'],
+      }
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals`, [v3Summary, draftSummary])
+      mockRoute('GET', `/api/v1/projects/${projectId}/creative-proposals/3`, v3Proposal)
+
+      const wrapper = await mountCreativeProposalView()
+      await flushPromises()
+
+      await wrapper.find('[data-testid="generate-proposal-btn"]').trigger('click')
+      await flushPromises()
+
+      // Poll 1 fires -> fails with 503
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+      await flushPromises()
+
+      expect(pollCount).toBe(1)
+      expect(wrapper.find('[data-testid="job-error-banner"]').exists()).toBe(true)
+
+      // Poll 2 fires automatically after 1s -> succeeds with succeeded state
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+      await flushPromises()
+
+      expect(pollCount).toBe(2)
+      expect(wrapper.find('[data-testid="job-error-banner"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Tieu de v3 sau polling recovery')
+
+      // Assert only 1 POST was ever made (no new job or request_id created)
+      const postCalls = fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          url === `/api/v1/projects/${projectId}/creative-proposal-generations` && init?.method === 'POST',
+      )
+      expect(postCalls).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 async function mountCreativeProposalView() {
