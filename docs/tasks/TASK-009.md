@@ -1,11 +1,28 @@
 # TASK-009 — AI Proposal generation job integration
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-006, TASK-007, TASK-008 and TASK-010 accepted
 Wave: WAVE-F1-E
 Branch: `feature/TASK-009-ai-proposal-integration`
 Base: `develop`
+Active PR: #28
+Current reviewed head: `f55917aa089553db5f32366e42fbf549c542ab13`
+
+## Current review gate
+CI #141 is green, but Team Lead review #5073433861 found four blockers to fix on the same branch/worktree:
+
+1. `source_generation_job_id` is internal persistence metadata under frozen `AI_PROPOSAL_JOB_V1`, but the current public `CreativeProposal` JSON shape exposes it. Keep it internal (`json:"-"` or an equivalent private persistence mapping) and add HTTP regression coverage proving generated Proposal responses omit it.
+2. `request_id` idempotency/conflict handling is not race-safe and is checked too late. Existing durable jobs must be validated/returned before current Brief/provider state can invalidate an idempotent replay. The duplicate-enqueue race must re-run the same kind/provider/model conflict validation; conflicting concurrent reuse must deterministically return `GENERATION_REQUEST_CONFLICT` rather than returning the winner job.
+3. Restore the three previously accepted TASK-008 frontend regressions removed during the test-harness refactor: failed mutation after failed version switch; stale recovery reload failure preserving dirty edits; initial Proposal-version GET failure with visible retry.
+4. Once a generation job is already `succeeded`, a transient failure refreshing/loading the created Proposal must not turn the UI into a Regenerate retry that launches another generation. Preserve the succeeded job/result and offer a safe load/recovery path until the created Proposal can be opened.
+
+Required verification after fixes:
+- focused service tests for normal replay + conflicting reuse + concurrent duplicate race;
+- HTTP regression proving internal job metadata is absent;
+- restored TASK-008 frontend regressions plus succeeded-job finalization failure recovery;
+- real PostgreSQL exactly-once tests;
+- full `make verify`, race where applicable and PR CI on the new head.
 
 ## Goal
 Connect the accepted Proposal persistence/API, Proposal generation engine, durable job foundation and Proposal frontend into a durable creator-facing Generate/Regenerate flow.
@@ -55,8 +72,8 @@ Only minimal composition/registration changes required for this feature:
 Do not perform unrelated refactors in shared hotspots.
 
 ## Reserved / do not touch
-- `apps/api/internal/providers/openaicompat/**` — TASK-013;
-- `apps/api/internal/sceneplangeneration/**` — TASK-014;
+- accepted `apps/api/internal/providers/openaicompat/**` from TASK-013;
+- accepted `apps/api/internal/sceneplangeneration/**` from TASK-014;
 - Script persistence/generation behavior;
 - generic jobs schema/lifecycle unless a real frozen-contract defect is discovered and escalated;
 - Scene Plan/media/editor/render/publishing code.
@@ -89,8 +106,8 @@ Do not perform unrelated refactors in shared hotspots.
 Truthful RED -> GREEN -> REFACTOR must cover at least:
 1. current owner-scoped Project/Brief snapshot and exact source Brief revision;
 2. same `request_id` HTTP retry returns same job;
-3. conflicting request ID reuse -> `GENERATION_REQUEST_CONFLICT`;
-4. missing Brief -> `CREATIVE_BRIEF_REQUIRED` without provider call;
+3. conflicting request ID reuse -> `GENERATION_REQUEST_CONFLICT`, including concurrent duplicate races;
+4. missing Brief -> `CREATIVE_BRIEF_REQUIRED` without provider call for a genuinely new request;
 5. no credentials in request/job payload/result/presentation errors;
 6. provider/model catalog contains only text-capable registered models;
 7. handler persists nothing on provider failure/invalid output;
@@ -102,29 +119,28 @@ Truthful RED -> GREEN -> REFACTOR must cover at least:
 13. dirty frontend blocks generation;
 14. pending/failure leaves currently-reviewed Proposal intact;
 15. refresh resumes a nonterminal job;
-16. success opens exact returned Proposal version;
+16. success opens exact returned Proposal version and remains recoverable if follow-up list/version loading transiently fails;
 17. production composition has no fake provider registration;
-18. full local smoke through Proposal approval.
+18. full local smoke through Proposal approval;
+19. previously accepted TASK-008 load/mutation/dirty-state regressions remain covered.
 
 ## Acceptance criteria
 - [ ] Frozen `AI_PROPOSAL_JOB_V1` is implemented without contract drift.
 - [ ] Provider execution never blocks the initiating HTTP request.
 - [ ] Generic TASK-010 jobs/executor is reused and wired into runtime; no second job engine/table.
-- [ ] Same HTTP `request_id` is idempotent.
+- [ ] Same HTTP `request_id` is idempotent and conflicting reuse is deterministic under races.
 - [ ] One successful durable job creates at most one Proposal version even across commit->crash->reclaim.
+- [ ] `source_generation_job_id` remains internal and never appears in public Proposal JSON.
 - [ ] Approved Proposal history remains immutable.
 - [ ] Safe catalog/status APIs expose no secret/job internals.
 - [ ] Production composition never exposes fake provider as live AI.
-- [ ] UI preserves dirty/current Proposal state and durable job state correctly.
+- [ ] UI preserves dirty/current Proposal state and durable succeeded-job recovery correctly.
+- [ ] Previously accepted TASK-008 regressions remain protected.
 - [ ] Real PostgreSQL integration, frontend tests, full CI and local smoke are green.
 - [ ] TDD evidence is truthful.
 
 ## Live-provider boundary
-This task may merge with an empty production text-provider catalog. That is an explicit safe state, not product completion.
+TASK-013 live OpenAI-compatible adapter foundation is now accepted, but secure BYOK/runtime registration remains a separate follow-on capability. TASK-009 may still merge with an empty production text-provider catalog; that is an explicit safe state, not product completion.
 
-TASK-013 builds the live OpenAI-compatible adapter foundation independently. A later secure BYOK/runtime-registration task must be accepted before the Proposal AI stage is considered production-complete.
-
-## Worktree / claim
-Atomically create the previously absent remote branch ref, then create one dedicated TASK-009 worktree. Never implement in the shared `develop` checkout.
-
-Do not self-merge or self-mark DONE.
+## Review-fix rule
+Continue only in the existing TASK-009 dedicated worktree and PR #28. Do not create a replacement branch/PR. Do not self-merge or self-mark DONE.
