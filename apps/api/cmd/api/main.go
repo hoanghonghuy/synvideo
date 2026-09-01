@@ -23,6 +23,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/scriptgenerationjob"
 )
 
 func main() {
@@ -43,6 +44,7 @@ func main() {
 	var creativeProposalService *creativeproposal.Service
 	var scriptService *script.Service
 	var proposalGenerationService *proposalgenerationjob.Service
+	var scriptGenerationService *scriptgenerationjob.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -108,10 +110,15 @@ func main() {
 		scriptService = script.NewService(scriptRepo)
 
 		proposalJobHandler := proposalgenerationjob.NewHandlerWithResolver(providerSettingsService, proposalRepo)
+		scriptJobHandler := scriptgenerationjob.NewHandlerWithResolver(providerSettingsService, scriptRepo)
 
 		jobsRegistry := jobs.NewRegistry()
 		if err := jobsRegistry.Register(proposalgenerationjob.JobKind, proposalJobHandler); err != nil {
 			logger.Error("register proposal generation job handler failed", "error", err)
+			os.Exit(1)
+		}
+		if err := jobsRegistry.Register(scriptgenerationjob.JobKind, scriptJobHandler); err != nil {
+			logger.Error("register script generation job handler failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -127,9 +134,10 @@ func main() {
 		}()
 
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, providerSettingsService, actor.NewLocalResolver(cfg))
+		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, providerSettingsService, scriptGenerationService, actor.NewLocalResolver(cfg))
 	} else {
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, nil, actor.NewLocalResolver(cfg))
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, nil, scriptGenerationService, actor.NewLocalResolver(cfg))
 	}
 	errCh := make(chan error, 1)
 

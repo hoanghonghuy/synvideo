@@ -48,6 +48,7 @@ type Script struct {
 	CreatedAt                time.Time  `json:"created_at"`
 	UpdatedAt                time.Time  `json:"updated_at"`
 	ApprovedAt               *time.Time `json:"approved_at,omitempty"`
+	SourceGenerationJobID    *uuid.UUID `json:"-"`
 }
 
 type Content struct {
@@ -63,6 +64,8 @@ type PutInput struct {
 
 type CreateDraftInput struct {
 	SourceProposalVersion int
+	SourceGenerationJobID *uuid.UUID
+	ContentLocale         string
 	Content
 }
 

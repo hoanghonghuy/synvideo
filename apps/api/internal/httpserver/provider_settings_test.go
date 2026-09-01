@@ -71,6 +71,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
 			nil, nil, nil, nil, nil, nil,
 			svc,
+			nil,
 			resolver,
 		)
 
@@ -113,6 +114,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
 			nil, nil, nil, nil, nil, nil,
 			svc,
+			nil,
 			resolver,
 		)
 
@@ -148,6 +150,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
 			nil, nil, nil, nil, nil, nil,
 			svc,
+			nil,
 			resolver,
 		)
 
@@ -173,6 +176,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
 			nil, nil, nil, nil, nil, nil,
 			svc,
+			nil,
 			resolver,
 		)
 
@@ -198,6 +202,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 			config.Config{Environment: config.EnvironmentTest, Addr: ":8080"},
 			nil, nil, nil, nil, nil, nil,
 			svc,
+			nil,
 			resolver,
 		)
 

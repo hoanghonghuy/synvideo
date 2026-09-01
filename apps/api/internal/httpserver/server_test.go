@@ -11,7 +11,7 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	server := New(config.Config{Addr: ":0", Environment: "test"}, slog.Default(), nil, nil, nil, nil, nil, nil, nil)
+	server := New(config.Config{Addr: ":0", Environment: "test"}, slog.Default(), nil, nil, nil, nil, nil, nil, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
 	recorder := httptest.NewRecorder()
 
@@ -31,7 +31,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestReadinessEndpoint(t *testing.T) {
-	server := New(config.Config{Addr: ":0", Environment: "test"}, slog.Default(), nil, nil, nil, nil, nil, nil, nil)
+	server := New(config.Config{Addr: ":0", Environment: "test"}, slog.Default(), nil, nil, nil, nil, nil, nil, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil)
 	recorder := httptest.NewRecorder()
 
