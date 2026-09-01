@@ -1,10 +1,14 @@
 # TASK-018 — Script durable generation integration
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Wave: WAVE-F1-H
 Branch: `feature/TASK-018-script-generation-integration`
 Base: `develop`
+PR: #48
+Review head: `95e958f7e7707c98289600fecee5df3ae3a83eda`
+Logical TL review: `5079858129`
+CI: #207 green on reviewed head
 Depends on: TASK-010, TASK-011, TASK-012, TASK-017 accepted; frozen `SCRIPT_JOB_V1`.
 
 ## Goal
@@ -37,9 +41,8 @@ Read first:
 ## Mandatory isolation
 Do not modify:
 - `apps/web/**` — owned by TASK-019;
-- `apps/api/internal/scenemedia/**` or migration `0011` — owned by TASK-020;
 - Scene Plan generation/domain behavior;
-- Media Asset storage semantics;
+- Media Asset / Scene Media semantics;
 - provider-settings credential lifecycle;
 - render/publish paths.
 
@@ -58,25 +61,35 @@ Implement the frozen:
 1. HTTP POST never calls a provider.
 2. Same request ID replay returns the original durable job before current Proposal/provider/credential checks.
 3. Durable payload/result are credential-free.
-4. Worker uses the snapshotted approved Proposal, not “latest” at execution time.
+4. Worker uses the snapshotted Project and approved Proposal, not mutable current generation intent.
 5. `source_generation_job_id` is internal and DB-unique, never public JSON.
 6. Crash after Script draft commit but before `MarkSuccess` cannot create another Script version.
 7. Approved Script history is immutable; only active unapproved draft supersede behavior follows accepted Script rules.
 8. TASK-017 owner runtime is reused; no second provider/secret path.
 
+## Current review blockers
+Fix only on the existing PR/worktree, preserving already-correct behavior.
+
+1. **Preserve request-time locale at persistence.** Generation uses the snapshotted Project locale but the current implementation re-reads mutable `projects.locale` when persisting. A Project locale change between enqueue and worker execution must not change generated Script `content_locale`. Add a generation-specific persistence path/input using the snapshotted locale while retaining normal manual/internal Script CreateDraft semantics.
+2. **Fully strict durable payload validation.** Reject trailing JSON and structurally invalid snapshots/IDs/enums before owner credential resolution/provider execution as terminal `GENERATION_INVALID_PAYLOAD`. At minimum validate job/payload Project identity, Project enums/duration/locale, Proposal version/required snapshot structure, provider/model IDs, and EOF after the first JSON value.
+3. **Real PostgreSQL concurrency proof.** Add concurrent same-generation-job CreateDraft attempts and prove one durable Script version / same returned identity with no duplicate active draft or history corruption.
+4. **Frozen status shape.** Remove public `started_at` / `finished_at`; `SCRIPT_JOB_V1` V1 safe response exposes only the frozen fields unless PM/TL intentionally revises the contract.
+5. Sync latest `develop` before final review.
+
 ## TDD plan
 Truthful RED → GREEN → REFACTOR must cover at least:
 - no-approved-Proposal rejection;
-- exact highest-approved-Proposal snapshot;
+- exact highest-approved-Proposal and Project snapshot;
+- Project locale changes after enqueue do not alter generated Script locale;
 - owner/project isolation;
 - same-request replay after Proposal/provider/credential changes;
 - conflicting request reuse;
 - duplicate-enqueue race same/conflicting selection;
-- strict durable payload decoding;
+- strict unknown/trailing/malformed/structurally-invalid durable payload rejection;
 - provider unavailable/failed/invalid output mapping;
 - local `httptest` owner credential execution;
 - secret-free durable bytes/errors;
-- PostgreSQL generation-job uniqueness;
+- PostgreSQL generation-job uniqueness under actual concurrency;
 - crash-window retry exactly-once Script persistence;
 - public JSON omission of internal job ID;
 - executor registration/runtime smoke;
@@ -87,13 +100,12 @@ Truthful RED → GREEN → REFACTOR must cover at least:
 - [ ] Migration is exactly `0010_add_script_generation_idempotency.sql`.
 - [ ] Script generation is durable, retryable and owner-scoped.
 - [ ] Request-id replay semantics match the frozen contract under races and configuration changes.
-- [ ] Script draft persistence is DB-idempotent across worker crash/reclaim.
+- [ ] Script draft persistence is DB-idempotent across worker crash/reclaim and preserves request-time locale.
+- [ ] Invalid durable snapshots fail before provider resolution.
 - [ ] No secret/provider raw response leaks into jobs, HTTP or errors.
 - [ ] Generic jobs executor runs Proposal and Script job kinds together without regression.
-- [ ] No TASK-019/TASK-020 write-surface leakage.
-- [ ] Targeted tests, race tests and full CI are green.
+- [ ] No TASK-019 / Scene Plan / media write-surface leakage.
+- [ ] Targeted tests, real PostgreSQL concurrency, race tests and exact-head CI are green.
 
-## Worktree / claim
-Before work, confirm remote `feature/TASK-018-script-generation-integration` does not exist. Atomically create that remote ref from latest `origin/develop`, then use a dedicated TASK-018 worktree. Shared/control checkout remains on `develop`.
-
-Do not self-merge or self-mark DONE.
+## Worktree / review protocol
+The branch is already claimed. Continue only in the existing TASK-018 dedicated worktree/PR #48. Review fixes stay on this branch. Do not create a replacement branch, self-merge, or self-mark DONE.
