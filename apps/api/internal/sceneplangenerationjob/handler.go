@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -134,6 +135,8 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	return json.Marshal(result)
 }
 
+var sectionKeyRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 func validatePayload(payload *Payload, job jobs.Job) error {
 	if payload.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unexpected schema_version: %q", payload.SchemaVersion)
@@ -180,13 +183,67 @@ func validatePayload(payload *Payload, job jobs.Job) error {
 	if len(payload.Script.Sections) == 0 {
 		return errors.New("script sections are required")
 	}
+	if len(payload.Script.Sections) > 200 {
+		return fmt.Errorf("script sections exceed maximum (200): %d", len(payload.Script.Sections))
+	}
+	seenKeys := make(map[string]bool, len(payload.Script.Sections))
 	for i, s := range payload.Script.Sections {
-		if strings.TrimSpace(s.Key) == "" {
+		trimmedKey := strings.TrimSpace(s.Key)
+		if trimmedKey == "" {
 			return fmt.Errorf("script section %d key is required", i)
 		}
+		if len([]rune(trimmedKey)) > 64 {
+			return fmt.Errorf("script section %d key exceeds maximum length (64): %q", i, trimmedKey)
+		}
+		if !sectionKeyRegex.MatchString(trimmedKey) {
+			return fmt.Errorf("script section %d key format is invalid: %q", i, trimmedKey)
+		}
+		if seenKeys[trimmedKey] {
+			return fmt.Errorf("script section %d key is duplicate: %q", i, trimmedKey)
+		}
+		seenKeys[trimmedKey] = true
+
+		if len([]rune(strings.TrimSpace(s.Heading))) > 300 {
+			return fmt.Errorf("script section %d heading exceeds maximum length (300)", i)
+		}
+		trimmedBody := strings.TrimSpace(s.Body)
+		if trimmedBody == "" {
+			return fmt.Errorf("script section %d body is required", i)
+		}
+		if len([]rune(trimmedBody)) > 20000 {
+			return fmt.Errorf("script section %d body exceeds maximum length (20000)", i)
+		}
 	}
+	if payload.Script.EstimatedDurationSeconds != nil {
+		dur := *payload.Script.EstimatedDurationSeconds
+		if dur < 1 || dur > 43200 {
+			return fmt.Errorf("invalid script estimated duration: %d", dur)
+		}
+	}
+	if len([]rune(strings.TrimSpace(payload.Script.Notes))) > 10000 {
+		return errors.New("script notes exceed maximum length (10000)")
+	}
+
 	if payload.Proposal.Version < 1 || payload.Proposal.Version != payload.Script.SourceProposalVersion {
 		return fmt.Errorf("invalid proposal version %d for script source proposal version %d", payload.Proposal.Version, payload.Script.SourceProposalVersion)
+	}
+	if len([]rune(strings.TrimSpace(payload.Proposal.VisualDirection))) > 5000 {
+		return errors.New("proposal visual_direction exceeds maximum length (5000)")
+	}
+	if len([]rune(strings.TrimSpace(payload.Proposal.VoiceDirection))) > 5000 {
+		return errors.New("proposal voice_direction exceeds maximum length (5000)")
+	}
+	if len([]rune(strings.TrimSpace(payload.Proposal.MusicDirection))) > 5000 {
+		return errors.New("proposal music_direction exceeds maximum length (5000)")
+	}
+	if len([]rune(strings.TrimSpace(payload.Proposal.CaptionDirection))) > 5000 {
+		return errors.New("proposal caption_direction exceeds maximum length (5000)")
+	}
+	if len(payload.Proposal.Warnings) > 100 {
+		return errors.New("proposal warnings exceed maximum items (100)")
+	}
+	if len(payload.Proposal.ResearchGaps) > 100 {
+		return errors.New("proposal research_gaps exceed maximum items (100)")
 	}
 	return nil
 }

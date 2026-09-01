@@ -708,3 +708,35 @@ func TestService_CreateGeneration_DuplicateEnqueueRace(t *testing.T) {
 		t.Fatalf("expected exactly 2 GetByIDForProject calls for conflicting duplicate race, got %d", getCallCount)
 	}
 }
+
+func TestService_GetGeneration_DifferentJobKind_ReturnsNotFound(t *testing.T) {
+	registry := registerFakeRegistry(t)
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	jobID := uuid.New()
+	principal := project.Principal{OwnerID: ownerID}
+
+	for _, otherKind := range []string{"creative_proposal_generation_v1", "script_generation_v1", "video_render_v1"} {
+		t.Run("kind_"+otherKind, func(t *testing.T) {
+			jobsRepo := newMockJobsRepo()
+			jobsRepo.jobs[jobID] = jobs.Job{
+				ID:          jobID,
+				OwnerID:     ownerID,
+				ProjectID:   &projectID,
+				Kind:        otherKind,
+				State:       jobs.StateSucceeded,
+				Attempt:     1,
+				MaxAttempts: 3,
+				CreatedAt:   time.Now().UTC(),
+				UpdatedAt:   time.Now().UTC(),
+			}
+
+			svc := sceneplangenerationjob.NewService(registry, jobsRepo, &mockProjectRepo{}, &mockScriptRepoForService{}, &mockProposalRepoForService{})
+
+			_, err := svc.GetGeneration(context.Background(), principal, projectID, jobID)
+			if !errors.Is(err, sceneplangenerationjob.ErrJobNotFound) {
+				t.Fatalf("expected ErrJobNotFound for foreign job kind %q, got %v", otherKind, err)
+			}
+		})
+	}
+}

@@ -297,6 +297,10 @@ func (s *Service) GetGeneration(
 		return ScenePlanGenerationJobView{}, err
 	}
 
+	if job.Kind != JobKind {
+		return ScenePlanGenerationJobView{}, ErrJobNotFound
+	}
+
 	return ToJobView(job), nil
 }
 

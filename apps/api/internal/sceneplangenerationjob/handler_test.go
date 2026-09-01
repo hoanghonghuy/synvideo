@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -336,10 +338,161 @@ func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
 			},
 		},
 		{
+			name: "script section item with invalid key format",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections[0].Key = "INVALID KEY WITH SPACES"
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "script section item with key exceeding max length",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections[0].Key = strings.Repeat("a", 65)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "duplicate script section keys",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections = []sceneplangeneration.ScriptSection{
+					{Key: "intro", Heading: "Heading 1", Body: "Body 1"},
+					{Key: "intro", Heading: "Heading 2", Body: "Body 2"},
+				}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "script section with blank body",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections[0].Body = "   "
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "script section with oversized body",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections[0].Body = strings.Repeat("a", 20001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "script section with oversized heading",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections[0].Heading = strings.Repeat("a", 301)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "script sections exceeding max count",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Sections = make([]sceneplangeneration.ScriptSection, 201)
+				for i := range p.Script.Sections {
+					p.Script.Sections[i] = sceneplangeneration.ScriptSection{
+						Key:  fmt.Sprintf("sec-%d", i),
+						Body: "Body",
+					}
+				}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid script estimated duration",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				dur := 0
+				p.Script.EstimatedDurationSeconds = &dur
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "oversized script notes",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Script.Notes = strings.Repeat("a", 10001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
 			name: "mismatched proposal version for script source proposal version",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
 				p.Proposal.Version = 99
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "oversized proposal visual direction",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.VisualDirection = strings.Repeat("a", 5001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "oversized proposal voice direction",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.VoiceDirection = strings.Repeat("a", 5001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "oversized proposal music direction",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.MusicDirection = strings.Repeat("a", 5001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "oversized proposal caption direction",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.CaptionDirection = strings.Repeat("a", 5001)
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal warnings exceeding max items",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.Warnings = make([]string, 101)
+				for i := range p.Proposal.Warnings {
+					p.Proposal.Warnings[i] = "warning"
+				}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal research gaps exceeding max items",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.ResearchGaps = make([]string, 101)
+				for i := range p.Proposal.ResearchGaps {
+					p.Proposal.ResearchGaps[i] = "gap"
+				}
 				b, _ := json.Marshal(p)
 				j.Payload = b
 			},
@@ -360,6 +513,38 @@ func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
 				t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD for %q, got %v", tc.name, err)
 			}
 		})
+	}
+}
+
+type trackingResolver struct {
+	called bool
+}
+
+func (r *trackingResolver) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+	r.called = true
+	return fake.NewTextGenerator(validScenePlanJSON()), nil
+}
+
+func TestHandler_Handle_ResolverNotCalledOnInvalidPayload(t *testing.T) {
+	resolver := &trackingResolver{}
+	scenePlanRepo := &mockScenePlanRepo{}
+	handler := sceneplangenerationjob.NewHandlerWithResolver(resolver, scenePlanRepo)
+
+	job := sampleScenePlanJob(validScenePlanPayload())
+	// Corrupt payload with duplicate section keys
+	p := validScenePlanPayload()
+	p.Script.Sections = []sceneplangeneration.ScriptSection{
+		{Key: "dup-key", Heading: "H1", Body: "B1"},
+		{Key: "dup-key", Heading: "H2", Body: "B2"},
+	}
+	job.Payload, _ = json.Marshal(p)
+
+	_, err := handler.Handle(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected error on invalid payload, got nil")
+	}
+	if resolver.called {
+		t.Fatal("expected resolver to NOT be called for invalid payload before validation")
 	}
 }
 
