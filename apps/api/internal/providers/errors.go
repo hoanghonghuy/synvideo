@@ -6,24 +6,40 @@ import (
 )
 
 var (
-	ErrUnknownProvider       = errors.New("unknown provider")
-	ErrUnknownModel          = errors.New("unknown model")
-	ErrUnsupportedCapability = errors.New("unsupported capability")
-	ErrProviderUnavailable   = errors.New("provider unavailable")
-	ErrProviderExecution     = errors.New("provider execution failed")
-	ErrDuplicateRegistration = errors.New("duplicate provider registration")
+	ErrUnknownProvider           = errors.New("unknown provider")
+	ErrUnknownModel              = errors.New("unknown model")
+	ErrUnsupportedCapability     = errors.New("unsupported capability")
+	ErrProviderUnavailable       = errors.New("provider unavailable")
+	ErrProviderExecution         = errors.New("provider execution failed")
+	ErrAuthenticationUnavailable = errors.New("provider authentication or configuration unavailable")
+	ErrRateLimited               = errors.New("provider rate limited")
+	ErrTransientExecution        = errors.New("provider transient execution failure")
+	ErrInvalidRequest            = errors.New("provider request is invalid")
+	ErrMalformedResponse         = errors.New("provider response is malformed")
+	ErrVideoOperationFailed      = errors.New("video operation failed")
+	ErrResultUnavailable         = errors.New("generated result is unavailable")
+	ErrUnknownVideoOperation     = errors.New("unknown video operation")
+	ErrDuplicateRegistration     = errors.New("duplicate provider registration")
 )
 
 // Category classifies provider-boundary failures for stable handling upstream.
 type Category string
 
 const (
-	CategoryUnknownProvider       Category = "unknown_provider"
-	CategoryUnknownModel          Category = "unknown_model"
-	CategoryUnsupportedCapability Category = "unsupported_capability"
-	CategoryProviderUnavailable   Category = "provider_unavailable"
-	CategoryProviderExecution     Category = "provider_execution"
-	CategoryDuplicateRegistration Category = "duplicate_registration"
+	CategoryUnknownProvider           Category = "unknown_provider"
+	CategoryUnknownModel              Category = "unknown_model"
+	CategoryUnsupportedCapability     Category = "unsupported_capability"
+	CategoryProviderUnavailable       Category = "provider_unavailable"
+	CategoryProviderExecution         Category = "provider_execution"
+	CategoryAuthenticationUnavailable Category = "authentication_or_config_unavailable"
+	CategoryRateLimited               Category = "rate_limited"
+	CategoryTransientExecution        Category = "transient_execution_failure"
+	CategoryInvalidRequest            Category = "invalid_request"
+	CategoryMalformedResponse         Category = "malformed_response"
+	CategoryVideoOperationFailed      Category = "video_operation_failed"
+	CategoryResultUnavailable         Category = "result_unavailable"
+	CategoryUnknownVideoOperation     Category = "unknown_video_operation"
+	CategoryDuplicateRegistration     Category = "duplicate_registration"
 )
 
 // BoundaryError is a provider-boundary failure with a safe presentation message.
@@ -83,6 +99,42 @@ func NewExecutionError(cause error) error {
 		Message:  "The provider could not complete text generation.",
 		cause:    errors.Join(ErrProviderExecution, cause),
 	}
+}
+
+func newSafeError(category Category, message string, sentinel error, cause error) error {
+	return &BoundaryError{Category: category, Message: message, cause: errors.Join(sentinel, cause)}
+}
+
+func NewAuthConfigError(cause error) error {
+	return newSafeError(CategoryAuthenticationUnavailable, "The provider authentication or configuration is unavailable.", ErrAuthenticationUnavailable, cause)
+}
+
+func NewRateLimitedError(cause error) error {
+	return newSafeError(CategoryRateLimited, "The provider temporarily rate-limited this request.", ErrRateLimited, cause)
+}
+
+func NewTransientError(cause error) error {
+	return newSafeError(CategoryTransientExecution, "The provider temporarily failed to complete this request.", ErrTransientExecution, cause)
+}
+
+func NewInvalidRequestError(cause error) error {
+	return newSafeError(CategoryInvalidRequest, "The generation request is invalid.", ErrInvalidRequest, cause)
+}
+
+func NewMalformedResponseError(cause error) error {
+	return newSafeError(CategoryMalformedResponse, "The provider returned an invalid response.", ErrMalformedResponse, cause)
+}
+
+func NewVideoOperationFailedError(cause error) error {
+	return newSafeError(CategoryVideoOperationFailed, "The video generation operation failed.", ErrVideoOperationFailed, cause)
+}
+
+func NewResultUnavailableError(cause error) error {
+	return newSafeError(CategoryResultUnavailable, "The generated result is not available yet.", ErrResultUnavailable, cause)
+}
+
+func NewUnknownVideoOperationError(cause error) error {
+	return newSafeError(CategoryUnknownVideoOperation, "The video generation operation is not known.", ErrUnknownVideoOperation, cause)
 }
 
 func NewDuplicateRegistrationError(providerID ProviderID) error {
