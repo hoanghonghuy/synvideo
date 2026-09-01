@@ -300,7 +300,22 @@ async function retryFailedVersion() {
       </p>
 
       <div
-        v-if="!hasProposal"
+        v-if="loadErrorCode && !hasProposal"
+        class="notice error"
+      >
+        <p>{{ t(`creativeProposal.errors.${loadErrorCode}`) }}</p>
+        <button
+          class="secondary-button"
+          data-testid="retry-proposal-list"
+          type="button"
+          @click="loadWorkspace"
+        >
+          {{ t('projects.actions.retry') }}
+        </button>
+      </div>
+
+      <div
+        v-else-if="!hasProposal"
         class="notice info"
       >
         <p>{{ t('creativeProposal.states.empty') }}</p>

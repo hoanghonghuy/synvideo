@@ -70,6 +70,7 @@ describe('ProjectDetailView', () => {
         ),
       )
       .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse(project))
       .mockResolvedValueOnce(jsonResponse([]))
 
     const router = createRouter({

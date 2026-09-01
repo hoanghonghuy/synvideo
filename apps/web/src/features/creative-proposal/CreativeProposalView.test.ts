@@ -95,6 +95,30 @@ describe('CreativeProposalView', () => {
     expect(wrapper.find('[name="audience_summary"]').exists()).toBe(false)
   })
 
+  it('renders a retryable error state when proposal list request fails after project loads', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed' } }, 503))
+
+    const wrapper = await mountCreativeProposalView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Không thể kết nối máy chủ.')
+    expect(wrapper.text()).not.toContain('Chưa có AI Proposal')
+    expect(wrapper.find('[data-testid="retry-proposal-list"]').exists()).toBe(true)
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse([draftSummary]))
+      .mockResolvedValueOnce(jsonResponse(draftProposal))
+
+    await wrapper.find('[data-testid="retry-proposal-list"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Tieu de A')
+    expect(wrapper.text()).not.toContain('Không thể kết nối máy chủ.')
+  })
+
   it('renders newest version history with status labels and opens the newest proposal', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
