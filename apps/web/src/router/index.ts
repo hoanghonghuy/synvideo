@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
+import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
 import ProjectDetailView from '@/views/ProjectDetailView.vue'
@@ -39,6 +40,11 @@ export const router = createRouter({
       path: '/projects/:id/creative-brief',
       name: 'creative-brief',
       component: CreativeBriefView,
+    },
+    {
+      path: '/projects/:id/creative-proposal',
+      name: 'creative-proposal',
+      component: CreativeProposalView,
     },
   ],
 })
