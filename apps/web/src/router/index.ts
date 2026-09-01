@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
+import ScriptView from '@/features/script/ScriptView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
@@ -46,6 +47,11 @@ export const router = createRouter({
       path: '/projects/:id/creative-proposal',
       name: 'creative-proposal',
       component: CreativeProposalView,
+    },
+    {
+      path: '/projects/:id/script',
+      name: 'script',
+      component: ScriptView,
     },
     {
       path: '/settings/ai-providers',

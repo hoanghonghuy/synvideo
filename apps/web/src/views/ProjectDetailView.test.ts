@@ -81,6 +81,7 @@ describe('ProjectDetailView', () => {
         { path: '/projects/:id', component: ProjectDetailView },
         { path: '/projects/:id/creative-brief', component: CreativeBriefView },
         { path: '/projects/:id/creative-proposal', component: CreativeProposalView },
+        { path: '/projects/:id/script', component: { template: '<div>Script workspace</div>' } },
       ],
     })
     router.push(`/projects/${project.id}`)
@@ -92,8 +93,10 @@ describe('ProjectDetailView', () => {
     const links = wrapper.findAll('.workspace-links a')
     const briefLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-brief`)
     const proposalLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-proposal`)
+    const scriptLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/script`)
     expect(briefLink?.text()).toContain('Mở Creative Brief')
     expect(proposalLink?.text()).toContain('Mở AI Proposal')
+    expect(scriptLink?.text()).toContain('Mở Script')
 
     await briefLink?.trigger('click')
     await flushPromises()
@@ -126,6 +129,7 @@ async function mountDetailView() {
       { path: '/projects/:id', component: ProjectDetailView },
       { path: '/projects/:id/creative-brief', component: { template: '<div />' } },
       { path: '/projects/:id/creative-proposal', component: { template: '<div />' } },
+      { path: '/projects/:id/script', component: { template: '<div />' } },
     ],
   })
   router.push('/projects/11111111-1111-4111-8111-111111111111')
