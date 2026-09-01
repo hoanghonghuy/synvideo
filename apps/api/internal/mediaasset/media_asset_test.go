@@ -84,6 +84,32 @@ func TestObjectKeyValidationRejectsTraversalAndExternalSelectors(t *testing.T) {
 	}
 }
 
+func TestAssetValidationRejectsObjectKeyIdentityMismatch(t *testing.T) {
+	asset := validAssetForValidation()
+
+	for name, key := range map[string]string{
+		"project": "projects/33333333-3333-4333-8333-333333333333/assets/" + asset.ID.String(),
+		"asset":   "projects/" + asset.ProjectID.String() + "/assets/44444444-4444-4444-8444-444444444444",
+	} {
+		t.Run(name, func(t *testing.T) {
+			asset.ObjectKey = key
+			if err := asset.Validate(); err == nil {
+				t.Fatal("expected object key identity validation error")
+			}
+		})
+	}
+}
+
+func validAssetForValidation() mediaasset.MediaAsset {
+	assetID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	return mediaasset.MediaAsset{
+		ID: assetID, OwnerID: ownerID, ProjectID: projectID,
+		Kind: mediaasset.KindImage, Origin: mediaasset.OriginUpload,
+		ObjectKey: "projects/" + projectID.String() + "/assets/" + assetID.String(),
+		MimeType:  "image/png", ByteSize: 1, SHA256: strings.Repeat("a", 64), Metadata: []byte(`{}`),
+	}
+}
+
 type fakeProjectRepository struct {
 	item project.Project
 	err  error
@@ -121,9 +147,12 @@ func (f *fakeMetadataRepository) Create(_ context.Context, asset mediaasset.Medi
 	f.created = asset
 	return asset, nil
 }
-func (f *fakeMetadataRepository) Get(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (mediaasset.MediaAsset, error) {
+func (f *fakeMetadataRepository) Get(_ context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
 	if f.getErr != nil {
 		return mediaasset.MediaAsset{}, f.getErr
+	}
+	if f.created.ID == uuid.Nil || f.created.ID != assetID || f.created.OwnerID != ownerID || f.created.ProjectID != projectID {
+		return mediaasset.MediaAsset{}, mediaasset.ErrNotFound
 	}
 	return f.created, nil
 }
@@ -139,6 +168,7 @@ type fakeObjectStorage struct {
 	putErr      error
 	deleteErr   error
 	putCalls    int
+	openCalls   int
 	deleteCalls int
 	lastPut     mediaasset.PutObjectInput
 }
@@ -159,6 +189,7 @@ func (f *fakeObjectStorage) Stat(context.Context, string) (mediaasset.ObjectInfo
 	panic("unused")
 }
 func (f *fakeObjectStorage) Open(context.Context, string) (io.ReadCloser, error) {
+	f.openCalls++
 	return io.NopCloser(strings.NewReader("opened media")), nil
 }
 func (f *fakeObjectStorage) Delete(context.Context, string) error {
@@ -274,6 +305,35 @@ func TestServiceAuthorizesMetadataBeforeOpeningAndDeletingObject(t *testing.T) {
 	}
 	if storage.deleteCalls != 1 || repository.deleteCalls != 1 {
 		t.Fatalf("expected object-first deletion, storage=%d repository=%d", storage.deleteCalls, repository.deleteCalls)
+	}
+}
+
+func TestServiceDoesNotDiscloseCrossOwnerOrProjectContentOrDelete(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeMetadataRepository{created: asset}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	cases := map[string]struct {
+		ownerID   uuid.UUID
+		projectID uuid.UUID
+	}{
+		"foreign owner":   {ownerID: uuid.MustParse("44444444-4444-4444-8444-444444444444"), projectID: asset.ProjectID},
+		"foreign project": {ownerID: asset.OwnerID, projectID: uuid.MustParse("55555555-5555-4555-8555-555555555555")},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			principal := project.Principal{OwnerID: tc.ownerID}
+			if _, err := service.Open(context.Background(), principal, tc.projectID, asset.ID); !errors.Is(err, mediaasset.ErrNotFound) {
+				t.Fatalf("open should be non-disclosing, got %v", err)
+			}
+			if err := service.Delete(context.Background(), principal, tc.projectID, asset.ID); !errors.Is(err, mediaasset.ErrNotFound) {
+				t.Fatalf("delete should be non-disclosing, got %v", err)
+			}
+		})
+	}
+	if storage.openCalls != 0 || storage.deleteCalls != 0 {
+		t.Fatalf("foreign access reached object storage: opens=%d deletes=%d", storage.openCalls, storage.deleteCalls)
 	}
 }
 

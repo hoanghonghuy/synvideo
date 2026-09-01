@@ -48,6 +48,10 @@ func TestMediaAssetRepositoryIntegrationScopeOrderingAndConstraints(t *testing.T
 	if _, err := assetRepository.Get(context.Background(), otherOwner, item.ID, first.ID); !errors.Is(err, mediaasset.ErrNotFound) {
 		t.Fatalf("expected cross-owner get to be not found, got %v", err)
 	}
+	mismatchedOwner := integrationAsset(item.ID, otherOwner, 3)
+	if _, err := assetRepository.Create(context.Background(), mismatchedOwner); !errors.Is(err, mediaasset.ErrNotFound) {
+		t.Fatalf("expected mismatched owner/project insertion to be rejected, got %v", err)
+	}
 
 	second := integrationAsset(item.ID, mediaAssetOwnerID, 2)
 	second.CreatedAt = first.CreatedAt.Add(time.Second)

@@ -35,7 +35,10 @@ func (r *MediaAssetRepository) Create(ctx context.Context, asset mediaasset.Medi
 		INSERT INTO media_assets (
 			id, owner_id, project_id, kind, origin, object_key, mime_type,
 			byte_size, sha256, original_filename, metadata, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+		FROM projects
+		WHERE id = $3 AND owner_id = $2
 		RETURNING %s;
 	`, mediaAssetSelectFields)
 	return scanMediaAsset(r.pool.QueryRow(ctx, query,

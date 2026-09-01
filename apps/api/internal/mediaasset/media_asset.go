@@ -124,7 +124,7 @@ func (asset MediaAsset) Validate() error {
 	if !validOrigin(asset.Origin) {
 		fields["origin"] = "invalid"
 	}
-	if err := ValidateObjectKey(asset.ObjectKey); err != nil {
+	if err := ValidateObjectKeyForAsset(asset.ObjectKey, asset.ProjectID, asset.ID); err != nil {
 		fields["object_key"] = "invalid"
 	}
 	if strings.TrimSpace(asset.MimeType) == "" || utf8.RuneCountInString(asset.MimeType) > 255 {
@@ -186,19 +186,35 @@ func isJSONObject(raw json.RawMessage) bool {
 }
 
 func ValidateObjectKey(key string) error {
+	_, _, err := parseCanonicalObjectKey(key)
+	return err
+}
+
+func ValidateObjectKeyForAsset(key string, projectID, assetID uuid.UUID) error {
+	keyProjectID, keyAssetID, err := parseCanonicalObjectKey(key)
+	if err != nil {
+		return err
+	}
+	if projectID == uuid.Nil || assetID == uuid.Nil || keyProjectID != projectID || keyAssetID != assetID {
+		return fmt.Errorf("object key identity does not match asset")
+	}
+	return nil
+}
+
+func parseCanonicalObjectKey(key string) (uuid.UUID, uuid.UUID, error) {
 	if key == "" || strings.ContainsAny(key, "\\\r\n") || strings.Contains(key, "..") || strings.HasPrefix(key, "/") || strings.Contains(key, "://") {
-		return fmt.Errorf("object key is unsafe")
+		return uuid.Nil, uuid.Nil, fmt.Errorf("object key is unsafe")
 	}
 	parts := strings.Split(key, "/")
 	if len(parts) != 4 || parts[0] != "projects" || parts[2] != "assets" {
-		return fmt.Errorf("object key is not canonical")
+		return uuid.Nil, uuid.Nil, fmt.Errorf("object key is not canonical")
 	}
 	projectID, projectErr := uuid.Parse(parts[1])
 	assetID, assetErr := uuid.Parse(parts[3])
 	if projectErr != nil || assetErr != nil || projectID.String() != parts[1] || assetID.String() != parts[3] {
-		return fmt.Errorf("object key is not canonical")
+		return uuid.Nil, uuid.Nil, fmt.Errorf("object key is not canonical")
 	}
-	return nil
+	return projectID, assetID, nil
 }
 
 type ObjectInfo struct {
