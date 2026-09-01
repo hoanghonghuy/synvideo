@@ -52,6 +52,11 @@ func TestMediaAssetRepositoryIntegrationScopeOrderingAndConstraints(t *testing.T
 	if _, err := assetRepository.Create(context.Background(), mismatchedOwner); !errors.Is(err, mediaasset.ErrNotFound) {
 		t.Fatalf("expected mismatched owner/project insertion to be rejected, got %v", err)
 	}
+	mismatchedKey := integrationAsset(item.ID, mediaAssetOwnerID, 4)
+	mismatchedKey.ObjectKey = "projects/" + mismatchedKey.ProjectID.String() + "/assets/" + uuid.NewString()
+	if _, err := assetRepository.Create(context.Background(), mismatchedKey); err == nil {
+		t.Fatal("expected mismatched asset/object-key insertion to be rejected")
+	}
 
 	second := integrationAsset(item.ID, mediaAssetOwnerID, 2)
 	second.CreatedAt = first.CreatedAt.Add(time.Second)
@@ -85,10 +90,11 @@ func TestMediaAssetRepositoryIntegrationScopeOrderingAndConstraints(t *testing.T
 }
 
 func integrationAsset(projectID, ownerID uuid.UUID, suffix int) mediaasset.MediaAsset {
+	assetID := uuid.New()
 	return mediaasset.MediaAsset{
-		ID: uuid.New(), OwnerID: ownerID, ProjectID: projectID,
+		ID: assetID, OwnerID: ownerID, ProjectID: projectID,
 		Kind: mediaasset.KindImage, Origin: mediaasset.OriginUpload,
-		ObjectKey: "projects/" + projectID.String() + "/assets/" + uuid.NewString(),
+		ObjectKey: "projects/" + projectID.String() + "/assets/" + assetID.String(),
 		MimeType:  "image/png", ByteSize: int64(suffix), SHA256: strings.Repeat("a", 64),
 		OriginalFilename: "asset.png", Metadata: json.RawMessage(`{"source":"test"}`),
 		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),

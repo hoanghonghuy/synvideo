@@ -30,6 +30,10 @@ func (r *MediaAssetRepository) Create(ctx context.Context, asset mediaasset.Medi
 	metadata := asset.Metadata
 	if len(metadata) == 0 {
 		metadata = json.RawMessage(`{}`)
+		asset.Metadata = metadata
+	}
+	if err := asset.Validate(); err != nil {
+		return mediaasset.MediaAsset{}, err
 	}
 	query := fmt.Sprintf(`
 		INSERT INTO media_assets (
