@@ -74,6 +74,61 @@ export async function approveCreativeProposal(
   })
 }
 
+export interface TextGenerationOptionModel {
+  id: string
+  display_name: string
+}
+
+export interface TextGenerationOptionProvider {
+  id: string
+  display_name: string
+  models: TextGenerationOptionModel[]
+}
+
+export interface TextGenerationOptionsResponse {
+  providers: TextGenerationOptionProvider[]
+}
+
+export interface ProposalGenerationJob {
+  id: string
+  state: 'queued' | 'running' | 'succeeded' | 'failed'
+  attempt: number
+  max_attempts: number
+  error_code: string | null
+  proposal_version: number | null
+  created_at: string
+  updated_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface CreateProposalGenerationPayload {
+  request_id: string
+  provider_id: string
+  model_id: string
+}
+
+export async function getTextGenerationOptions(): Promise<TextGenerationOptionsResponse> {
+  return request<TextGenerationOptionsResponse>('/api/v1/ai/text-generation-options')
+}
+
+export async function createProposalGeneration(
+  projectId: string,
+  payload: CreateProposalGenerationPayload,
+): Promise<ProposalGenerationJob> {
+  return request<ProposalGenerationJob>(`/api/v1/projects/${projectId}/creative-proposal-generations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getProposalGeneration(
+  projectId: string,
+  jobId: string,
+): Promise<ProposalGenerationJob> {
+  return request<ProposalGenerationJob>(`/api/v1/projects/${projectId}/creative-proposal-generations/${jobId}`)
+}
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...init,

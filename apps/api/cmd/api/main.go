@@ -17,8 +17,12 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/httpserver"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/postgres"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgeneration"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
 
@@ -38,6 +42,7 @@ func main() {
 	var creativeBriefService *creativebrief.Service
 	var creativeProposalService *creativeproposal.Service
 	var scriptService *script.Service
+	var proposalGenerationService *proposalgenerationjob.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -49,13 +54,42 @@ func main() {
 			logger.Error("database ping failed", "error", err)
 			os.Exit(1)
 		}
-		projectService = project.NewService(postgres.NewProjectRepository(pool))
-		creativeBriefService = creativebrief.NewService(postgres.NewCreativeBriefRepository(pool))
-		creativeProposalService = creativeproposal.NewService(postgres.NewCreativeProposalRepository(pool))
-		scriptService = script.NewService(postgres.NewScriptRepository(pool))
+		projectRepo := postgres.NewProjectRepository(pool)
+		briefRepo := postgres.NewCreativeBriefRepository(pool)
+		proposalRepo := postgres.NewCreativeProposalRepository(pool)
+		scriptRepo := postgres.NewScriptRepository(pool)
+		jobsRepo := postgres.NewJobRepository(pool)
+
+		projectService = project.NewService(projectRepo)
+		creativeBriefService = creativebrief.NewService(briefRepo)
+		creativeProposalService = creativeproposal.NewService(proposalRepo)
+		scriptService = script.NewService(scriptRepo)
+
+		providerRegistry := providers.NewRegistry()
+		generationEngine := proposalgeneration.New(providerRegistry)
+		proposalJobHandler := proposalgenerationjob.NewHandler(generationEngine, proposalRepo)
+
+		jobsRegistry := jobs.NewRegistry()
+		if err := jobsRegistry.Register(proposalgenerationjob.JobKind, proposalJobHandler); err != nil {
+			logger.Error("register proposal generation job handler failed", "error", err)
+			os.Exit(1)
+		}
+
+		executor := jobs.NewExecutor(jobsRepo, jobsRegistry, jobs.ExecutorConfig{
+			LeaseDuration:  30 * time.Second,
+			PollInterval:   1 * time.Second,
+			DefaultBackoff: 10 * time.Second,
+		})
+		go func() {
+			if err := executor.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("job executor failed", "error", err)
+			}
+		}()
+
+		proposalGenerationService = proposalgenerationjob.NewService(providerRegistry, jobsRepo, projectRepo, briefRepo)
 	}
 
-	server := httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, actor.NewLocalResolver(cfg))
+	server := httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, actor.NewLocalResolver(cfg))
 	errCh := make(chan error, 1)
 
 	go func() {

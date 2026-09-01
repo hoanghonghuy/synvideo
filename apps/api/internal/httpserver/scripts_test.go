@@ -69,6 +69,7 @@ func newTestScriptServer(svc ScriptService, resolver fakeScriptActorResolver) *h
 		nil,
 		nil,
 		svc,
+		nil,
 		resolver,
 	)
 }
