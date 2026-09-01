@@ -1,9 +1,14 @@
 package proposalgenerationjob_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -17,6 +22,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/fake"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 )
 
 type mockProposalRepo struct {
@@ -277,4 +283,224 @@ func TestHandler_GenerationErrors(t *testing.T) {
 			t.Fatalf("expected retryable GENERATION_PERSISTENCE_FAILED, got: %v", err)
 		}
 	})
+}
+
+type mockResolver struct {
+	resolveFn func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error)
+}
+
+func (m *mockResolver) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+	if m.resolveFn != nil {
+		return m.resolveFn(ctx, ownerID, providerID, modelID)
+	}
+	return nil, providers.ErrProviderUnavailable
+}
+
+func TestHandler_WithResolver(t *testing.T) {
+	t.Run("resolves owner generator dynamically and produces draft", func(t *testing.T) {
+		var resolvedOwnerID uuid.UUID
+		res := &mockResolver{
+			resolveFn: func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+				resolvedOwnerID = ownerID
+				return fake.NewTextGenerator(validProposalJSON()), nil
+			},
+		}
+		mockRepo := &mockProposalRepo{
+			createdDraft: creativeproposal.CreativeProposal{Version: 3},
+		}
+		handler := proposalgenerationjob.NewHandlerWithResolver(res, mockRepo)
+
+		job := sampleJob(validPayload())
+		out, err := handler.Handle(context.Background(), job)
+		if err != nil {
+			t.Fatalf("handle with resolver: %v", err)
+		}
+		if resolvedOwnerID != job.OwnerID {
+			t.Fatalf("expected resolved owner %v, got %v", job.OwnerID, resolvedOwnerID)
+		}
+
+		var result proposalgenerationjob.Result
+		if err := json.Unmarshal(out, &result); err != nil {
+			t.Fatalf("unmarshal result: %v", err)
+		}
+		if result.ProposalVersion != 3 {
+			t.Fatalf("expected ProposalVersion 3, got %d", result.ProposalVersion)
+		}
+	})
+
+	t.Run("credential unavailable at execution maps to retryable GENERATION_PROVIDER_UNAVAILABLE", func(t *testing.T) {
+		res := &mockResolver{
+			resolveFn: func(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error) {
+				return nil, providers.ErrProviderUnavailable
+			},
+		}
+		mockRepo := &mockProposalRepo{}
+		handler := proposalgenerationjob.NewHandlerWithResolver(res, mockRepo)
+
+		job := sampleJob(validPayload())
+		_, err := handler.Handle(context.Background(), job)
+		var retryErr *jobs.RetryableJobError
+		if !errors.As(err, &retryErr) || retryErr.Code != "GENERATION_PROVIDER_UNAVAILABLE" {
+			t.Fatalf("expected retryable GENERATION_PROVIDER_UNAVAILABLE, got: %v", err)
+		}
+	})
+}
+
+type memorySettingsRepository struct {
+	settings map[string]providersettings.Setting
+}
+
+func (m *memorySettingsRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]providersettings.Setting, error) {
+	return nil, nil
+}
+func (m *memorySettingsRepository) GetByOwnerAndProvider(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID) (providersettings.Setting, error) {
+	s, ok := m.settings[ownerID.String()+":"+string(providerID)]
+	if !ok {
+		return providersettings.Setting{}, providersettings.ErrSettingNotFound
+	}
+	return s, nil
+}
+func (m *memorySettingsRepository) Save(ctx context.Context, setting providersettings.Setting, expectedRevision *int) (providersettings.Setting, error) {
+	if m.settings == nil {
+		m.settings = make(map[string]providersettings.Setting)
+	}
+	setting.Revision = 1
+	m.settings[setting.OwnerID.String()+":"+string(setting.ProviderID)] = setting
+	return setting, nil
+}
+func (m *memorySettingsRepository) Delete(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, expectedRevision int) error {
+	delete(m.settings, ownerID.String()+":"+string(providerID))
+	return nil
+}
+
+func TestHandler_EndToEndOwnerCredentialResolutionAndIsolation(t *testing.T) {
+	ownerA := uuid.New()
+	ownerB := uuid.New()
+	keyA := "sk-owner-A-secret-key-11111"
+	keyB := "sk-owner-B-secret-key-22222"
+
+	var receivedAuthHeader string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuthHeader = r.Header.Get("Authorization")
+		if r.URL.Path != "/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		if receivedAuthHeader != "Bearer "+keyA && receivedAuthHeader != "Bearer "+keyB {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "chatcmpl-test",
+			"choices": []map[string]any{
+				{
+					"index": 0,
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": validProposalJSON(),
+					},
+					"finish_reason": "stop",
+				},
+			},
+		})
+	}))
+	defer upstream.Close()
+
+	cat, err := providersettings.NewCatalog([]providersettings.ProviderDefinition{
+		{
+			ProviderID:  "openai",
+			DisplayName: "OpenAI",
+			BaseURL:     upstream.URL,
+			Models: []providersettings.ModelDefinition{
+				{
+					ModelID:         "gpt-5-mini",
+					DisplayName:     "GPT-5 mini",
+					ExternalModelID: "gpt-5-mini",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+
+	masterKey := make([]byte, 32)
+	_, _ = rand.Read(masterKey)
+	cipher, err := providersettings.NewAESGCMCipher(hex.EncodeToString(masterKey), "v1")
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+
+	repo := &memorySettingsRepository{settings: make(map[string]providersettings.Setting)}
+	svc := providersettings.NewService(cat, repo, cipher, upstream.Client())
+
+	ctx := context.Background()
+	_, err = svc.PutSetting(ctx, ownerA, "openai", providersettings.PutSettingInput{
+		Enabled:         true,
+		EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
+		APIKey:          &keyA,
+	})
+	if err != nil {
+		t.Fatalf("put owner A setting: %v", err)
+	}
+
+	_, err = svc.PutSetting(ctx, ownerB, "openai", providersettings.PutSettingInput{
+		Enabled:         true,
+		EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
+		APIKey:          &keyB,
+	})
+	if err != nil {
+		t.Fatalf("put owner B setting: %v", err)
+	}
+
+	mockRepo := &mockProposalRepo{
+		createdDraft: creativeproposal.CreativeProposal{Version: 1},
+	}
+	handler := proposalgenerationjob.NewHandlerWithResolver(svc, mockRepo)
+
+	// Execute Job for Owner A
+	payloadA := validPayload()
+	payloadA.ProviderID = "openai"
+	payloadA.ModelID = "gpt-5-mini"
+
+	jobA := sampleJob(payloadA)
+	jobA.OwnerID = ownerA
+
+	outA, err := handler.Handle(ctx, jobA)
+	if err != nil {
+		t.Fatalf("handle job for owner A: %v", err)
+	}
+
+	// Verify Owner A's key was sent upstream and NOT Owner B's key
+	if receivedAuthHeader != "Bearer "+keyA {
+		t.Fatalf("expected Authorization 'Bearer %s', got %q", keyA, receivedAuthHeader)
+	}
+	// Verify durable job payload and result bytes are 100% secret-free
+	if bytes.Contains(jobA.Payload, []byte(keyA)) || bytes.Contains(jobA.Payload, []byte(keyB)) {
+		t.Fatalf("job payload contains sensitive API key")
+	}
+	if bytes.Contains(outA, []byte(keyA)) || bytes.Contains(outA, []byte(keyB)) {
+		t.Fatalf("job result contains sensitive API key")
+	}
+
+	// Execute Job for Owner B
+	jobB := sampleJob(payloadA)
+	jobB.OwnerID = ownerB
+
+	outB, err := handler.Handle(ctx, jobB)
+	if err != nil {
+		t.Fatalf("handle job for owner B: %v", err)
+	}
+
+	// Verify Owner B's key was sent upstream and NOT Owner A's key
+	if receivedAuthHeader != "Bearer "+keyB {
+		t.Fatalf("expected Authorization 'Bearer %s', got %q", keyB, receivedAuthHeader)
+	}
+	if bytes.Contains(jobB.Payload, []byte(keyA)) || bytes.Contains(jobB.Payload, []byte(keyB)) {
+		t.Fatalf("job payload contains sensitive API key")
+	}
+	if bytes.Contains(outB, []byte(keyA)) || bytes.Contains(outB, []byte(keyB)) {
+		t.Fatalf("job result contains sensitive API key")
+	}
 }

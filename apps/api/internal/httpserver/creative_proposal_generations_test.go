@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
@@ -23,6 +24,13 @@ type fakeProposalGenService struct {
 }
 
 func (f fakeProposalGenService) GetTextGenerationOptions(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+	if f.getOptionsFn != nil {
+		return f.getOptionsFn(ctx)
+	}
+	return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
+}
+
+func (f fakeProposalGenService) GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
 	if f.getOptionsFn != nil {
 		return f.getOptionsFn(ctx)
 	}
@@ -44,38 +52,94 @@ func (f fakeProposalGenService) GetGeneration(ctx context.Context, principal pro
 }
 
 func TestGetTextGenerationOptionsEndpoint(t *testing.T) {
-	service := fakeProposalGenService{
-		getOptionsFn: func(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
-			return proposalgenerationjob.TextGenerationOptionsResponse{
-				Providers: []proposalgenerationjob.TextGenerationOptionProvider{
-					{
-						ID:          "lab-provider",
-						DisplayName: "Lab Provider",
-						Models: []proposalgenerationjob.TextGenerationOptionModel{
-							{ID: "lab-model-v1", DisplayName: "Lab Model V1"},
+	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+	t.Run("authenticated owner returns scoped options", func(t *testing.T) {
+		calledOwnerID := uuid.Nil
+		service := fakeProposalGenService{
+			getOptionsFn: func(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+				t.Fatal("legacy global GetTextGenerationOptions must not be called")
+				return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
+			},
+		}
+		// override with owner-aware func
+		serviceWithOwner := fakeOwnerAwareProposalGenService{
+			fakeProposalGenService: service,
+			getOptionsForOwnerFn: func(ctx context.Context, oID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+				calledOwnerID = oID
+				return proposalgenerationjob.TextGenerationOptionsResponse{
+					Providers: []proposalgenerationjob.TextGenerationOptionProvider{
+						{
+							ID:          "lab-provider",
+							DisplayName: "Lab Provider",
+							Models: []proposalgenerationjob.TextGenerationOptionModel{
+								{ID: "lab-model-v1", DisplayName: "Lab Model V1"},
+							},
 						},
 					},
-				},
-			}, nil
-		},
-	}
+				}, nil
+			},
+		}
 
-	server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/ai/text-generation-options", nil)
-	rec := httptest.NewRecorder()
-	server.Handler.ServeHTTP(rec, req)
+		resolver := actor.NewLocalResolver(config.Config{Environment: "test", LocalActorID: &ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, serviceWithOwner, nil, resolver)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/ai/text-generation-options", nil)
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if calledOwnerID != ownerID {
+			t.Fatalf("expected owner ID %s, got %s", ownerID, calledOwnerID)
+		}
 
-	var resp proposalgenerationjob.TextGenerationOptionsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+		var resp proposalgenerationjob.TextGenerationOptionsResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(resp.Providers) != 1 || resp.Providers[0].ID != "lab-provider" {
+			t.Fatalf("unexpected providers response: %+v", resp)
+		}
+	})
+
+	t.Run("unauthenticated request returns 401 and does not expose global options", func(t *testing.T) {
+		service := fakeProposalGenService{
+			getOptionsFn: func(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+				t.Fatal("global GetTextGenerationOptions must not be called on unauthenticated request")
+				return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
+			},
+		}
+
+		resolver := actor.NewLocalResolver(config.Config{Environment: config.EnvironmentProduction})
+		server := New(config.Config{Environment: config.EnvironmentProduction}, nil, nil, nil, nil, nil, service, nil, resolver)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/ai/text-generation-options", nil)
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var errResp errorEnvelope
+		if err := json.Unmarshal(rec.Body.Bytes(), &errResp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if errResp.Error.Code != "principal_required" {
+			t.Fatalf("expected principal_required, got %s", errResp.Error.Code)
+		}
+	})
+}
+
+type fakeOwnerAwareProposalGenService struct {
+	fakeProposalGenService
+	getOptionsForOwnerFn func(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error)
+}
+
+func (f fakeOwnerAwareProposalGenService) GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error) {
+	if f.getOptionsForOwnerFn != nil {
+		return f.getOptionsForOwnerFn(ctx, ownerID)
 	}
-	if len(resp.Providers) != 1 || resp.Providers[0].ID != "lab-provider" {
-		t.Fatalf("unexpected providers response: %+v", resp)
-	}
+	return proposalgenerationjob.TextGenerationOptionsResponse{}, nil
 }
 
 func TestCreateProposalGenerationEndpoint(t *testing.T) {
@@ -100,7 +164,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -130,7 +194,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrCreativeBriefRequired
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -157,7 +221,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrProviderUnavailable
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -184,7 +248,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrGenerationRequestConflict
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -211,7 +275,7 @@ func TestCreateProposalGenerationEndpoint(t *testing.T) {
 				return proposalgenerationjob.ProposalGenerationJobView{}, proposalgenerationjob.ErrProjectNotFound
 			},
 		}
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		bodyBytes, _ := json.Marshal(map[string]any{
 			"request_id":  requestID.String(),
@@ -252,7 +316,7 @@ func TestGetProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposal-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()
@@ -278,7 +342,7 @@ func TestGetProposalGenerationEndpoint(t *testing.T) {
 			},
 		}
 
-		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, fixedResolver{ownerID: ownerID})
+		server := New(config.Config{Environment: "test"}, nil, nil, nil, nil, nil, service, nil, fixedResolver{ownerID: ownerID})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/creative-proposal-generations/"+jobID.String(), nil)
 		rec := httptest.NewRecorder()

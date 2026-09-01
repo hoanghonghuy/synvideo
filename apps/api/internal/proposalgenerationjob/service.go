@@ -15,6 +15,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgeneration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 )
 
 var (
@@ -69,8 +70,14 @@ type CreativeBriefRepository interface {
 	Get(ctx context.Context, ownerID uuid.UUID, projectID uuid.UUID) (creativebrief.CreativeBrief, error)
 }
 
+type TextProviderRuntime interface {
+	GetOwnerTextGenerationOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.TextGenerationOptionsResponse, error)
+	ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error)
+}
+
 type Service struct {
 	registry *providers.Registry
+	runtime  TextProviderRuntime
 	jobsRepo jobs.Repository
 	projects ProjectRepository
 	briefs   CreativeBriefRepository
@@ -90,7 +97,51 @@ func NewService(
 	}
 }
 
+func NewServiceWithRuntime(
+	runtime TextProviderRuntime,
+	jobsRepo jobs.Repository,
+	projects ProjectRepository,
+	briefs CreativeBriefRepository,
+) *Service {
+	return &Service{
+		runtime:  runtime,
+		jobsRepo: jobsRepo,
+		projects: projects,
+		briefs:   briefs,
+	}
+}
+
 func (s *Service) GetTextGenerationOptions(ctx context.Context) (TextGenerationOptionsResponse, error) {
+	return s.GetTextGenerationOptionsForOwner(ctx, uuid.Nil)
+}
+
+func (s *Service) GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (TextGenerationOptionsResponse, error) {
+	if s.runtime != nil && ownerID != uuid.Nil {
+		res, err := s.runtime.GetOwnerTextGenerationOptions(ctx, ownerID)
+		if err != nil {
+			return TextGenerationOptionsResponse{}, err
+		}
+		var provs []TextGenerationOptionProvider
+		for _, p := range res.Providers {
+			var mods []TextGenerationOptionModel
+			for _, m := range p.Models {
+				mods = append(mods, TextGenerationOptionModel{
+					ID:          string(m.ID),
+					DisplayName: m.DisplayName,
+				})
+			}
+			provs = append(provs, TextGenerationOptionProvider{
+				ID:          string(p.ID),
+				DisplayName: p.DisplayName,
+				Models:      mods,
+			})
+		}
+		if provs == nil {
+			provs = []TextGenerationOptionProvider{}
+		}
+		return TextGenerationOptionsResponse{Providers: provs}, nil
+	}
+
 	if s.registry == nil {
 		return TextGenerationOptionsResponse{Providers: []TextGenerationOptionProvider{}}, nil
 	}
@@ -182,12 +233,18 @@ func (s *Service) CreateGeneration(
 		return ProposalGenerationJobView{}, err
 	}
 
-	// 4. Resolve selected text-generation capability through accepted provider registry
-	if s.registry == nil {
-		return ProposalGenerationJobView{}, ErrProviderUnavailable
-	}
-	generator, _, err := s.registry.ResolveTextGenerator(providers.ProviderID(input.ProviderID), providers.ModelID(input.ModelID))
-	if err != nil || generator == nil {
+	// 4. Resolve selected text-generation capability through runtime or registry
+	if s.runtime != nil {
+		generator, err := s.runtime.ResolveTextGenerator(ctx, principal.OwnerID, providers.ProviderID(input.ProviderID), providers.ModelID(input.ModelID))
+		if err != nil || generator == nil {
+			return ProposalGenerationJobView{}, ErrProviderUnavailable
+		}
+	} else if s.registry != nil {
+		generator, _, err := s.registry.ResolveTextGenerator(providers.ProviderID(input.ProviderID), providers.ModelID(input.ModelID))
+		if err != nil || generator == nil {
+			return ProposalGenerationJobView{}, ErrProviderUnavailable
+		}
+	} else {
 		return ProposalGenerationJobView{}, ErrProviderUnavailable
 	}
 

@@ -208,7 +208,7 @@ func TestPutCreativeBriefEndpointRejectsServerControlledFields(t *testing.T) {
 
 func newCreativeBriefTestServer(ownerID uuid.UUID, service CreativeBriefService) *http.Server {
 	cfg := config.Config{Addr: ":0", Environment: config.EnvironmentTest}
-	return New(cfg, slog.Default(), nil, service, nil, nil, nil, fixedResolver{ownerID: ownerID})
+	return New(cfg, slog.Default(), nil, service, nil, nil, nil, nil, fixedResolver{ownerID: ownerID})
 }
 
 type fakeCreativeBriefService struct {

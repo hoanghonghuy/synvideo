@@ -16,6 +16,7 @@ import (
 
 type ProposalGenerationService interface {
 	GetTextGenerationOptions(ctx context.Context) (proposalgenerationjob.TextGenerationOptionsResponse, error)
+	GetTextGenerationOptionsForOwner(ctx context.Context, ownerID uuid.UUID) (proposalgenerationjob.TextGenerationOptionsResponse, error)
 	CreateGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, input proposalgenerationjob.CreateProposalGenerationInput) (proposalgenerationjob.ProposalGenerationJobView, error)
 	GetGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, jobID uuid.UUID) (proposalgenerationjob.ProposalGenerationJobView, error)
 }
@@ -45,7 +46,12 @@ type proposalGenerationJobResponse struct {
 }
 
 func (h creativeProposalGenerationHandler) getTextGenerationOptions(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.GetTextGenerationOptions(r.Context())
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	resp, err := h.service.GetTextGenerationOptionsForOwner(r.Context(), principal.OwnerID)
 	if err != nil {
 		writeProposalGenerationAPIError(w, err)
 		return
@@ -125,6 +131,10 @@ func (h creativeProposalGenerationHandler) get(w http.ResponseWriter, r *http.Re
 }
 
 func (h creativeProposalGenerationHandler) resolvePrincipal(w http.ResponseWriter, r *http.Request) (project.Principal, bool) {
+	if h.actorResolver == nil {
+		writeAPIError(w, project.ErrUnauthenticated)
+		return project.Principal{}, false
+	}
 	principal, err := h.actorResolver.Resolve(r)
 	if err != nil {
 		writeAPIError(w, project.ErrUnauthenticated)

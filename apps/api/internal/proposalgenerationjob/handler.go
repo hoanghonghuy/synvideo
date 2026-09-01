@@ -7,19 +7,34 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgeneration"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 )
+
+type TextGeneratorResolver interface {
+	ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.TextGenerator, error)
+}
 
 type Handler struct {
 	engine    *proposalgeneration.Engine
+	resolver  TextGeneratorResolver
 	proposals creativeproposal.Repository
 }
 
 func NewHandler(engine *proposalgeneration.Engine, proposals creativeproposal.Repository) *Handler {
 	return &Handler{
 		engine:    engine,
+		proposals: proposals,
+	}
+}
+
+func NewHandlerWithResolver(resolver TextGeneratorResolver, proposals creativeproposal.Repository) *Handler {
+	return &Handler{
+		resolver:  resolver,
 		proposals: proposals,
 	}
 }
@@ -46,7 +61,20 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		ModelID:    payload.ModelID,
 	}
 
-	candidate, err := h.engine.Generate(ctx, req)
+	var engine *proposalgeneration.Engine
+	if h.resolver != nil {
+		generator, err := h.resolver.ResolveTextGenerator(ctx, job.OwnerID, providers.ProviderID(payload.ProviderID), providers.ModelID(payload.ModelID))
+		if err != nil {
+			return nil, jobs.NewRetryableError("GENERATION_PROVIDER_UNAVAILABLE", err, nil)
+		}
+		engine = proposalgeneration.NewWithGenerator(generator)
+	} else if h.engine != nil {
+		engine = h.engine
+	} else {
+		return nil, jobs.NewRetryableError("GENERATION_PROVIDER_UNAVAILABLE", errors.New("no engine or resolver available"), nil)
+	}
+
+	candidate, err := engine.Generate(ctx, req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
