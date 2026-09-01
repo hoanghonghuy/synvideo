@@ -17,7 +17,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`, an
 | TASK-006 | AI Proposal domain, persistence and approval API | DONE | Accepted and squash-merged via PR #17 after Team Lead review, real PostgreSQL concurrency/owner-isolation coverage and green CI. |
 | TASK-007 | AI Proposal generation engine | DONE | Accepted and squash-merged via PR #16 after fixing in-flight context cancellation/deadline propagation; CI #74 green. |
 | TASK-008 | AI Proposal frontend workspace | DONE | Accepted/squash-merged PR #20 as `36418b8e...`; final list-load recovery regression fixed and CI #122 green. |
-| TASK-009 | AI Proposal generation job integration | CHANGES_REQUESTED | PR #28 head `f55917aa`; CI #141 green but internal job metadata leak, request-id race/replay semantics, removed TASK-008 regressions and succeeded-job UI recovery must be fixed. |
+| TASK-009 | AI Proposal generation job integration | CHANGES_REQUESTED | PR #28 head `6ca7ca4d`; CI #154 green. Prior four blockers fixed; remaining: strict job-payload decode, genuinely exercised duplicate-enqueue race test, and transient nonterminal status-poll recovery. |
 | TASK-010 | Durable job execution foundation | DONE | Accepted/squash-merged PR #21 as `f731f4b9...`; lease heartbeat/loss, exhausted attempts, retry cap, JSON-object boundaries and real PostgreSQL lifecycle coverage accepted; CI #109 green. |
 | TASK-011 | Script domain, persistence and approval API | DONE | Accepted/squash-merged PR #22 as `87c9849e...`; Unicode character semantics, latest-develop sync and CI #123 accepted. |
 | TASK-012 | Script generation engine | DONE | Accepted/squash-merged PR #24 as `0a3d2fb9...`; strict `script_v1`, long-form/Unicode/context/immutability coverage accepted; CI #128 green. |
@@ -35,7 +35,7 @@ Frozen contracts:
 - plus accepted Proposal/Jobs/Script/Scene Plan generation/provider contracts.
 
 Current implementation slots:
-- Dev A — TASK-009 `CHANGES_REQUESTED`: continue only in the existing TASK-009 worktree/PR #28 and fix the recorded review blockers.
+- Dev A — TASK-009 `CHANGES_REQUESTED`: continue only in the existing TASK-009 worktree/PR #28 and fix the three current review blockers.
 - Dev B — TASK-015 `READY`: Scene Plan domain/persistence foundation, canonical branch `feature/TASK-015-scene-plan-persistence`.
 - Dev C — TASK-016 `READY`: Media Asset + S3-compatible storage foundation, canonical branch `feature/TASK-016-media-asset-storage`.
 
@@ -50,10 +50,11 @@ These are substantial capabilities, not artificial micro-tasks:
 Primary write surfaces do not overlap. Migrations are `0007` and `0008` and do not reference each other's new tables, so they remain merge-order independent under the accepted migration runner.
 
 ## TASK-009 current review blockers
-1. `source_generation_job_id` must remain internal persistence metadata and never appear in public Proposal JSON.
-2. `request_id` replay/conflict behavior must remain idempotent even if current Brief/provider state changes and must deterministically reject conflicting concurrent reuse after duplicate enqueue races.
-3. Restore the TASK-008 regressions removed during the frontend test-harness refactor.
-4. A succeeded durable generation job whose Proposal list/version follow-up load transiently fails must remain recoverable without offering a Regenerate action that starts another AI job.
+1. Strictly decode the versioned durable job payload. Unknown fields must be rejected as terminal `GENERATION_INVALID_PAYLOAD` before provider/persistence work.
+2. Fix the duplicate-race regression test so it genuinely executes `initial lookup not-found -> Enqueue ErrDuplicateJob -> re-read winner`, covering both matching replay and conflicting reuse.
+3. Recover a transient status GET failure for a queued/running job by polling/retrying the same durable job ID; the UI must not remain permanently stuck or create a new generation request.
+
+The prior metadata-leak, replay-order/conflict, TASK-008 regression-restoration and succeeded-job Proposal-load recovery findings are accepted on head `6ca7ca4d`.
 
 ## Isolation / merge rules
 - **Each implementation task must run in its own dedicated Git worktree. The shared/control checkout remains on `develop`; agents must not switch that folder among task branches.**
