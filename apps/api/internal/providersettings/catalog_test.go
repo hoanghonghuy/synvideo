@@ -128,6 +128,51 @@ func TestCatalog_ValidationErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid base url with user info", func(t *testing.T) {
+		jsonConfig := `[
+			{
+				"provider_id": "openai",
+				"display_name": "OpenAI",
+				"base_url": "https://user:secret@api.openai.com/v1",
+				"models": [{"model_id": "m1", "display_name": "M1", "external_model_id": "m1"}]
+			}
+		]`
+		_, err := providersettings.NewCatalogFromJSON([]byte(jsonConfig))
+		if err == nil {
+			t.Fatal("expected error for base url with user info")
+		}
+	})
+
+	t.Run("invalid base url with fragment", func(t *testing.T) {
+		jsonConfig := `[
+			{
+				"provider_id": "openai",
+				"display_name": "OpenAI",
+				"base_url": "https://api.openai.com/v1#section",
+				"models": [{"model_id": "m1", "display_name": "M1", "external_model_id": "m1"}]
+			}
+		]`
+		_, err := providersettings.NewCatalogFromJSON([]byte(jsonConfig))
+		if err == nil {
+			t.Fatal("expected error for base url with fragment")
+		}
+	})
+
+	t.Run("invalid base url with unsupported scheme", func(t *testing.T) {
+		jsonConfig := `[
+			{
+				"provider_id": "openai",
+				"display_name": "OpenAI",
+				"base_url": "ftp://api.openai.com/v1",
+				"models": [{"model_id": "m1", "display_name": "M1", "external_model_id": "m1"}]
+			}
+		]`
+		_, err := providersettings.NewCatalogFromJSON([]byte(jsonConfig))
+		if err == nil {
+			t.Fatal("expected error for base url with ftp scheme")
+		}
+	})
+
 	t.Run("empty models list", func(t *testing.T) {
 		jsonConfig := `[
 			{

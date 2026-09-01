@@ -100,8 +100,8 @@ async function handleSave(provider: ProviderSettingView) {
     return
   }
 
-  const trimmedKey = form.apiKeyInput.trim()
-  if (!provider.configured && !trimmedKey) {
+  const rawKey = form.apiKeyInput
+  if (!provider.configured && rawKey.length === 0) {
     form.error = t('providerSettings.errors.apiKeyRequired')
     return
   }
@@ -121,8 +121,8 @@ async function handleSave(provider: ProviderSettingView) {
     if (provider.configured) {
       payload.revision = provider.revision
     }
-    if (trimmedKey) {
-      payload.api_key = trimmedKey
+    if (rawKey.length > 0) {
+      payload.api_key = rawKey
     }
 
     const updated = await saveProviderSetting(provider.id, payload)

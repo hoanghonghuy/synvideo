@@ -184,6 +184,12 @@ func NewRegistration(config Config) (providers.Registration, error) {
 	return registration, nil
 }
 
+// ValidateBaseURL validates the OpenAI-compatible base URL according to strict schema rules.
+func ValidateBaseURL(rawBaseURL string) error {
+	_, err := chatCompletionsEndpoint(rawBaseURL)
+	return err
+}
+
 func chatCompletionsEndpoint(rawBaseURL string) (string, error) {
 	baseURL := strings.TrimSpace(rawBaseURL)
 	if baseURL == "" {

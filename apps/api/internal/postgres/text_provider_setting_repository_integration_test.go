@@ -184,4 +184,81 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			t.Fatalf("expected ErrSettingNotFound on second delete, got %v", err)
 		}
 	})
+
+	t.Run("concurrent same-revision updates have exactly one winner", func(t *testing.T) {
+		concurrentOwner := uuid.New()
+		concurrentProvider := providers.ProviderID("openai")
+
+		initial, err := repo.Save(ctx, providersettings.Setting{
+			OwnerID:          concurrentOwner,
+			ProviderID:       concurrentProvider,
+			Enabled:          true,
+			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
+			APIKeyCiphertext: fakeCiphertext,
+			APIKeyNonce:      fakeNonce,
+			KeyVersion:       "v1",
+		}, nil)
+		if err != nil {
+			t.Fatalf("create initial setting for concurrency test: %v", err)
+		}
+		if initial.Revision != 1 {
+			t.Fatalf("expected revision 1, got %d", initial.Revision)
+		}
+
+		concurrency := 10
+		type result struct {
+			setting providersettings.Setting
+			err     error
+		}
+		results := make(chan result, concurrency)
+		baseRev := 1
+
+		for i := 0; i < concurrency; i++ {
+			go func(idx int) {
+				expectedRev := baseRev
+				res, sErr := repo.Save(ctx, providersettings.Setting{
+					OwnerID:          concurrentOwner,
+					ProviderID:       concurrentProvider,
+					Enabled:          idx%2 == 0,
+					EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
+					APIKeyCiphertext: []byte{byte(idx)},
+					APIKeyNonce:      fakeNonce,
+					KeyVersion:       "v1",
+				}, &expectedRev)
+				results <- result{setting: res, err: sErr}
+			}(i)
+		}
+
+		var successCount, staleCount, otherCount int
+		for i := 0; i < concurrency; i++ {
+			r := <-results
+			if r.err == nil {
+				successCount++
+				if r.setting.Revision != 2 {
+					t.Errorf("expected winner revision 2, got %d", r.setting.Revision)
+				}
+			} else if errors.Is(r.err, providersettings.ErrStaleRevision) {
+				staleCount++
+			} else {
+				otherCount++
+				t.Errorf("unexpected error in concurrent save: %v", r.err)
+			}
+		}
+
+		if successCount != 1 {
+			t.Fatalf("expected exactly 1 winner, got %d (stale: %d, other: %d)", successCount, staleCount, otherCount)
+		}
+		if staleCount != concurrency-1 {
+			t.Fatalf("expected %d stale competitors, got %d", concurrency-1, staleCount)
+		}
+
+		// Final check from DB confirms revision is 2
+		finalSetting, err := repo.GetByOwnerAndProvider(ctx, concurrentOwner, concurrentProvider)
+		if err != nil {
+			t.Fatalf("get final setting: %v", err)
+		}
+		if finalSetting.Revision != 2 {
+			t.Fatalf("expected final revision 2 in DB, got %d", finalSetting.Revision)
+		}
+	})
 }

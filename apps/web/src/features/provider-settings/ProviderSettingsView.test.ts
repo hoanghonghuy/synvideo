@@ -152,6 +152,46 @@ describe('ProviderSettingsView', () => {
     expect(wrapper.text()).toContain('Đã lưu cấu hình thành công.')
   })
 
+  it('preserves exact API key without trimming whitespace when submitting', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(createMockProvidersList()))
+
+    const wrapper = await mountProviderSettingsView()
+    await flushPromises()
+
+    const openrouterCard = wrapper.find('[data-provider-id="openrouter"]')
+
+    const toggleInput = openrouterCard.find<HTMLInputElement>('input.toggle-checkbox')
+    await toggleInput.setValue(true)
+
+    const modelCheckbox = openrouterCard.find<HTMLInputElement>('input[type="checkbox"]:not(.toggle-checkbox)')
+    await modelCheckbox.setValue(true)
+
+    const keyInput = openrouterCard.find<HTMLInputElement>('input.text-input')
+    const keyWithWhitespace = '  sk-key-with-spaces  '
+    await keyInput.setValue(keyWithWhitespace)
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'openrouter',
+        display_name: 'OpenRouter',
+        configured: true,
+        enabled: true,
+        has_api_key: true,
+        revision: 1,
+        models: [
+          { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: true },
+        ],
+      }),
+    )
+
+    await openrouterCard.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    const call = fetchMock.mock.calls[1] as [string, RequestInit]
+    const body = JSON.parse(call[1].body as string)
+    expect(body.api_key).toBe('  sk-key-with-spaces  ')
+  })
+
   it('updates configured provider preserving key when input is blank', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(createMockProvidersList()))
 

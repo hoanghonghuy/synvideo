@@ -186,6 +186,20 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("first create rejects non-nil revision", func(t *testing.T) {
+		revZero := 0
+		unconfProvider := providers.ProviderID("openrouter")
+		_, err := svc.PutSetting(ctx, ownerID, unconfProvider, providersettings.PutSettingInput{
+			Revision:        &revZero,
+			Enabled:         true,
+			EnabledModelIDs: []providers.ModelID{"claude-3-5-sonnet"},
+			APIKey:          &apiKey,
+		})
+		if !errors.Is(err, providersettings.ErrStaleRevision) {
+			t.Fatalf("expected ErrStaleRevision when revision provided on first create, got %v", err)
+		}
+	})
+
 	t.Run("successful initial create", func(t *testing.T) {
 		view, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
 			Enabled:         true,

@@ -2,14 +2,13 @@ package providersettings
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/openaicompat"
 )
 
 // ModelDefinition specifies the metadata and external upstream model mapping.
@@ -70,7 +69,7 @@ func NewCatalog(defs []ProviderDefinition) (*Catalog, error) {
 			return nil, fmt.Errorf("duplicate provider_id in catalog: %q", p.ProviderID)
 		}
 
-		if err := validateBaseURL(p.BaseURL); err != nil {
+		if err := openaicompat.ValidateBaseURL(p.BaseURL); err != nil {
 			return nil, fmt.Errorf("provider %q invalid base_url: %w", p.ProviderID, err)
 		}
 
@@ -133,31 +132,4 @@ func (c *Catalog) GetModel(providerID providers.ProviderID, modelID providers.Mo
 	}
 	m, ok := models[modelID]
 	return m, ok
-}
-
-func validateBaseURL(rawURL string) error {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return errors.New("base_url is required")
-	}
-
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
-	}
-
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("scheme must be http or https: %q", parsed.Scheme)
-	}
-	if parsed.Host == "" {
-		return errors.New("host is required")
-	}
-	if parsed.RawQuery != "" {
-		return errors.New("base_url must not contain query parameters")
-	}
-	if parsed.Fragment != "" {
-		return errors.New("base_url must not contain a URL fragment")
-	}
-
-	return nil
 }

@@ -115,9 +115,9 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return ProviderSettingView{}, fmt.Errorf("get existing setting: %w", err)
 	}
 
-	// First configuration: revision must be nil, api_key is required
+	// First configuration: revision must be omitted (nil), api_key is required
 	if !isExisting {
-		if input.Revision != nil && *input.Revision != 0 {
+		if input.Revision != nil {
 			return ProviderSettingView{}, ErrStaleRevision
 		}
 		if input.APIKey == nil || strings.TrimSpace(*input.APIKey) == "" {
