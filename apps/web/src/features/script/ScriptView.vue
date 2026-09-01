@@ -46,6 +46,7 @@ const dirty = ref(false)
 const confirmApproval = ref(false)
 const loadErrorCode = ref('')
 const mutationErrorCode = ref('')
+const confirmStaleReload = ref(false)
 const failedVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 
@@ -159,6 +160,7 @@ async function loadVersion(version: number, discardDirty = false): Promise<boole
   loadErrorCode.value = ''
   mutationErrorCode.value = ''
   fieldErrors.value = {}
+  confirmStaleReload.value = false
   try {
     const script = await getScript(projectID(), version)
     applyScript(script)
@@ -230,9 +232,17 @@ function handleMutationError(error: unknown) {
   mutationErrorCode.value = 'request_failed'
 }
 
-function requestID(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+function requestID(): string | null {
+  if (typeof crypto === 'undefined') return null
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  if (typeof crypto.getRandomValues !== 'function') return null
+
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 async function startGeneration() {
@@ -241,8 +251,13 @@ async function startGeneration() {
   generationErrorCode.value = ''
   mutationErrorCode.value = ''
   try {
+    const requestId = requestID()
+    if (!requestId) {
+      generationErrorCode.value = 'GENERATION_REQUEST_ID_UNAVAILABLE'
+      return
+    }
     const job = await createScriptGeneration(projectID(), {
-      request_id: requestID(),
+      request_id: requestId,
       provider_id: selectedProviderId.value,
       model_id: selectedModelId.value,
     })
@@ -355,6 +370,15 @@ async function discardAndSwitch() {
 
 function cancelSwitch() {
   pendingVersion.value = null
+}
+
+function requestStaleReload() {
+  confirmStaleReload.value = true
+}
+
+async function confirmStaleReloadAndDiscard() {
+  confirmStaleReload.value = false
+  if (selectedVersion.value !== null) await loadVersion(selectedVersion.value, true)
 }
 
 async function retryLoad() {
@@ -717,6 +741,39 @@ function errorMessage(code: string) {
               >
                 {{ field }}: {{ t(`script.validation.${error}`) }}
               </p>
+              <template v-if="mutationErrorCode === 'STALE_REVISION'">
+                <button
+                  v-if="!confirmStaleReload"
+                  class="secondary-button"
+                  data-testid="reload-stale-script"
+                  type="button"
+                  @click="requestStaleReload"
+                >
+                  {{ t('script.actions.reloadAfterConflict') }}
+                </button>
+                <div
+                  v-else
+                  class="notice warning"
+                  data-testid="confirm-stale-reload"
+                >
+                  <p>{{ t('script.states.confirmStaleReload') }}</p>
+                  <button
+                    class="primary-button"
+                    data-testid="confirm-reload-stale-script"
+                    type="button"
+                    @click="confirmStaleReloadAndDiscard"
+                  >
+                    {{ t('script.actions.confirmReloadAfterConflict') }}
+                  </button>
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    @click="confirmStaleReload = false"
+                  >
+                    {{ t('script.actions.cancel') }}
+                  </button>
+                </div>
+              </template>
             </div>
             <div
               v-if="isReadOnly"
@@ -738,15 +795,18 @@ function errorMessage(code: string) {
                 <legend>{{ t('script.fields.section', { value: index + 1 }) }}</legend>
                 <label class="field"><span>{{ t('script.fields.key') }}</span><input
                   v-model="section.key"
+                  :disabled="isReadOnly"
                   :name="`section_key_${index}`"
                   autocomplete="off"
                 ><small v-if="fieldErrors[`sections[${index}].key`]">{{ t(`script.validation.${fieldErrors[`sections[${index}].key`]}`) }}</small></label>
                 <label class="field"><span>{{ t('script.fields.heading') }}</span><input
                   v-model="section.heading"
+                  :disabled="isReadOnly"
                   :name="`section_heading_${index}`"
                 ></label>
                 <label class="field"><span>{{ t('script.fields.body') }}</span><textarea
                   v-model="section.body"
+                  :disabled="isReadOnly"
                   :name="`section_body_${index}`"
                   rows="7"
                 /><small v-if="fieldErrors[`sections[${index}].body`]">{{ t(`script.validation.${fieldErrors[`sections[${index}].body`]}`) }}</small></label>

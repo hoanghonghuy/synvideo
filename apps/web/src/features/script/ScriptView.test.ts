@@ -115,7 +115,11 @@ describe('ScriptView', () => {
   it('shows source staleness and preserves local edits after a stale save response', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scripts`, [draftScript])
-    route('GET', `/api/v1/projects/${projectId}/scripts/1`, draftScript)
+    let scriptLoads = 0
+    routeFn('GET', `/api/v1/projects/${projectId}/scripts/1`, () => {
+      scriptLoads++
+      return jsonResponse(scriptLoads === 1 ? draftScript : { ...draftScript, revision: 3, sections: [{ ...draftScript.sections[0], body: 'Bản trên máy chủ' }] })
+    })
     route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [{ ...approvedProposal, version: 3 }])
     route('GET', '/api/v1/ai/text-generation-options', providers)
     route('PUT', `/api/v1/projects/${projectId}/scripts/1`, { error: { code: 'STALE_REVISION' } }, 409)
@@ -131,6 +135,11 @@ describe('ScriptView', () => {
     expect(wrapper.find('[data-testid="script-load-error"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Script trên máy chủ đã thay đổi.')
     expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).value).toBe('Bản chỉnh sửa cần được giữ lại')
+    await wrapper.find('[data-testid="reload-stale-script"]').trigger('click')
+    expect(wrapper.find('[data-testid="confirm-stale-reload"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="confirm-reload-stale-script"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).value).toBe('Bản trên máy chủ')
   })
 
   it('renders a retryable script load error instead of a false empty state', async () => {
@@ -143,6 +152,95 @@ describe('ScriptView', () => {
 
     expect(wrapper.find('[data-testid="script-empty-state"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="retry-script-list"]').exists()).toBe(true)
+  })
+
+  it('guides creators to AI settings when no provider/model is available', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [])
+    route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="no-script-providers-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="generate-script-btn"]').exists()).toBe(false)
+    expect(wrapper.find('a[href="/settings/ai-providers"]').exists()).toBe(true)
+  })
+
+  it('keeps approved and superseded history versions read-only', async () => {
+    const supersededScript = { ...approvedScript, version: 3, status: 'superseded' as const, approved_at: null }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [supersededScript, approvedScript])
+    route('GET', `/api/v1/projects/${projectId}/scripts/3`, supersededScript)
+    route('GET', `/api/v1/projects/${projectId}/scripts/2`, approvedScript)
+    route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+
+    const wrapper = await mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="version-3"]').text()).toContain('Đã thay thế')
+    expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).disabled).toBe(true)
+    await wrapper.find('[data-testid="version-2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="version-2"]').text()).toContain('Đã duyệt')
+    expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).disabled).toBe(true)
+  })
+
+  it('saves a clean optimistic revision and opens the updated draft', async () => {
+    const updatedScript = { ...draftScript, revision: 3, notes: 'Đã lưu ghi chú mới' }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [draftScript])
+    route('GET', `/api/v1/projects/${projectId}/scripts/1`, draftScript)
+    route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+    route('PUT', `/api/v1/projects/${projectId}/scripts/1`, updatedScript)
+
+    const wrapper = await mountView()
+    await flushPromises()
+    await wrapper.find('[name="notes"]').setValue('Đã lưu ghi chú mới')
+    await wrapper.find('form.script-form').trigger('submit')
+    await flushPromises()
+
+    const putCall = fetchMock.mock.calls.find(([url, init]) => url === `/api/v1/projects/${projectId}/scripts/1` && init?.method === 'PUT')
+    expect(JSON.parse(String(putCall?.[1]?.body)).revision).toBe(2)
+    expect(wrapper.text()).toContain('Đã lưu Script.')
+    expect(wrapper.text()).toContain('Bản sửa 3')
+  })
+
+  it('approves a clean draft and preserves it after an approval conflict', async () => {
+    const approvedDraft = { ...draftScript, status: 'approved' as const, approved_at: '2026-08-31T10:00:00Z' }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [draftScript])
+    route('GET', `/api/v1/projects/${projectId}/scripts/1`, draftScript)
+    route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+    let listCalls = 0
+    routeFn('GET', `/api/v1/projects/${projectId}/scripts`, () => {
+      listCalls++
+      return jsonResponse(listCalls === 1 ? [draftScript] : [approvedDraft])
+    })
+    route('POST', `/api/v1/projects/${projectId}/scripts/1/approve`, approvedDraft)
+
+    const wrapper = await mountView()
+    await flushPromises()
+    await wrapper.find('[data-testid="approve-script"]').trigger('click')
+    await wrapper.find('[data-testid="confirm-approve-script"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Đã duyệt')
+    expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).disabled).toBe(true)
+  })
+
+  it('preserves the current draft after an approval conflict', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [draftScript])
+    route('GET', `/api/v1/projects/${projectId}/scripts/1`, draftScript)
+    route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+    route('POST', `/api/v1/projects/${projectId}/scripts/1/approve`, { error: { code: 'STALE_REVISION' } }, 409)
+
+    const staleWrapper = await mountView()
+    await flushPromises()
+    await staleWrapper.find('[data-testid="approve-script"]').trigger('click')
+    await staleWrapper.find('[data-testid="confirm-approve-script"]').trigger('click')
+    await flushPromises()
+    expect(staleWrapper.text()).toContain('Script trên máy chủ đã thay đổi.')
+    expect(staleWrapper.find('[name="section_body_0"]').exists()).toBe(true)
   })
 
   it('polls the same job and loads exactly the succeeded script version', async () => {
@@ -245,6 +343,52 @@ describe('ScriptView', () => {
       vi.useRealTimers()
     }
   })
+
+  it('uses distinct valid UUIDs for generation and terminal retry without persisting secrets', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let randomSeed = 1
+    vi.stubGlobal('crypto', {
+      getRandomValues(bytes: Uint8Array) {
+        bytes.fill(randomSeed++)
+        return bytes
+      },
+    })
+    try {
+      route('GET', `/api/v1/projects/${projectId}`, project)
+      route('GET', `/api/v1/projects/${projectId}/scripts`, [draftScript])
+      route('GET', `/api/v1/projects/${projectId}/scripts/1`, draftScript)
+      route('GET', `/api/v1/projects/${projectId}/creative-proposals`, [approvedProposal])
+      route('GET', '/api/v1/ai/text-generation-options', providers)
+      const postBodies: Record<string, unknown>[] = []
+      routeFn('POST', `/api/v1/projects/${projectId}/script-generations`, (_url, init) => {
+        postBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return jsonResponse(job('queued'), 202)
+      })
+      route('GET', `/api/v1/projects/${projectId}/script-generations/${jobId}`, job('failed'))
+
+      const wrapper = await mountView()
+      await flushPromises()
+      await wrapper.find('[data-testid="generate-script-btn"]').trigger('click')
+      await flushPromises()
+      expect(Object.keys(window.sessionStorage)).toEqual([`script_job_${projectId}`])
+      expect(window.sessionStorage.getItem(`script_job_${projectId}`)).toBe(jobId)
+      expect(JSON.stringify(postBodies[0])).not.toContain('secret')
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="job-error-banner"]').exists()).toBe(true)
+      await wrapper.find('[data-testid="retry-generation-btn"]').trigger('click')
+      await flushPromises()
+
+      expect(postBodies).toHaveLength(2)
+      expect(postBodies.every((body) => typeof body.request_id === 'string' && isUUID(String(body.request_id)))).toBe(true)
+      expect(postBodies[0]?.request_id).not.toBe(postBodies[1]?.request_id)
+      expect(wrapper.find('[name="section_body_0"]').exists()).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
+  })
 })
 
 async function mountView() {
@@ -285,4 +429,8 @@ function job(state: 'queued' | 'running' | 'succeeded' | 'failed', scriptVersion
 
 function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) }
+}
+
+function isUUID(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
