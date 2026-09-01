@@ -1,11 +1,13 @@
 # TASK-017 — Secure BYOK text provider settings and owner-scoped runtime
 
-Status: READY
+Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-005, TASK-009 and TASK-013 accepted; frozen `BYOK_TEXT_PROVIDER_RUNTIME_V1`
 Wave: WAVE-F1-G
 Branch: `feature/TASK-017-byok-provider-runtime`
 Base: `develop`
+Active PR: #35
+Latest reviewed head: `488467e0651824e11d86e09160e9c2a47b70143a`
 
 ## Goal
 Make AI Proposal generation genuinely usable with live creator-provided API credentials by adding secure owner-scoped BYOK settings, encrypted-at-rest credential persistence, safe provider/model settings UI, and runtime resolution of the accepted OpenAI-compatible adapter.
@@ -47,7 +49,7 @@ Do not touch:
 - render/publish/media generation;
 - deterministic fake provider production registration.
 
-TASK-015 and TASK-016 are concurrently in review-fix mode and their write surfaces must remain isolated.
+TASK-015 and TASK-016 are accepted/DONE; do not reopen their write surfaces while finishing this review fix.
 
 ## Scope
 ### Secure persisted owner settings
@@ -135,10 +137,15 @@ Truthful RED → GREEN → REFACTOR must cover at least:
 - [ ] No Scene Plan/media/Script/render/publish scope leakage.
 - [ ] TDD/security evidence is truthful and full CI is green.
 
-## Worktree
-Atomically create the absent remote branch ref `feature/TASK-017-byok-provider-runtime` from the latest `origin/develop`, then use a dedicated TASK-017 worktree. The shared/control checkout stays on `develop`.
+## Current Team Lead review gate
+The six blockers from the first PR review are accepted on head `488467e0...` and CI #169 is green. One production configuration-boundary blocker remains:
 
-Before claiming the branch, confirm it does not already exist remotely. Do not use a plain same-base push as an exclusive lock.
+1. `providersettings.NewCatalog` must fail validation for definition values the accepted TASK-013 adapter would reject later at runtime, including non-canonical/whitespace external model IDs and invalid timeout/max-response-size bounds. Add deterministic regressions.
+2. If `SYNVIDEO_TEXT_PROVIDER_DEFINITIONS` is explicitly supplied but invalid, startup/config initialization must fail rather than logging the catalog error and continuing with a nil catalog / silently disabled BYOK. The frozen contract separately permits missing/invalid credential encryption keys to disable BYOK safely; do not conflate the two cases.
+3. Sync/rebase PR #35 onto latest `develop` after TASK-015/TASK-016 merges and rerun targeted config/catalog tests, race tests, frontend verification and full CI.
+
+## Worktree
+Continue only on the existing TASK-017 worktree/branch/PR. The shared control checkout stays on `develop`.
 
 Do not self-merge or self-mark DONE.
 
