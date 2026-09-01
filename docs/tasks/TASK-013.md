@@ -1,11 +1,27 @@
 # TASK-013 — Live OpenAI-compatible text provider adapter foundation
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-005 accepted; frozen `OPENAI_COMPAT_TEXT_PROVIDER_V1`
 Wave: WAVE-F1-E
 Branch: `feature/TASK-013-openai-compatible-provider`
 Base: `develop`
+Accepted PR: #29
+Squash merge: `177e78fc27a8af2990c2263b689e3d41a1785499`
+
+## Acceptance record
+Team Lead logical APPROVE on head `9a3d0ca8` with CI #142 green.
+
+Accepted behavior:
+- isolated `apps/api/internal/providers/openaicompat/**` scope;
+- OpenAI-compatible chat-completions adapter implements accepted `providers.TextGenerator`;
+- stable internal provider/model IDs map to configured external model IDs;
+- credential is supplied only at request time and never exposed through metadata/presentation errors;
+- redirects are disabled to prevent credential forwarding;
+- timeout/response size are bounded and there is no internal retry loop;
+- auth/rate-limit/5xx/malformed responses are safely classified;
+- context cancellation/deadline propagates;
+- deterministic `httptest` coverage, race/full CI and no real CI network.
 
 ## Goal
 Implement the first live-network text-generation adapter behind the accepted provider-neutral capability using the frozen OpenAI-compatible HTTP contract.
@@ -20,7 +36,7 @@ This task is infrastructure/provider-boundary work. It intentionally does not ow
 - accepted `apps/api/internal/providers/**` contracts/tests.
 
 ## Frozen contract
-`docs/contracts/OPENAI_COMPAT_TEXT_PROVIDER_V1.md` is authoritative.
+`OPENAI_COMPAT_TEXT_PROVIDER_V1.md` is authoritative.
 
 ## Primary ownership
 - `apps/api/internal/providers/openaicompat/**`;
@@ -61,19 +77,17 @@ Truthful RED -> GREEN -> REFACTOR covers at least:
 12. no vendor SDK/core-domain leakage.
 
 ## Acceptance criteria
-- [ ] Implements frozen OpenAI-compatible provider contract.
-- [ ] Uses only accepted provider-neutral interfaces outside the adapter package.
-- [ ] No credential can escape through request domain types or safe errors.
-- [ ] No unbounded internal retry; durable retry remains a higher-layer concern.
-- [ ] Context cancellation/deadline and resource bounds are proven.
-- [ ] Deterministic local upstream tests, gofmt/vet/race/tests/build/full CI green.
-- [ ] No main/httpserver/web/jobs/persistence scope leakage.
-- [ ] TDD evidence truthful.
+- [x] Implements frozen OpenAI-compatible provider contract.
+- [x] Uses only accepted provider-neutral interfaces outside the adapter package.
+- [x] No credential can escape through request domain types or safe errors.
+- [x] No unbounded internal retry; durable retry remains a higher-layer concern.
+- [x] Context cancellation/deadline and resource bounds are proven.
+- [x] Deterministic local upstream tests, gofmt/vet/race/tests/build/full CI green.
+- [x] No main/httpserver/web/jobs/persistence scope leakage.
+- [x] TDD evidence truthful.
 
 ## Follow-on
 A later secure BYOK/runtime task will store/manage creator credentials, expose provider settings and register this adapter into production runtime. TASK-009 may safely merge before that with an empty production provider catalog.
 
-## Worktree / claim
-Atomically claim the remote task branch, then work only in a dedicated TASK-013 worktree.
-
-Do not self-merge or self-mark DONE.
+## Worktree cleanup
+The TASK-013 implementation worktree should be removed after confirming the merged commit before this developer claims another task.
