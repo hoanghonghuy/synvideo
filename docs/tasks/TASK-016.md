@@ -1,11 +1,15 @@
 # TASK-016 — Media Asset + S3-compatible storage foundation
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-002 accepted; frozen `MEDIA_ASSET_STORAGE_V1`
 Wave: WAVE-F1-F
 Branch: `feature/TASK-016-media-asset-storage`
 Base: `develop`
+Accepted PR: #33
+Accepted head: `7141c02b4c39db6947161a53d8aa33027304f445`
+Squash merge: `a12a98569b817027c0de948a301586437cb090a4`
+CI: #167 green
 
 ## Goal
 Implement the durable Stage 8 media metadata and vendor-neutral object-storage foundation, including an S3-compatible adapter/local development path, before scene-level generation/acquisition orchestration is added.
@@ -73,17 +77,23 @@ Truthful RED → GREEN → REFACTOR must cover at least:
 13. `go test -race`, integration tests, Docker Compose validation and `make verify`.
 
 ## Acceptance criteria
-- [ ] Frozen `MEDIA_ASSET_STORAGE_V1` implemented without drift.
-- [ ] Migration is exactly `0008_create_media_assets.sql`.
-- [ ] Core media domain does not depend on AWS/MinIO SDK types.
-- [ ] Credentials/endpoints/bucket internals do not leak into asset resources or presentation-safe errors.
-- [ ] S3-compatible local path is deterministic and internet-free in CI/integration testing.
-- [ ] Cross-owner/project object access is prevented at the metadata/service boundary.
-- [ ] Failure windows and compensation behavior are explicitly tested.
-- [ ] No HTTP/frontend/jobs/Scene Plan/provider-generation scope leakage.
-- [ ] TDD evidence is truthful.
+- [x] Frozen `MEDIA_ASSET_STORAGE_V1` implemented without drift.
+- [x] Migration is exactly `0008_create_media_assets.sql`.
+- [x] Core media domain does not depend on AWS/MinIO SDK types.
+- [x] Credentials/endpoints/bucket internals do not leak into asset resources or presentation-safe errors.
+- [x] S3-compatible local path is deterministic and internet-free in CI/integration testing.
+- [x] Cross-owner/project object access is prevented at the metadata/service boundary.
+- [x] Failure windows and compensation behavior are explicitly tested.
+- [x] No HTTP/frontend/jobs/Scene Plan/provider-generation scope leakage.
+- [x] TDD evidence is truthful.
+
+## Accepted review gate
+- repository persistence enforces owner/project consistency;
+- canonical object-key identity is bound to both `ProjectID` and asset `ID`;
+- repository validates assets before INSERT so internal callers cannot bypass identity validation;
+- real PostgreSQL regressions reject mismatched ownership/key identity;
+- foreign owner/project `Open` and `Delete` never reach object storage;
+- S3 adapter, streaming hash/size, compensation, timeout/retry and secret-safe error behavior remain accepted.
 
 ## Worktree
-Atomically create the absent remote branch ref, then create/use a dedicated TASK-016 worktree. The shared control checkout stays on `develop`.
-
-Do not self-merge or self-mark DONE.
+Merged task worktree should be removed/pruned before the developer claims another task.
