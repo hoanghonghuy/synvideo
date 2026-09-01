@@ -151,12 +151,28 @@ func (r ImageGenerationResponse) Validate() error {
 		return NewMalformedResponseError(errors.New("image output count is invalid"))
 	}
 	for _, output := range r.Outputs {
-		if output.Binary == nil || !validGeneratedMIME(output.Binary.MIMEType()) || output.Binary.Size() < -1 {
-			return NewMalformedResponseError(errors.New("image output binary is invalid"))
+		if err := ValidateImageBinary(output.Binary); err != nil {
+			return err
 		}
 		if output.Width != nil && *output.Width < 1 || output.Height != nil && *output.Height < 1 {
 			return NewMalformedResponseError(errors.New("image dimensions are invalid"))
 		}
+	}
+	return nil
+}
+
+// ValidateImageBinary rejects generated binaries that are not image media.
+func ValidateImageBinary(binary GeneratedBinary) error {
+	if binary == nil || !validImageMIME(binary.MIMEType()) || binary.Size() < -1 {
+		return NewMalformedResponseError(errors.New("image output binary is invalid"))
+	}
+	return nil
+}
+
+// ValidateVideoBinary rejects generated binaries that are not video media.
+func ValidateVideoBinary(binary GeneratedBinary) error {
+	if binary == nil || !validVideoMIME(binary.MIMEType()) || binary.Size() < -1 {
+		return NewMalformedResponseError(errors.New("video output binary is invalid"))
 	}
 	return nil
 }
@@ -276,8 +292,21 @@ func validReferenceMIME(mime string) bool {
 }
 
 func validGeneratedMIME(mime string) bool {
+	return validImageMIME(mime) || validVideoMIME(mime)
+}
+
+func validImageMIME(mime string) bool {
 	switch mime {
-	case "image/png", "image/jpeg", "image/webp", "video/mp4", "video/webm":
+	case "image/png", "image/jpeg", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func validVideoMIME(mime string) bool {
+	switch mime {
+	case "video/mp4", "video/webm":
 		return true
 	default:
 		return false

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ func (g *ImageGenerator) WithDelay(delay time.Duration) *ImageGenerator {
 	return g
 }
 
-func cloneImageRequest(req providers.ImageGenerationRequest) providers.ImageGenerationRequest {
+func cloneImageRequest(ctx context.Context, req providers.ImageGenerationRequest) (providers.ImageGenerationRequest, error) {
 	cloned := req
 	if req.OutputCount != nil {
 		value := *req.OutputCount
@@ -65,14 +66,14 @@ func cloneImageRequest(req providers.ImageGenerationRequest) providers.ImageGene
 	if len(req.ReferenceImages) > 0 {
 		cloned.ReferenceImages = make([]providers.BinaryInput, len(req.ReferenceImages))
 		for i, reference := range req.ReferenceImages {
-			if cloneable, ok := reference.(providers.BinaryInputCloner); ok {
-				cloned.ReferenceImages[i] = cloneable.Clone()
-			} else {
-				cloned.ReferenceImages[i] = reference
+			var err error
+			cloned.ReferenceImages[i], err = snapshotBinaryInput(ctx, reference)
+			if err != nil {
+				return providers.ImageGenerationRequest{}, err
 			}
 		}
 	}
-	return cloned
+	return cloned, nil
 }
 
 func (g *ImageGenerator) Requests() []providers.ImageGenerationRequest {
@@ -80,7 +81,7 @@ func (g *ImageGenerator) Requests() []providers.ImageGenerationRequest {
 	defer g.mu.Unlock()
 	requests := make([]providers.ImageGenerationRequest, len(g.requests))
 	for i, request := range g.requests {
-		requests[i] = cloneImageRequest(request)
+		requests[i], _ = cloneImageRequest(context.Background(), request)
 	}
 	return requests
 }
@@ -91,6 +92,10 @@ func (g *ImageGenerator) GenerateImage(ctx context.Context, req providers.ImageG
 	}
 	if err := req.Validate(); err != nil {
 		return providers.ImageGenerationResponse{}, err
+	}
+	clonedRequest, err := cloneImageRequest(ctx, req)
+	if err != nil {
+		return providers.ImageGenerationResponse{}, providers.NewInvalidRequestError(err)
 	}
 	if g.delay > 0 {
 		timer := time.NewTimer(g.delay)
@@ -106,7 +111,7 @@ func (g *ImageGenerator) GenerateImage(ctx context.Context, req providers.ImageG
 	if g.generateErr != nil {
 		return providers.ImageGenerationResponse{}, g.generateErr
 	}
-	g.requests = append(g.requests, cloneImageRequest(req))
+	g.requests = append(g.requests, clonedRequest)
 	count := 1
 	if req.OutputCount != nil {
 		count = *req.OutputCount
@@ -123,7 +128,11 @@ func (g *ImageGenerator) GenerateImage(ctx context.Context, req providers.ImageG
 		}
 		outputs = append(outputs, providers.GeneratedImage{Binary: binary})
 	}
-	return providers.ImageGenerationResponse{ProviderID: req.ProviderID, ModelID: req.ModelID, Outputs: outputs}, nil
+	response := providers.ImageGenerationResponse{ProviderID: req.ProviderID, ModelID: req.ModelID, Outputs: outputs}
+	if err := response.Validate(); err != nil {
+		return providers.ImageGenerationResponse{}, err
+	}
+	return response, nil
 }
 
 // VideoGenerator is a deterministic fake with queued -> running -> succeeded states.
@@ -160,18 +169,20 @@ func (g *VideoGenerator) WithOperationFailure(err error) *VideoGenerator {
 }
 func (g *VideoGenerator) WithDelay(delay time.Duration) *VideoGenerator { g.delay = delay; return g }
 
-func cloneVideoRequest(req providers.VideoGenerationRequest) providers.VideoGenerationRequest {
+func cloneVideoRequest(ctx context.Context, req providers.VideoGenerationRequest) (providers.VideoGenerationRequest, error) {
 	cloned := req
 	if req.DurationSeconds != nil {
 		value := *req.DurationSeconds
 		cloned.DurationSeconds = &value
 	}
 	if req.ReferenceImage != nil {
-		if cloneable, ok := req.ReferenceImage.(providers.BinaryInputCloner); ok {
-			cloned.ReferenceImage = cloneable.Clone()
+		var err error
+		cloned.ReferenceImage, err = snapshotBinaryInput(ctx, req.ReferenceImage)
+		if err != nil {
+			return providers.VideoGenerationRequest{}, err
 		}
 	}
-	return cloned
+	return cloned, nil
 }
 
 func (g *VideoGenerator) Requests() []providers.VideoGenerationRequest {
@@ -179,7 +190,7 @@ func (g *VideoGenerator) Requests() []providers.VideoGenerationRequest {
 	defer g.mu.Unlock()
 	requests := make([]providers.VideoGenerationRequest, len(g.requests))
 	for i, request := range g.requests {
-		requests[i] = cloneVideoRequest(request)
+		requests[i], _ = cloneVideoRequest(context.Background(), request)
 	}
 	return requests
 }
@@ -217,6 +228,10 @@ func (g *VideoGenerator) StartVideo(ctx context.Context, req providers.VideoGene
 	if err := req.Validate(); err != nil {
 		return providers.VideoOperation{}, err
 	}
+	clonedRequest, err := cloneVideoRequest(ctx, req)
+	if err != nil {
+		return providers.VideoOperation{}, providers.NewInvalidRequestError(err)
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.startErr != nil {
@@ -226,7 +241,7 @@ func (g *VideoGenerator) StartVideo(ctx context.Context, req providers.VideoGene
 	id := "op-" + formatID(g.nextID)
 	operation := providers.VideoOperation{ID: id, State: providers.VideoOperationQueued}
 	g.operations[id] = &fakeVideoOperation{operation: operation}
-	g.requests = append(g.requests, cloneVideoRequest(req))
+	g.requests = append(g.requests, clonedRequest)
 	return cloneOperation(operation), nil
 }
 
@@ -281,7 +296,45 @@ func (g *VideoGenerator) OpenVideoResult(ctx context.Context, id string) (provid
 	if operation.operation.State != providers.VideoOperationSucceeded {
 		return nil, providers.NewResultUnavailableError(errors.New("operation has not succeeded"))
 	}
-	return providers.NewGeneratedBinary(g.mime, g.result)
+	binary, err := providers.NewGeneratedBinary(g.mime, g.result)
+	if err != nil {
+		return nil, err
+	}
+	if err := providers.ValidateVideoBinary(binary); err != nil {
+		return nil, err
+	}
+	return binary, nil
+}
+
+func snapshotBinaryInput(ctx context.Context, input providers.BinaryInput) (providers.BinaryInput, error) {
+	if input == nil {
+		return nil, errors.New("reference input size is invalid")
+	}
+	size := input.Size()
+	if size < 0 || size > providers.MaxReferenceImageBytes {
+		return nil, errors.New("reference input size is invalid")
+	}
+	mime := input.MIMEType()
+	stream, err := input.Open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	data, err := io.ReadAll(io.LimitReader(stream, size+1))
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > size {
+		return nil, errors.New("reference input exceeded declared size")
+	}
+	cloned, err := providers.NewBinaryInput(mime, data)
+	if err != nil {
+		return nil, err
+	}
+	return cloned, nil
 }
 
 func cloneBytes(values [][]byte) [][]byte {

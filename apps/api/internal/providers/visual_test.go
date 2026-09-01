@@ -6,10 +6,28 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/fake"
 )
+
+type mutableBinaryInput struct {
+	mime         string
+	data         []byte
+	reportedSize int64
+}
+
+func (b *mutableBinaryInput) MIMEType() string { return b.mime }
+func (b *mutableBinaryInput) Size() int64 {
+	if b.reportedSize != 0 {
+		return b.reportedSize
+	}
+	return int64(len(b.data))
+}
+func (b *mutableBinaryInput) Open(context.Context) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(string(b.data))), nil
+}
 
 func TestImageGenerationRequestValidationAndDeepCopy(t *testing.T) {
 	tooLong := strings.Repeat("x", providers.MaxVisualPromptRunes+1)
@@ -42,6 +60,41 @@ func TestImageGenerationRequestValidationAndDeepCopy(t *testing.T) {
 	requests := gen.Requests()
 	if len(requests) != 1 || requests[0].Prompt != "before" || requests[0].ReferenceImages[0].MIMEType() != "image/png" {
 		t.Fatalf("captured request was not deeply cloned: %#v", requests)
+	}
+}
+
+func TestFakeVisualGeneratorsSnapshotMutableBinaryInputsWithoutOptionalCloner(t *testing.T) {
+	imageInput := &mutableBinaryInput{mime: "image/png", data: []byte("before")}
+	imageGen := fake.NewImageGenerator([]byte("image"))
+	if _, err := imageGen.GenerateImage(context.Background(), providers.ImageGenerationRequest{Prompt: "a", ReferenceImages: []providers.BinaryInput{imageInput}}); err != nil {
+		t.Fatalf("generate image: %v", err)
+	}
+	imageInput.mime = "image/jpeg"
+	imageInput.data[0] = 'X'
+	imageRequests := imageGen.Requests()
+	if imageRequests[0].ReferenceImages[0].MIMEType() != "image/png" {
+		t.Fatalf("image fake retained mutable MIME input: %q", imageRequests[0].ReferenceImages[0].MIMEType())
+	}
+	imageStream, err := imageRequests[0].ReferenceImages[0].Open(context.Background())
+	if err != nil {
+		t.Fatalf("open captured image reference: %v", err)
+	}
+	imageData, _ := io.ReadAll(imageStream)
+	_ = imageStream.Close()
+	if string(imageData) != "before" {
+		t.Fatalf("image fake retained mutable bytes: %q", imageData)
+	}
+
+	videoInput := &mutableBinaryInput{mime: "image/png", data: []byte("before")}
+	videoGen := fake.NewVideoGenerator([]byte("video"))
+	if _, err := videoGen.StartVideo(context.Background(), providers.VideoGenerationRequest{Prompt: "a", ReferenceImage: videoInput}); err != nil {
+		t.Fatalf("start video: %v", err)
+	}
+	videoInput.mime = "image/jpeg"
+	videoInput.data[0] = 'X'
+	videoRequests := videoGen.Requests()
+	if videoRequests[0].ReferenceImage.MIMEType() != "image/png" {
+		t.Fatalf("video fake retained mutable MIME input: %q", videoRequests[0].ReferenceImage.MIMEType())
 	}
 }
 
@@ -111,6 +164,77 @@ func TestFakeVideoGeneratorUsesOpaqueAsyncLifecycle(t *testing.T) {
 	}
 	if _, err := gen.GetVideoOperation(context.Background(), "opaque-missing"); !errors.Is(err, providers.ErrUnknownVideoOperation) {
 		t.Fatalf("missing operation error = %v, want ErrUnknownVideoOperation", err)
+	}
+}
+
+func TestVisualGenerationEnforcesCapabilitySpecificResultMIME(t *testing.T) {
+	imageGen := fake.NewImageGenerator([]byte("not an image")).WithMIMEType("video/mp4")
+	if _, err := imageGen.GenerateImage(context.Background(), providers.ImageGenerationRequest{Prompt: "a still"}); !errors.Is(err, providers.ErrMalformedResponse) {
+		t.Fatalf("image wrong-family error = %v, want ErrMalformedResponse", err)
+	}
+
+	videoGen := fake.NewVideoGenerator([]byte("not a video")).WithMIMEType("image/png")
+	operation, err := videoGen.StartVideo(context.Background(), providers.VideoGenerationRequest{Prompt: "a video"})
+	if err != nil {
+		t.Fatalf("start video: %v", err)
+	}
+	if _, err := videoGen.GetVideoOperation(context.Background(), operation.ID); err != nil {
+		t.Fatalf("poll running: %v", err)
+	}
+	if _, err := videoGen.GetVideoOperation(context.Background(), operation.ID); err != nil {
+		t.Fatalf("poll succeeded: %v", err)
+	}
+	if _, err := videoGen.OpenVideoResult(context.Background(), operation.ID); !errors.Is(err, providers.ErrMalformedResponse) {
+		t.Fatalf("video wrong-family error = %v, want ErrMalformedResponse", err)
+	}
+}
+
+func TestVisualGenerationReferenceBoundsFailureCancellationAndFailedOperation(t *testing.T) {
+	tooLarge := &mutableBinaryInput{mime: "image/png", data: []byte("small")}
+	tooLargeSize := int64(providers.MaxReferenceImageBytes + 1)
+	tooLarge.reportedSize = tooLargeSize
+	if err := (providers.ImageGenerationRequest{Prompt: "a", ReferenceImages: []providers.BinaryInput{tooLarge}}).Validate(); !errors.Is(err, providers.ErrInvalidRequest) {
+		t.Fatalf("oversized reference error = %v, want ErrInvalidRequest", err)
+	}
+	if err := (providers.ImageGenerationRequest{Prompt: "a", ReferenceImages: []providers.BinaryInput{&mutableBinaryInput{mime: "application/octet-stream", data: []byte("x")}}}).Validate(); !errors.Is(err, providers.ErrInvalidRequest) {
+		t.Fatalf("invalid reference MIME error = %v, want ErrInvalidRequest", err)
+	}
+
+	videoGen := fake.NewVideoGenerator([]byte("video")).WithDelay(20 * time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := videoGen.StartVideo(ctx, providers.VideoGenerationRequest{Prompt: "cancelled"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled video start error = %v, want context.Canceled", err)
+	}
+	pollGen := fake.NewVideoGenerator([]byte("video"))
+	pollOperation, err := pollGen.StartVideo(context.Background(), providers.VideoGenerationRequest{Prompt: "poll cancellation"})
+	if err != nil {
+		t.Fatalf("start poll-cancellation operation: %v", err)
+	}
+	pollGen.WithDelay(20 * time.Millisecond)
+	pollCtx, pollCancel := context.WithCancel(context.Background())
+	pollCancel()
+	if _, err := pollGen.GetVideoOperation(pollCtx, pollOperation.ID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled video poll error = %v, want context.Canceled", err)
+	}
+
+	failedGen := fake.NewVideoGenerator([]byte("video")).WithOperationFailure(errors.New("terminal failure"))
+	operation, err := failedGen.StartVideo(context.Background(), providers.VideoGenerationRequest{Prompt: "fail"})
+	if err != nil {
+		t.Fatalf("start failed operation: %v", err)
+	}
+	if _, err := failedGen.OpenVideoResult(context.Background(), operation.ID); !errors.Is(err, providers.ErrResultUnavailable) {
+		t.Fatalf("queued result error = %v, want ErrResultUnavailable", err)
+	}
+	if _, err := failedGen.GetVideoOperation(context.Background(), operation.ID); err != nil {
+		t.Fatalf("poll failed operation running: %v", err)
+	}
+	failed, err := failedGen.GetVideoOperation(context.Background(), operation.ID)
+	if err != nil || failed.State != providers.VideoOperationFailed {
+		t.Fatalf("failed operation = %#v, error = %v", failed, err)
+	}
+	if _, err := failedGen.OpenVideoResult(context.Background(), operation.ID); !errors.Is(err, providers.ErrVideoOperationFailed) {
+		t.Fatalf("failed result error = %v, want ErrVideoOperationFailed", err)
 	}
 }
 
