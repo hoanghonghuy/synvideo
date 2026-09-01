@@ -19,6 +19,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/httpserver"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/postgres"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 	var projectService *project.Service
 	var creativeBriefService *creativebrief.Service
 	var creativeProposalService *creativeproposal.Service
+	var scriptService *script.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -50,9 +52,10 @@ func main() {
 		projectService = project.NewService(postgres.NewProjectRepository(pool))
 		creativeBriefService = creativebrief.NewService(postgres.NewCreativeBriefRepository(pool))
 		creativeProposalService = creativeproposal.NewService(postgres.NewCreativeProposalRepository(pool))
+		scriptService = script.NewService(postgres.NewScriptRepository(pool))
 	}
 
-	server := httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, actor.NewLocalResolver(cfg))
+	server := httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, actor.NewLocalResolver(cfg))
 	errCh := make(chan error, 1)
 
 	go func() {
