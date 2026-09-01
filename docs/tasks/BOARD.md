@@ -25,7 +25,7 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`. Re
 | TASK-014 | Scene Plan generation engine | DONE | Accepted and squash-merged PR #27. |
 | TASK-015 | Scene Plan domain and persistence foundation | DONE | PR #32 accepted on head `306d9dae...`, CI #168 green, squash-merged as `66034b8e...`; issue #30 closed. |
 | TASK-016 | Media Asset + S3-compatible storage foundation | DONE | PR #33 accepted on head `7141c02b...`, CI #167 green, squash-merged as `a12a9856...`; issue #31 closed. |
-| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | CHANGES_REQUESTED | Issue #34 / PR #35. Review fixes pushed on head `488467e0...`; awaiting Team Lead delta re-review after the prior six security/runtime/TDD gates. |
+| TASK-017 | Secure BYOK text provider settings and owner-scoped runtime | CHANGES_REQUESTED | Issue #34 / PR #35. Six prior review gates accepted on head `488467e0...`, CI #169 green; final blocker is fail-fast, adapter-equivalent deployment catalog validation + latest-develop sync. |
 
 ## Active parallel wave — WAVE-F1-G
 
@@ -34,17 +34,17 @@ Frozen contracts relevant to active work:
 - accepted `AI_PROPOSAL_JOB_V1`, `OPENAI_COMPAT_TEXT_PROVIDER_V1`, `SCENE_PLAN_V1`, and `MEDIA_ASSET_STORAGE_V1`.
 
 Current implementation slots:
-- **Dev A — TASK-017 `CHANGES_REQUESTED`**: continue only on PR #35/worktree; fix commit `488467e0...` is pushed and awaits Team Lead delta review.
+- **Dev A — TASK-017 `CHANGES_REQUESTED`**: continue only on PR #35/worktree; fix deployment catalog validation/startup fail-fast behavior and sync latest `develop`.
 - **Dev B — free**: TASK-015 is merged/DONE; cleanup its worktree before claiming a new task.
 - **Dev C — free**: TASK-016 is merged/DONE; cleanup its worktree before claiming a new task.
 
 ## Why current isolation remains safe
-TASK-015 and TASK-016 are now accepted and no longer occupy implementation write surfaces. TASK-017 owns the runtime/httpserver/provider-settings/frontend surface plus migration `0009` and must not reopen Scene Plan/media foundations.
+TASK-015 and TASK-016 are accepted and no longer occupy implementation write surfaces. TASK-017 owns the runtime/httpserver/provider-settings/frontend/config surface plus migration `0009` and must not reopen Scene Plan/media foundations.
 
 TASK-017 remains intentionally deployment-definition based: creators configure credentials/model enablement but cannot submit arbitrary base URLs in V1. This closes the real live-AI usability gap without introducing an unreviewed SSRF/custom-endpoint surface.
 
 ## TASK-017 current review state
-Previous Team Lead review on head `94d49abf...` requested:
+Accepted on head `488467e0...`:
 1. strict authenticated/owner-scoped text-generation options with no global fallback;
 2. exact API-key input preservation so whitespace mistakes are rejected server-side;
 3. reuse of accepted TASK-013 OpenAI-compatible base-URL validation;
@@ -52,7 +52,10 @@ Previous Team Lead review on head `94d49abf...` requested:
 5. end-to-end Proposal job smoke proving owner credential isolation and secret-free durable payload/result;
 6. first-create revision must be omitted.
 
-Fix commit `488467e0...` claims all six are addressed. Team Lead must review that delta and CI before TASK-017 can merge.
+Remaining gate:
+1. deployment provider definitions must fail catalog validation for values that TASK-013 would reject later at runtime, including non-canonical external model IDs and invalid timeout/max-response-size bounds;
+2. explicitly supplied invalid `SYNVIDEO_TEXT_PROVIDER_DEFINITIONS` must fail startup/config initialization rather than logging and continuing with nil catalog;
+3. PR #35 must sync latest `develop` after TASK-015/TASK-016 merges and rerun full CI.
 
 ## Isolation / merge rules
 - Every implementation task uses a dedicated Git worktree; the shared/control checkout remains on `develop`.
