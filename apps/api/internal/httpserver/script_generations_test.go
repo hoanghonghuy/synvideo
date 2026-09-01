@@ -163,8 +163,6 @@ func TestGetScriptGenerationEndpoint(t *testing.T) {
 					ScriptVersion: &version,
 					CreatedAt:     now,
 					UpdatedAt:     now,
-					StartedAt:     &now,
-					FinishedAt:    &now,
 				}, nil
 			},
 		}

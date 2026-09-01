@@ -39,8 +39,6 @@ type scriptGenerationJobResponse struct {
 	ScriptVersion *int    `json:"script_version"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
-	StartedAt     *string `json:"started_at"`
-	FinishedAt    *string `json:"finished_at"`
 }
 
 func (h scriptGenerationHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -170,16 +168,6 @@ func writeScriptGenerationAPIError(w http.ResponseWriter, err error) {
 }
 
 func toScriptGenerationJobResponse(item scriptgenerationjob.ScriptGenerationJobView) scriptGenerationJobResponse {
-	var startedAt, finishedAt *string
-	if item.StartedAt != nil {
-		tStr := item.StartedAt.UTC().Format(time.RFC3339Nano)
-		startedAt = &tStr
-	}
-	if item.FinishedAt != nil {
-		tStr := item.FinishedAt.UTC().Format(time.RFC3339Nano)
-		finishedAt = &tStr
-	}
-
 	return scriptGenerationJobResponse{
 		ID:            item.ID.String(),
 		State:         item.State,
@@ -189,7 +177,5 @@ func toScriptGenerationJobResponse(item scriptgenerationjob.ScriptGenerationJobV
 		ScriptVersion: item.ScriptVersion,
 		CreatedAt:     item.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:     item.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		StartedAt:     startedAt,
-		FinishedAt:    finishedAt,
 	}
 }

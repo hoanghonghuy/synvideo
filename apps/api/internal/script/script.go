@@ -65,6 +65,7 @@ type PutInput struct {
 type CreateDraftInput struct {
 	SourceProposalVersion int
 	SourceGenerationJobID *uuid.UUID
+	ContentLocale         string
 	Content
 }
 

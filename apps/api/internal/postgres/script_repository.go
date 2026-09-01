@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -157,14 +158,19 @@ func (r *ScriptRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID, p
 	defer tx.Rollback(ctx)
 
 	// Lock the project row to serialize draft creation for this project and get content locale
-	var contentLocale string
+	var projectLocale string
 	if err := tx.QueryRow(ctx, `
 		SELECT locale FROM projects WHERE owner_id = $1 AND id = $2 FOR UPDATE
-	`, ownerID.String(), projectID.String()).Scan(&contentLocale); err != nil {
+	`, ownerID.String(), projectID.String()).Scan(&projectLocale); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return script.Script{}, script.ErrNotFound
 		}
 		return script.Script{}, fmt.Errorf("lock project for create script draft: %w", err)
+	}
+
+	contentLocale := projectLocale
+	if strings.TrimSpace(input.ContentLocale) != "" {
+		contentLocale = strings.TrimSpace(input.ContentLocale)
 	}
 
 	// Verify source proposal exists and is approved

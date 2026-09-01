@@ -34,16 +34,14 @@ type CreateScriptGenerationInput struct {
 }
 
 type ScriptGenerationJobView struct {
-	ID            uuid.UUID  `json:"id"`
-	State         string     `json:"state"`
-	Attempt       int        `json:"attempt"`
-	MaxAttempts   int        `json:"max_attempts"`
-	ErrorCode     *string    `json:"error_code"`
-	ScriptVersion *int       `json:"script_version"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	StartedAt     *time.Time `json:"started_at"`
-	FinishedAt    *time.Time `json:"finished_at"`
+	ID            uuid.UUID `json:"id"`
+	State         string    `json:"state"`
+	Attempt       int       `json:"attempt"`
+	MaxAttempts   int       `json:"max_attempts"`
+	ErrorCode     *string   `json:"error_code"`
+	ScriptVersion *int      `json:"script_version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type ProjectRepository interface {
@@ -286,8 +284,6 @@ func ToJobView(job jobs.Job) ScriptGenerationJobView {
 		ErrorCode:   job.ErrorCode,
 		CreatedAt:   job.CreatedAt,
 		UpdatedAt:   job.UpdatedAt,
-		StartedAt:   job.StartedAt,
-		FinishedAt:  job.FinishedAt,
 	}
 
 	if job.State == jobs.StateSucceeded && len(job.Result) > 0 {

@@ -151,6 +151,9 @@ func TestHandler_Handle_Success(t *testing.T) {
 	if scriptRepo.createdInput.Sections[0].Key != "intro" {
 		t.Fatalf("expected key intro, got %s", scriptRepo.createdInput.Sections[0].Key)
 	}
+	if scriptRepo.createdInput.ContentLocale != string(project.LocaleVI) {
+		t.Fatalf("expected content locale %s, got %s", project.LocaleVI, scriptRepo.createdInput.ContentLocale)
+	}
 }
 
 func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
@@ -159,44 +162,158 @@ func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
 	scriptRepo := &mockScriptRepo{}
 	handler := scriptgenerationjob.NewHandler(engine, scriptRepo)
 
-	// Unknown field in payload
-	jobWithExtra := sampleScriptJob(validScriptPayload())
-	var rawMap map[string]interface{}
-	_ = json.Unmarshal(jobWithExtra.Payload, &rawMap)
-	rawMap["unknown_field"] = "malicious"
-	jobWithExtra.Payload, _ = json.Marshal(rawMap)
+	testCases := []struct {
+		name      string
+		modifyJob func(j *jobs.Job)
+	}{
+		{
+			name: "unknown field in payload",
+			modifyJob: func(j *jobs.Job) {
+				var rawMap map[string]interface{}
+				_ = json.Unmarshal(j.Payload, &rawMap)
+				rawMap["unknown_field"] = "malicious"
+				j.Payload, _ = json.Marshal(rawMap)
+			},
+		},
+		{
+			name: "trailing content after json payload",
+			modifyJob: func(j *jobs.Job) {
+				j.Payload = append(j.Payload, []byte(` {"extra":"trailing"}`)...)
+			},
+		},
+		{
+			name: "wrong schema version",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.SchemaVersion = "wrong_version_v2"
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "missing project ID on job",
+			modifyJob: func(j *jobs.Job) {
+				j.ProjectID = nil
+			},
+		},
+		{
+			name: "nil project ID in payload",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Project.ID = uuid.Nil
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "mismatched project ID between job and payload",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Project.ID = uuid.New()
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "empty provider ID",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.ProviderID = ""
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "empty model ID",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.ModelID = "   "
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid project content format",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Project.ContentFormat = "invalid_format"
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid project aspect ratio",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Project.AspectRatio = "3:4"
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid project target duration out of range",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				dur := 0
+				p.Project.TargetDurationSeconds = &dur
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid project locale",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Project.Locale = "fr"
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "invalid proposal version",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Proposal.Version = 0
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "empty proposal structure",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Proposal.Structure = nil
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal structure item with empty key",
+			modifyJob: func(j *jobs.Job) {
+				p := validScriptPayload()
+				p.Proposal.Structure = []scriptgeneration.ProposalStructureItem{
+					{Key: "   ", Title: "Title", Purpose: "Purpose"},
+				}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+	}
 
-	_, err := handler.Handle(context.Background(), jobWithExtra)
-	if err == nil {
-		t.Fatal("expected error on unknown payload field, got nil")
-	}
-	var termErr *jobs.TerminalJobError
-	if !errors.As(err, &termErr) || termErr.Code != "GENERATION_INVALID_PAYLOAD" {
-		t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD, got %v", err)
-	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			job := sampleScriptJob(validScriptPayload())
+			tc.modifyJob(&job)
 
-	// Wrong schema version
-	wrongSchemaPayload := validScriptPayload()
-	wrongSchemaPayload.SchemaVersion = "wrong_version_v2"
-	jobWrongSchema := sampleScriptJob(wrongSchemaPayload)
-
-	_, err = handler.Handle(context.Background(), jobWrongSchema)
-	if err == nil {
-		t.Fatal("expected error on wrong schema version, got nil")
-	}
-	if !errors.As(err, &termErr) || termErr.Code != "GENERATION_INVALID_PAYLOAD" {
-		t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD, got %v", err)
-	}
-
-	// Missing project ID on job
-	jobNoProject := sampleScriptJob(validScriptPayload())
-	jobNoProject.ProjectID = nil
-	_, err = handler.Handle(context.Background(), jobNoProject)
-	if err == nil {
-		t.Fatal("expected error on missing project ID, got nil")
-	}
-	if !errors.As(err, &termErr) || termErr.Code != "GENERATION_INVALID_PAYLOAD" {
-		t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD, got %v", err)
+			_, err := handler.Handle(context.Background(), job)
+			if err == nil {
+				t.Fatalf("expected error for case %q, got nil", tc.name)
+			}
+			var termErr *jobs.TerminalJobError
+			if !errors.As(err, &termErr) || termErr.Code != "GENERATION_INVALID_PAYLOAD" {
+				t.Fatalf("expected terminal GENERATION_INVALID_PAYLOAD for %q, got %v", tc.name, err)
+			}
+		})
 	}
 }
 
