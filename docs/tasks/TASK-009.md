@@ -3,25 +3,30 @@
 Status: CHANGES_REQUESTED
 Milestone: F1 Creative Workflow
 Depends on: TASK-006, TASK-007, TASK-008 and TASK-010 accepted
-Wave: WAVE-F1-E
+Wave: WAVE-F1-F
 Branch: `feature/TASK-009-ai-proposal-integration`
 Base: `develop`
 Active PR: #28
-Current reviewed head: `f55917aa089553db5f32366e42fbf549c542ab13`
+Current reviewed head: `6ca7ca4d0549ffcc2f42d4e8ef018521a5962e13`
 
 ## Current review gate
-CI #141 is green, but Team Lead review #5073433861 found four blockers to fix on the same branch/worktree:
+CI #154 is green. Team Lead review #5073871824 accepts the prior four fixes but found three remaining blockers on the same branch/worktree:
 
-1. `source_generation_job_id` is internal persistence metadata under frozen `AI_PROPOSAL_JOB_V1`, but the current public `CreativeProposal` JSON shape exposes it. Keep it internal (`json:"-"` or an equivalent private persistence mapping) and add HTTP regression coverage proving generated Proposal responses omit it.
-2. `request_id` idempotency/conflict handling is not race-safe and is checked too late. Existing durable jobs must be validated/returned before current Brief/provider state can invalidate an idempotent replay. The duplicate-enqueue race must re-run the same kind/provider/model conflict validation; conflicting concurrent reuse must deterministically return `GENERATION_REQUEST_CONFLICT` rather than returning the winner job.
-3. Restore the three previously accepted TASK-008 frontend regressions removed during the test-harness refactor: failed mutation after failed version switch; stale recovery reload failure preserving dirty edits; initial Proposal-version GET failure with visible retry.
-4. Once a generation job is already `succeeded`, a transient failure refreshing/loading the created Proposal must not turn the UI into a Regenerate retry that launches another generation. Preserve the succeeded job/result and offer a safe load/recovery path until the created Proposal can be opened.
+1. Durable job payload decoding must be strict per frozen `AI_PROPOSAL_JOB_V1`. `Handler.Handle` still uses plain `json.Unmarshal`, which accepts unknown fields. Use `DisallowUnknownFields` or an equivalent strict decoder and add a regression proving unknown payload fields terminalize as `GENERATION_INVALID_PAYLOAD` before provider or persistence work.
+2. The new duplicate-race service test does not actually execute `Enqueue -> ErrDuplicateJob -> re-read winner`, because it inserts the winner into the mock before the initial lookup. Make the first lookup return not-found, make enqueue return `ErrDuplicateJob`, then expose the winner on the second lookup; prove both matching replay and conflicting provider/model reuse.
+3. A transient status GET failure while a job is `queued`/`running` currently stops polling permanently. `activeJob` remains non-terminal, Generate stays disabled, and the generic retry-generation action is hidden. Retry/status-poll the same durable job ID safely (or expose a dedicated status-retry action) and add a regression where one status GET fails and the same job later succeeds without a new POST/request ID.
+
+Previous review fixes now accepted:
+- `source_generation_job_id` is hidden from public Proposal JSON with HTTP regression coverage;
+- replay/conflict validation is centralized and existing jobs are checked before current Brief/provider state;
+- the three accepted TASK-008 frontend regressions are restored;
+- succeeded-job Proposal-load recovery keeps the succeeded job/result and retries loading instead of creating another generation job.
 
 Required verification after fixes:
-- focused service tests for normal replay + conflicting reuse + concurrent duplicate race;
-- HTTP regression proving internal job metadata is absent;
-- restored TASK-008 frontend regressions plus succeeded-job finalization failure recovery;
-- real PostgreSQL exactly-once tests;
+- focused handler strict-payload regression;
+- service test that genuinely executes the duplicate-enqueue race branch;
+- frontend transient status-poll recovery regression proving no new generation POST;
+- existing PostgreSQL exactly-once tests;
 - full `make verify`, race where applicable and PR CI on the new head.
 
 ## Goal
@@ -98,6 +103,7 @@ Do not perform unrelated refactors in shared hotspots.
 - generate fresh `request_id` for each explicit new generation intent;
 - show queued/running/succeeded/failed state without unmounting or corrupting current Proposal;
 - resume an active non-terminal generation across page refresh/navigation using route/session job identity;
+- recover transient status-poll failures against the same job ID without creating a new generation request;
 - on success refresh history and open returned Proposal version;
 - terminal retry is explicit and creates a new request/job;
 - never render deterministic fake output as production success.
@@ -106,35 +112,38 @@ Do not perform unrelated refactors in shared hotspots.
 Truthful RED -> GREEN -> REFACTOR must cover at least:
 1. current owner-scoped Project/Brief snapshot and exact source Brief revision;
 2. same `request_id` HTTP retry returns same job;
-3. conflicting request ID reuse -> `GENERATION_REQUEST_CONFLICT`, including concurrent duplicate races;
+3. conflicting request ID reuse -> `GENERATION_REQUEST_CONFLICT`, including a genuinely exercised duplicate-enqueue race;
 4. missing Brief -> `CREATIVE_BRIEF_REQUIRED` without provider call for a genuinely new request;
 5. no credentials in request/job payload/result/presentation errors;
 6. provider/model catalog contains only text-capable registered models;
-7. handler persists nothing on provider failure/invalid output;
-8. retryable provider failure enters generic retry lifecycle;
-9. invalid output is terminal for that job;
-10. real PostgreSQL crash/reclaim simulation proves one job creates at most one Proposal draft;
-11. distinct regenerate jobs preserve approved history + one-active-draft invariant;
-12. owner/project status non-disclosure;
-13. dirty frontend blocks generation;
-14. pending/failure leaves currently-reviewed Proposal intact;
-15. refresh resumes a nonterminal job;
-16. success opens exact returned Proposal version and remains recoverable if follow-up list/version loading transiently fails;
-17. production composition has no fake provider registration;
-18. full local smoke through Proposal approval;
-19. previously accepted TASK-008 load/mutation/dirty-state regressions remain covered.
+7. handler strictly rejects malformed/unknown-field payloads before provider/persistence work;
+8. handler persists nothing on provider failure/invalid output;
+9. retryable provider failure enters generic retry lifecycle;
+10. invalid output is terminal for that job;
+11. real PostgreSQL crash/reclaim simulation proves one job creates at most one Proposal draft;
+12. distinct regenerate jobs preserve approved history + one-active-draft invariant;
+13. owner/project status non-disclosure;
+14. dirty frontend blocks generation;
+15. pending/failure leaves currently-reviewed Proposal intact;
+16. refresh resumes a nonterminal job;
+17. transient status GET failure recovers the same nonterminal job without a new POST/request ID;
+18. success opens exact returned Proposal version and remains recoverable if follow-up list/version loading transiently fails;
+19. production composition has no fake provider registration;
+20. full local smoke through Proposal approval;
+21. previously accepted TASK-008 load/mutation/dirty-state regressions remain covered.
 
 ## Acceptance criteria
 - [ ] Frozen `AI_PROPOSAL_JOB_V1` is implemented without contract drift.
 - [ ] Provider execution never blocks the initiating HTTP request.
 - [ ] Generic TASK-010 jobs/executor is reused and wired into runtime; no second job engine/table.
-- [ ] Same HTTP `request_id` is idempotent and conflicting reuse is deterministic under races.
+- [ ] Same HTTP `request_id` is idempotent and conflicting reuse is deterministic under a proven duplicate-enqueue race.
+- [ ] Durable job payload decoding is strict and rejects unknown fields safely.
 - [ ] One successful durable job creates at most one Proposal version even across commit->crash->reclaim.
 - [ ] `source_generation_job_id` remains internal and never appears in public Proposal JSON.
 - [ ] Approved Proposal history remains immutable.
 - [ ] Safe catalog/status APIs expose no secret/job internals.
 - [ ] Production composition never exposes fake provider as live AI.
-- [ ] UI preserves dirty/current Proposal state and durable succeeded-job recovery correctly.
+- [ ] UI preserves dirty/current Proposal state, nonterminal polling recovery and durable succeeded-job recovery correctly.
 - [ ] Previously accepted TASK-008 regressions remain protected.
 - [ ] Real PostgreSQL integration, frontend tests, full CI and local smoke are green.
 - [ ] TDD evidence is truthful.
