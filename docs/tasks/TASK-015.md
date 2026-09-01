@@ -1,11 +1,15 @@
 # TASK-015 — Scene Plan domain and persistence foundation
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Depends on: TASK-011 and TASK-014 accepted; frozen `SCENE_PLAN_V1`
 Wave: WAVE-F1-F
 Branch: `feature/TASK-015-scene-plan-persistence`
 Base: `develop`
+Accepted PR: #32
+Accepted head: `306d9daee1164dce224b49750c930976f91078d6`
+Squash merge: `66034b8e214a3ea58452f68d0d17a5ded9c4e4a9`
+CI: #168 green
 
 ## Goal
 Implement the durable editable Scene Plan Stage 7 domain and PostgreSQL persistence foundation from approved Script versions, preserving approved narration while enabling scene-level planning/versioning before media generation.
@@ -73,16 +77,20 @@ Truthful RED → GREEN → REFACTOR must cover at least:
 14. full `go test -race`, real PostgreSQL integration and `make verify`.
 
 ## Acceptance criteria
-- [ ] Frozen `SCENE_PLAN_V1` implemented without drift.
-- [ ] Migration is exactly `0007_create_scene_plans.sql`.
-- [ ] Source must be an approved owner-visible Script.
-- [ ] Scene Plan cannot silently rewrite approved Script narration.
-- [ ] Version/revision/status invariants match accepted Proposal/Script conventions.
-- [ ] Real PostgreSQL concurrency/owner-isolation coverage is green.
-- [ ] No HTTP/frontend/jobs/media/provider-generation scope leakage.
-- [ ] TDD evidence is truthful.
+- [x] Frozen `SCENE_PLAN_V1` implemented without drift.
+- [x] Migration is exactly `0007_create_scene_plans.sql`.
+- [x] Source must be an approved owner-visible Script.
+- [x] Scene Plan cannot silently rewrite approved Script narration.
+- [x] Version/revision/status invariants match accepted Proposal/Script conventions.
+- [x] Real PostgreSQL concurrency/owner-isolation coverage is green.
+- [x] No HTTP/frontend/jobs/media/provider-generation scope leakage.
+- [x] TDD evidence is truthful.
+
+## Accepted review gate
+- cross-owner `UpdateDraft` and `Approve` are non-disclosing in real PostgreSQL tests;
+- foreign approved Script sources cannot be attached to another target project/owner;
+- canonical-whitespace-only narration segmentation remains accepted;
+- core persistence/version/concurrency/source invariants remain intact.
 
 ## Worktree
-Atomically create the absent remote branch ref, then create/use a dedicated TASK-015 worktree. The shared control checkout stays on `develop`.
-
-Do not self-merge or self-mark DONE.
+Merged task worktree should be removed/pruned before the developer claims another task.
