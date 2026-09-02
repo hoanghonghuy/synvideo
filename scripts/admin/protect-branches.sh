@@ -81,7 +81,7 @@ JSON
 
 echo
 echo "Verification:"
-gh api "repos/$REPO/branches/develop/protection" --jq '{develop: {enforce_admins: .enforce_admins.enabled, required_checks: [.required_status_checks.contexts[].context], required_pr: (.required_pull_request_reviews != null), conversation_resolution: .required_conversation_resolution.enabled, force_pushes: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled}}'
+gh api "repos/$REPO/branches/develop/protection" --jq '{develop: {enforce_admins: .enforce_admins.enabled, required_checks: .required_status_checks.contexts, required_pr: (.required_pull_request_reviews != null), conversation_resolution: .required_conversation_resolution.enabled, force_pushes: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled}}'
 gh api "repos/$REPO/branches/main/protection" --jq '{main: {enforce_admins: .enforce_admins.enabled, required_pr: (.required_pull_request_reviews != null), conversation_resolution: .required_conversation_resolution.enabled, force_pushes: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled}}'
 
 echo
