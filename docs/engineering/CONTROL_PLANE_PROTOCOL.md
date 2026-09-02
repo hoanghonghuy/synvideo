@@ -12,6 +12,14 @@ Before making a workflow decision, refresh or directly inspect the relevant GitH
 
 `main` is the stable/release branch and may intentionally lag development. Current development decisions must explicitly target `develop`, the canonical task branch, or the exact PR head. Generic GitHub code search that implicitly reads the repository default branch is not sufficient evidence for current `develop` state.
 
+## Protected control plane
+
+`main` and `develop` are intended to be protected server-side. When protection is enabled, **all writers, including PM/Team Lead/admin identities, use PRs for versioned changes**. PM/TL control-plane changes use short-lived docs/chore/admin branches into `develop`; implementation uses canonical task branches.
+
+Do not depend on repository-admin bypass to distinguish PM/TL from Developer automation when the same GitHub identity or token can be used by multiple roles. Server-side enforcement can distinguish identities/permissions, not the semantic role an AI is currently playing.
+
+The helper `scripts/admin/protect-branches.sh` applies the current baseline protection policy. Protection policy and this protocol must remain aligned.
+
 ## Authority by concern
 
 Different concerns have different authorities; there is no single file that wins every conflict.
@@ -92,24 +100,24 @@ A stale local `develop`, stale remote-tracking ref or missing local branch is no
 
 ## PM transition ordering
 
-GitHub issues and versioned docs cannot be updated atomically, so use ordering that minimizes unsafe windows.
+GitHub issues and versioned docs cannot be updated atomically, so use ordering that minimizes unsafe windows. With protected `develop`, versioned changes are merged through a control-plane PR before subsequent live issue transitions that depend on them.
 
 ### Activate `READY`
-1. finalize/freeze task spec, required contracts and relevant board ordering on `develop`;
-2. verify the resulting remote `develop` SHA and dependencies;
+1. finalize/freeze task spec, required contracts and relevant board ordering on a short-lived control-plane branch;
+2. merge that control-plane PR into protected `develop` and verify the resulting remote `develop` SHA/dependencies;
 3. update the authoritative GitHub issue to `READY` **last**. The issue transition is the live activation signal.
 
 ### Block or cancel unclaimed work
 1. update the authoritative GitHub issue first so new claims stop;
-2. then reconcile task/board mirrors on `develop`.
+2. then reconcile task/board mirrors through a control-plane PR to `develop`.
 
 If a canonical branch was already claimed, do not silently delete/take it over; make an explicit PM/Team Lead stop/re-scope decision.
 
 ### Complete work
 1. Team Lead accepts the exact PR head and required exact-head/current-base verification;
-2. merge the PR;
+2. merge the implementation PR;
 3. close/update the authoritative issue with acceptance/merge evidence;
-4. reconcile task and board mirrors and remove stale actionable instructions.
+4. reconcile task and board mirrors through a control-plane PR and remove stale actionable instructions.
 
 ### Requested changes
 The exact-head PR review is the live review authority. Issue/task/board status may mirror `CHANGES_REQUESTED`, but stale mirror text never supersedes a newer PR head/review.
