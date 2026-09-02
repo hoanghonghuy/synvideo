@@ -46,7 +46,11 @@ const loadErrorCode = ref('')
 const mutationErrorCode = ref('')
 const confirmStaleReload = ref(false)
 const failedVersion = ref<number | null>(null)
+const failedTargetVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
+
+let currentWorkspaceLoadSeq = 0
+let currentVersionLoadSeq = 0
 
 const providerOptions = ref<TextGenerationOptionProvider[]>([])
 const optionsLoading = ref(false)
@@ -120,6 +124,30 @@ const staleSource = computed(() => {
   )
 })
 
+const unmappedFieldErrors = computed(() => {
+  const knownKeys = new Set<string>()
+  formScenes.value.forEach((_, idx) => {
+    knownKeys.add(`scenes[${idx}].visual_instruction`)
+    knownKeys.add(`scenes.${idx}.visual_instruction`)
+    knownKeys.add(`scenes[${idx}].planned_source_type`)
+    knownKeys.add(`scenes.${idx}.planned_source_type`)
+    knownKeys.add(`scenes[${idx}].expected_duration_seconds`)
+    knownKeys.add(`scenes.${idx}.expected_duration_seconds`)
+    knownKeys.add(`scenes[${idx}].caption_intent`)
+    knownKeys.add(`scenes.${idx}.caption_intent`)
+    knownKeys.add(`scenes[${idx}].transition_notes`)
+    knownKeys.add(`scenes.${idx}.transition_notes`)
+    knownKeys.add(`scenes[${idx}].key`)
+    knownKeys.add(`scenes.${idx}.key`)
+    knownKeys.add(`scenes[${idx}].narration`)
+    knownKeys.add(`scenes.${idx}.narration`)
+    knownKeys.add(`scenes[${idx}]`)
+  })
+  return Object.entries(fieldErrors.value)
+    .filter(([k]) => !knownKeys.has(k))
+    .map(([k, v]) => `${k}: ${v}`)
+})
+
 watch(
   formScenes,
   () => {
@@ -174,33 +202,36 @@ async function loadWorkspace() {
   loadErrorCode.value = ''
   mutationErrorCode.value = ''
   failedVersion.value = null
+  failedTargetVersion.value = null
   plansLoaded.value = false
+  const seq = ++currentWorkspaceLoadSeq
   try {
     project.value = await getProject(String(route.params.id))
     const [fetchedPlans, fetchedScripts] = await Promise.all([
       listScenePlans(project.value.id),
       listScripts(project.value.id),
     ])
+    if (seq !== currentWorkspaceLoadSeq) return
     summaries.value = fetchedPlans
     scripts.value = fetchedScripts
     plansLoaded.value = true
 
-    // Check if an active succeeded job is awaiting version loading
-    const succeededVersion =
-      activeJob.value?.state === 'succeeded' && activeJob.value.scene_plan_version !== null
-        ? activeJob.value.scene_plan_version
-        : null
+    // If an active succeeded job is waiting or loaded, keep its version
+    if (activeJob.value?.state === 'succeeded' && activeJob.value.scene_plan_version !== null) {
+      if (selectedVersion.value === activeJob.value.scene_plan_version && selectedPlan.value) {
+        return
+      }
+      const loaded = await loadVersion(activeJob.value.scene_plan_version, false)
+      if (loaded) {
+        removePersistedJob()
+        activeJob.value = null
+      }
+      return
+    }
 
-    const initial =
-      (succeededVersion !== null
-        ? summaries.value.find((item) => item.version === succeededVersion)
-        : null) ??
-      summaries.value.find((item) => item.status === 'draft') ??
-      summaries.value[0]
-
+    const initial = summaries.value.find((item) => item.status === 'draft') ?? summaries.value[0]
     if (initial) {
-      const loaded = await loadVersion(initial.version, true)
-      if (!loaded) return
+      await loadVersion(initial.version, true)
     } else {
       selectedPlan.value = null
       selectedVersion.value = null
@@ -209,9 +240,13 @@ async function loadWorkspace() {
       dirty.value = false
     }
   } catch (error) {
-    loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    if (seq === currentWorkspaceLoadSeq) {
+      loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    }
   } finally {
-    loading.value = false
+    if (seq === currentWorkspaceLoadSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -220,6 +255,7 @@ async function loadVersion(version: number, discardDirty = false): Promise<boole
     pendingVersion.value = version
     return false
   }
+  const seq = ++currentVersionLoadSeq
   planLoading.value = true
   loadErrorCode.value = ''
   mutationErrorCode.value = ''
@@ -227,14 +263,24 @@ async function loadVersion(version: number, discardDirty = false): Promise<boole
   confirmStaleReload.value = false
   try {
     const plan = await getScenePlan(projectID(), version)
+    if (seq !== currentVersionLoadSeq) {
+      return false
+    }
+    if (dirty.value && !discardDirty) {
+      pendingVersion.value = version
+      return false
+    }
     applyPlan(plan)
     return true
   } catch (error) {
+    if (seq !== currentVersionLoadSeq) return false
     loadErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
     failedVersion.value = version
     return false
   } finally {
-    planLoading.value = false
+    if (seq === currentVersionLoadSeq) {
+      planLoading.value = false
+    }
   }
 }
 
@@ -283,11 +329,18 @@ async function saveAndSwitch() {
       revision: selectedPlan.value.revision,
       scenes: formScenes.value.map((s) => ({ ...s })),
     })
+    applyPlan(updated)
+    saved.value = true
     upsertSummary(updated)
     pendingVersion.value = null
+
     const loaded = await loadVersion(targetVersion, true)
+    if (!loaded) {
+      failedTargetVersion.value = targetVersion
+      return
+    }
+    failedTargetVersion.value = null
     if (
-      loaded &&
       activeJob.value?.state === 'succeeded' &&
       activeJob.value.scene_plan_version === targetVersion
     ) {
@@ -299,6 +352,23 @@ async function saveAndSwitch() {
     handleMutationError(error)
   } finally {
     saving.value = false
+  }
+}
+
+async function retryTargetVersion() {
+  if (failedTargetVersion.value === null) return
+  const target = failedTargetVersion.value
+  const loaded = await loadVersion(target, true)
+  if (loaded) {
+    failedTargetVersion.value = null
+    if (
+      activeJob.value?.state === 'succeeded' &&
+      activeJob.value.scene_plan_version === target
+    ) {
+      removePersistedJob()
+      activeJob.value = null
+      generationErrorCode.value = ''
+    }
   }
 }
 
@@ -411,7 +481,7 @@ async function loadSucceededPlan() {
       generationErrorCode.value = ''
       return
     }
-    const loaded = await loadVersion(job.scene_plan_version, true)
+    const loaded = await loadVersion(job.scene_plan_version, false)
     if (!loaded) {
       generationErrorCode.value = loadErrorCode.value || 'request_failed'
       return
@@ -465,6 +535,7 @@ async function discardAndSwitch() {
   if (pendingVersion.value === null) return
   const version = pendingVersion.value
   pendingVersion.value = null
+  failedTargetVersion.value = null
   const loaded = await loadVersion(version, true)
   if (
     loaded &&
@@ -479,6 +550,7 @@ async function discardAndSwitch() {
 
 function cancelSwitch() {
   pendingVersion.value = null
+  failedTargetVersion.value = null
 }
 
 function requestStaleReload() {
@@ -547,7 +619,8 @@ function confirmSplit() {
     return
   }
 
-  const isDuplicate = formScenes.value.some((s, i) => i !== index && s.key === trimmedKey)
+  // A new scene key must not duplicate any existing scene key (including target scene key which will be retained)
+  const isDuplicate = formScenes.value.some((s) => s.key === trimmedKey)
   if (isDuplicate) {
     splitError.value = t('scenePlan.validation.duplicate')
     return
@@ -890,6 +963,23 @@ function errorMessage(code: string) {
 
         <!-- Editor Area -->
         <div class="scene-plan-editor">
+          <!-- Failed Target Version Notice (Save-and-Switch retry) -->
+          <div
+            v-if="failedTargetVersion !== null"
+            class="notice error"
+            data-testid="failed-target-version-notice"
+          >
+            <p>{{ errorMessage(loadErrorCode || 'request_failed') }}</p>
+            <button
+              class="secondary-button"
+              type="button"
+              data-testid="retry-target-version-btn"
+              @click="retryTargetVersion"
+            >
+              {{ t('projects.actions.retry') }}
+            </button>
+          </div>
+
           <!-- Dirty Switch Warning (Save / Discard / Cancel) -->
           <div
             v-if="pendingVersion !== null"
@@ -983,6 +1073,20 @@ function errorMessage(code: string) {
             <p>{{ errorMessage(mutationErrorCode) }}</p>
           </div>
 
+          <!-- Unmapped Form-Level Field Errors Fallback -->
+          <div
+            v-if="unmappedFieldErrors.length > 0"
+            class="notice error"
+            data-testid="unmapped-field-errors"
+          >
+            <p
+              v-for="err in unmappedFieldErrors"
+              :key="err"
+            >
+              {{ err }}
+            </p>
+          </div>
+
           <!-- Stale Reload Confirm -->
           <div
             v-if="confirmStaleReload"
@@ -1038,6 +1142,14 @@ function errorMessage(code: string) {
                   {{ t('scenePlan.fields.scriptSectionKey', { key: scene.script_section_key }) }}
                 </span>
               </div>
+              <span
+                v-if="getFieldError(idx, 'key')"
+                :id="`error-key-${idx}`"
+                class="field-error"
+                :data-testid="`error-key-${idx}`"
+              >
+                {{ getFieldError(idx, 'key') }}
+              </span>
 
               <!-- Read-only approved narration -->
               <div class="scene-narration-block">
@@ -1048,6 +1160,14 @@ function errorMessage(code: string) {
                 >
                   {{ scene.narration }}
                 </div>
+                <span
+                  v-if="getFieldError(idx, 'narration')"
+                  :id="`error-narration-${idx}`"
+                  class="field-error"
+                  :data-testid="`error-narration-${idx}`"
+                >
+                  {{ getFieldError(idx, 'narration') }}
+                </span>
               </div>
 
               <!-- Planning Fields -->
@@ -1055,13 +1175,17 @@ function errorMessage(code: string) {
                 <label>
                   <span>{{ t('scenePlan.fields.visualInstruction') }}</span>
                   <textarea
+                    :id="`scene-${idx}-visual`"
                     v-model="scene.visual_instruction"
                     :name="`scene_visual_${idx}`"
                     :disabled="isReadOnly"
+                    :aria-invalid="Boolean(getFieldError(idx, 'visual_instruction'))"
+                    :aria-describedby="getFieldError(idx, 'visual_instruction') ? `error-visual-${idx}` : undefined"
                     rows="3"
                   />
                   <span
                     v-if="getFieldError(idx, 'visual_instruction')"
+                    :id="`error-visual-${idx}`"
                     class="field-error"
                     :data-testid="`error-visual-${idx}`"
                   >
@@ -1073,9 +1197,12 @@ function errorMessage(code: string) {
                   <label>
                     <span>{{ t('scenePlan.fields.plannedSourceType') }}</span>
                     <select
+                      :id="`scene-${idx}-source-type`"
                       v-model="scene.planned_source_type"
                       :name="`scene_source_type_${idx}`"
                       :disabled="isReadOnly"
+                      :aria-invalid="Boolean(getFieldError(idx, 'planned_source_type'))"
+                      :aria-describedby="getFieldError(idx, 'planned_source_type') ? `error-source-type-${idx}` : undefined"
                     >
                       <option value="stock">{{ t('scenePlan.sourceTypes.stock') }}</option>
                       <option value="upload">{{ t('scenePlan.sourceTypes.upload') }}</option>
@@ -1083,20 +1210,32 @@ function errorMessage(code: string) {
                       <option value="generated_image">{{ t('scenePlan.sourceTypes.generated_image') }}</option>
                       <option value="generated_video">{{ t('scenePlan.sourceTypes.generated_video') }}</option>
                     </select>
+                    <span
+                      v-if="getFieldError(idx, 'planned_source_type')"
+                      :id="`error-source-type-${idx}`"
+                      class="field-error"
+                      :data-testid="`error-source-type-${idx}`"
+                    >
+                      {{ getFieldError(idx, 'planned_source_type') }}
+                    </span>
                   </label>
 
                   <label>
                     <span>{{ t('scenePlan.fields.expectedDurationSeconds') }}</span>
                     <input
+                      :id="`scene-${idx}-duration`"
                       v-model.number="scene.expected_duration_seconds"
                       type="number"
                       :name="`scene_duration_${idx}`"
                       min="1"
                       max="3600"
                       :disabled="isReadOnly"
+                      :aria-invalid="Boolean(getFieldError(idx, 'expected_duration_seconds'))"
+                      :aria-describedby="getFieldError(idx, 'expected_duration_seconds') ? `error-duration-${idx}` : undefined"
                     >
                     <span
                       v-if="getFieldError(idx, 'expected_duration_seconds')"
+                      :id="`error-duration-${idx}`"
                       class="field-error"
                       :data-testid="`error-duration-${idx}`"
                     >
@@ -1109,21 +1248,43 @@ function errorMessage(code: string) {
                   <label>
                     <span>{{ t('scenePlan.fields.captionIntent') }}</span>
                     <input
+                      :id="`scene-${idx}-caption`"
                       v-model="scene.caption_intent"
                       type="text"
                       :name="`scene_caption_${idx}`"
                       :disabled="isReadOnly"
+                      :aria-invalid="Boolean(getFieldError(idx, 'caption_intent'))"
+                      :aria-describedby="getFieldError(idx, 'caption_intent') ? `error-caption-${idx}` : undefined"
                     >
+                    <span
+                      v-if="getFieldError(idx, 'caption_intent')"
+                      :id="`error-caption-${idx}`"
+                      class="field-error"
+                      :data-testid="`error-caption-${idx}`"
+                    >
+                      {{ getFieldError(idx, 'caption_intent') }}
+                    </span>
                   </label>
 
                   <label>
                     <span>{{ t('scenePlan.fields.transitionNotes') }}</span>
                     <input
+                      :id="`scene-${idx}-transition`"
                       v-model="scene.transition_notes"
                       type="text"
                       :name="`scene_transition_${idx}`"
                       :disabled="isReadOnly"
+                      :aria-invalid="Boolean(getFieldError(idx, 'transition_notes'))"
+                      :aria-describedby="getFieldError(idx, 'transition_notes') ? `error-transition-${idx}` : undefined"
                     >
+                    <span
+                      v-if="getFieldError(idx, 'transition_notes')"
+                      :id="`error-transition-${idx}`"
+                      class="field-error"
+                      :data-testid="`error-transition-${idx}`"
+                    >
+                      {{ getFieldError(idx, 'transition_notes') }}
+                    </span>
                   </label>
                 </div>
               </div>
@@ -1226,6 +1387,7 @@ function errorMessage(code: string) {
           <label>
             <span>{{ t('scenePlan.splitModal.splitPointLabel', { max: splitMaxCodePoints }) }}</span>
             <input
+              id="split-point-input"
               v-model.number="splitPoint"
               type="number"
               min="1"
@@ -1237,6 +1399,7 @@ function errorMessage(code: string) {
           <label>
             <span>{{ t('scenePlan.splitModal.newKeyLabel') }}</span>
             <input
+              id="split-key-input"
               v-model="splitNewKey"
               type="text"
               data-testid="split-new-key-input"

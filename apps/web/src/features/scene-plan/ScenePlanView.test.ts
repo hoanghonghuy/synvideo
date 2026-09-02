@@ -253,6 +253,45 @@ describe('ScenePlanView', () => {
     expect(wrapper.text()).toContain('Phiên bản 2')
   })
 
+  it('3c. preserves saved revision and shows retry target load when save-and-switch target fetch fails', async () => {
+    const updatedPlan = { ...draftPlan, revision: 3, scenes: [{ ...draftPlan.scenes[0]!, visual_instruction: 'Visual đã lưu máy chủ' }, draftPlan.scenes[1]!] }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedPlan, draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+    let version2Calls = 0
+    routeFn('GET', `/api/v1/projects/${projectId}/scene-plans/2`, () => {
+      version2Calls++
+      return version2Calls === 1
+        ? jsonResponse({ error: { code: 'request_failed' } }, 500)
+        : jsonResponse(approvedPlan)
+    })
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route('PUT', `/api/v1/projects/${projectId}/scene-plans/1`, updatedPlan)
+    route('GET', '/api/v1/ai/text-generation-options', providers)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('[name="scene_visual_0"]').setValue('Visual đã lưu máy chủ')
+    await wrapper.find('[data-testid="version-2"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="confirm-save-switch"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Bản sửa 3')
+    expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="failed-target-version-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retry-target-version-btn"]').exists()).toBe(true)
+
+    // Click retry target version
+    await wrapper.find('[data-testid="retry-target-version-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="version-2"]').classes()).toContain('active')
+    expect(wrapper.text()).toContain('Phiên bản 2')
+  })
+
   it('4. keeps approved and superseded versions read-only', async () => {
     const supersededPlan = { ...approvedPlan, version: 3, status: 'superseded' as const, approved_at: null }
     route('GET', `/api/v1/projects/${projectId}`, project)
@@ -415,7 +454,7 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(true)
   })
 
-  it('8b. validates split scene key against slug format, duplicate, and length constraints', async () => {
+  it('8b. validates split scene key against slug format, duplicate with target key, and length constraints', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
@@ -426,16 +465,22 @@ describe('ScenePlanView', () => {
 
     await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
 
+    // Duplicate key with target scene 0 itself ('scene-intro-1')
+    await wrapper.find('[data-testid="split-new-key-input"]').setValue('scene-intro-1')
+    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="split-error-notice"]').text()).toContain('Không được trùng khóa.')
+    expect(wrapper.findAll('.scene-card').length).toBe(2)
+
+    // Duplicate key with scene 1 ('scene-body-1')
+    await wrapper.find('[data-testid="split-new-key-input"]').setValue('scene-body-1')
+    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="split-error-notice"]').text()).toContain('Không được trùng khóa.')
+    expect(wrapper.findAll('.scene-card').length).toBe(2)
+
     // Invalid slug with uppercase / spaces
     await wrapper.find('[data-testid="split-new-key-input"]').setValue('INVALID KEY!')
     await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
     expect(wrapper.find('[data-testid="split-error-notice"]').exists()).toBe(true)
-    expect(wrapper.findAll('.scene-card').length).toBe(2)
-
-    // Duplicate key with scene 1
-    await wrapper.find('[data-testid="split-new-key-input"]').setValue('scene-body-1')
-    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
-    expect(wrapper.find('[data-testid="split-error-notice"]').text()).toContain('Không được trùng khóa.')
     expect(wrapper.findAll('.scene-card').length).toBe(2)
 
     // Key exceeding 64 runes
@@ -706,6 +751,43 @@ describe('ScenePlanView', () => {
     }
   })
 
+  it('17b. does not overwrite succeeded version when delayed initial workspace load completes afterward', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      window.sessionStorage.setItem(`scene_plan_job_${projectId}`, jobId)
+      route('GET', `/api/v1/projects/${projectId}`, project)
+      route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+      route('GET', '/api/v1/ai/text-generation-options', providers)
+      route('GET', `/api/v1/projects/${projectId}/scene-plan-generations/${jobId}`, job('succeeded', 9))
+      route('GET', `/api/v1/projects/${projectId}/scene-plans/9`, { ...draftPlan, version: 9 })
+      route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+
+      let resolvePlans!: (value: unknown) => void
+      const plansPromise = new Promise((resolve) => {
+        resolvePlans = resolve
+      })
+      routeFn('GET', `/api/v1/projects/${projectId}/scene-plans`, () => plansPromise)
+
+      const wrapper = await mountView()
+      await flushPromises()
+
+      // Resumed job poll fires and resolves
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+
+      // Delayed initial list finishes with draft v1
+      resolvePlans(jsonResponse([{ ...draftPlan, version: 9 }, draftPlan]))
+      await flushPromises()
+      await flushPromises()
+
+      // Must remain on version 9
+      expect(wrapper.text()).toContain('Phiên bản 9')
+      expect(wrapper.find('[data-testid="version-9"]').classes()).toContain('active')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('18. retries loading succeeded version without regenerating if version fetch transiently fails', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
@@ -785,6 +867,7 @@ describe('ScenePlanView', () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+    route('GET', `/api/v1/scripts`, [approvedScript])
     route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
 
     let listCalls = 0
@@ -806,7 +889,7 @@ describe('ScenePlanView', () => {
     expect((wrapper.find('[name="scene_visual_0"]').element as HTMLTextAreaElement).disabled).toBe(true)
   })
 
-  it('21. presents server field errors next to corresponding controls', async () => {
+  it('21. presents server field errors with accessible aria attributes and unmapped form-level fallback', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
@@ -820,7 +903,13 @@ describe('ScenePlanView', () => {
           message: 'Validation failed',
           fields: {
             'scenes[0].visual_instruction': 'Chỉ dẫn hình ảnh không hợp lệ.',
+            'scenes[0].planned_source_type': 'Nguồn hình ảnh không hợp lệ.',
             'scenes[0].expected_duration_seconds': 'Thời lượng quá lớn.',
+            'scenes[0].caption_intent': 'Ý đồ phụ đề quá dài.',
+            'scenes[0].transition_notes': 'Ghi chú chuyển cảnh không hợp lệ.',
+            'scenes[0].key': 'Khóa cảnh không hợp lệ.',
+            'scenes[0].narration': 'Lời thoại bị sửa.',
+            'global_content_rule': 'Lỗi toàn cục không thuộc về field cụ thể.',
           },
         },
       },
@@ -834,8 +923,34 @@ describe('ScenePlanView', () => {
     await wrapper.find('form.scene-plan-form').trigger('submit')
     await flushPromises()
 
+    // Specific field errors and aria bindings
     expect(wrapper.find('[data-testid="error-visual-0"]').text()).toBe('Chỉ dẫn hình ảnh không hợp lệ.')
+    expect(wrapper.find('#scene-0-visual').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('#scene-0-visual').attributes('aria-describedby')).toBe('error-visual-0')
+
+    expect(wrapper.find('[data-testid="error-source-type-0"]').text()).toBe('Nguồn hình ảnh không hợp lệ.')
+    expect(wrapper.find('#scene-0-source-type').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('#scene-0-source-type').attributes('aria-describedby')).toBe('error-source-type-0')
+
     expect(wrapper.find('[data-testid="error-duration-0"]').text()).toBe('Thời lượng quá lớn.')
+    expect(wrapper.find('#scene-0-duration').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('#scene-0-duration').attributes('aria-describedby')).toBe('error-duration-0')
+
+    expect(wrapper.find('[data-testid="error-caption-0"]').text()).toBe('Ý đồ phụ đề quá dài.')
+    expect(wrapper.find('#scene-0-caption').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('#scene-0-caption').attributes('aria-describedby')).toBe('error-caption-0')
+
+    expect(wrapper.find('[data-testid="error-transition-0"]').text()).toBe('Ghi chú chuyển cảnh không hợp lệ.')
+    expect(wrapper.find('#scene-0-transition').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('#scene-0-transition').attributes('aria-describedby')).toBe('error-transition-0')
+
+    expect(wrapper.find('[data-testid="error-key-0"]').text()).toBe('Khóa cảnh không hợp lệ.')
+    expect(wrapper.find('[data-testid="error-narration-0"]').text()).toBe('Lời thoại bị sửa.')
+
+    // Unmapped form-level fallback
+    expect(wrapper.find('[data-testid="unmapped-field-errors"]').text()).toContain(
+      'global_content_rule: Lỗi toàn cục không thuộc về field cụ thể.',
+    )
   })
 })
 
