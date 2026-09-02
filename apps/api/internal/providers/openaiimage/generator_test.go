@@ -1,6 +1,7 @@
 package openaiimage_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -96,6 +97,22 @@ func TestGenerateImageMapsCurrentModelPromptCountAndAspectAndDecodesBytes(t *tes
 		if err != nil || string(data) != string(expected.data) {
 			t.Fatalf("output %d data = %q/%v, want fixture", i, data, err)
 		}
+	}
+}
+
+func TestGenerateImageDefaultResponseBoundSupportsConfiguredDecodedImageBound(t *testing.T) {
+	largePNG := append(append([]byte(nil), pngBytes...), bytes.Repeat([]byte{'x'}, 1<<20)...)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeImageResponse(w, imageResponse{Data: []imageData{{B64JSON: base64.StdEncoding.EncodeToString(largePNG)}}})
+	}))
+	defer server.Close()
+
+	response, err := newGenerator(t, server.URL+"/v1", nil).GenerateImage(context.Background(), providers.ImageGenerationRequest{Prompt: "hello"})
+	if err != nil {
+		t.Fatalf("generate image: %v", err)
+	}
+	if len(response.Outputs) != 1 || response.Outputs[0].Binary.Size() != int64(len(largePNG)) {
+		t.Fatalf("output = %#v, want decoded image larger than 1 MiB", response.Outputs)
 	}
 }
 

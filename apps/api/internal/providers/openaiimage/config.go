@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	DefaultBaseURL                = "https://api.openai.com/v1"
-	DefaultTimeout                = 30 * time.Second
-	DefaultMaxResponseBytes       = 1 << 20
+	DefaultBaseURL = "https://api.openai.com/v1"
+	DefaultTimeout = 30 * time.Second
+	// Four 20 MiB decoded outputs expand to about 107 MiB as base64. This
+	// leaves headroom for the JSON envelope while keeping the response bounded.
+	DefaultMaxResponseBytes       = 128 << 20
 	DefaultMaxDecodedImageBytes   = 20 << 20
 	DefaultMaxAggregateImageBytes = 80 << 20
 )

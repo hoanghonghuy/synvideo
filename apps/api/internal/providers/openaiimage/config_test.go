@@ -49,30 +49,38 @@ func TestNewRegistrationIsDeterministicAndBindsImageCapability(t *testing.T) {
 }
 
 func TestNewRejectsUnsafeOrInvalidConfiguration(t *testing.T) {
-	base := openaiimage.Config{
+	tests := map[string]func(*openaiimage.Config){
+		"missing credential source": func(c *openaiimage.Config) { c.CredentialSource = nil },
+		"missing model":             func(c *openaiimage.Config) { c.Models = nil },
+		"invalid model mapping":     func(c *openaiimage.Config) { c.Models[0].ExternalModelID = " gpt-image-2" },
+		"negative response bound":   func(c *openaiimage.Config) { c.MaxResponseBytes = -1 },
+		"negative image bound":      func(c *openaiimage.Config) { c.MaxDecodedImageBytes = -1 },
+		"zero output bound":         func(c *openaiimage.Config) { c.MaxOutputCount = -1 },
+		"http public endpoint":      func(c *openaiimage.Config) { c.BaseURL = "http://api.example.com/v1" },
+		"userinfo":                  func(c *openaiimage.Config) { c.BaseURL = "https://user:pass@example.test/v1" },
+		"query":                     func(c *openaiimage.Config) { c.BaseURL = "https://example.test/v1?key=value" },
+	}
+
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			config := validConfig()
+			mutate(&config)
+			if _, err := openaiimage.New(config); !errors.Is(err, openaiimage.ErrInvalidConfiguration) {
+				t.Fatalf("error = %v, want invalid configuration", err)
+			}
+			if err := openaiimage.ValidateBaseURL(config.BaseURL); name == "http public endpoint" && err == nil {
+				t.Fatal("expected public HTTP URL to be rejected")
+			}
+		})
+	}
+}
+
+func validConfig() openaiimage.Config {
+	return openaiimage.Config{
 		ProviderID:       "openai",
 		DisplayName:      "OpenAI Images",
 		CredentialSource: openaiimage.SecretSourceFunc(func(context.Context) (string, error) { return "key", nil }),
 		Models:           []openaiimage.ModelConfig{{ID: "image", DisplayName: "Image", ExternalModelID: "gpt-image-2"}},
-	}
-	tests := map[string]openaiimage.Config{
-		"missing credential source": func() openaiimage.Config { c := base; c.CredentialSource = nil; return c }(),
-		"missing model":             func() openaiimage.Config { c := base; c.Models = nil; return c }(),
-		"invalid model mapping":     func() openaiimage.Config { c := base; c.Models[0].ExternalModelID = " gpt-image-2"; return c }(),
-		"negative response bound":   func() openaiimage.Config { c := base; c.MaxResponseBytes = -1; return c }(),
-		"negative image bound":      func() openaiimage.Config { c := base; c.MaxDecodedImageBytes = -1; return c }(),
-		"zero output bound":         func() openaiimage.Config { c := base; c.MaxOutputCount = -1; return c }(),
-		"http public endpoint":      func() openaiimage.Config { c := base; c.BaseURL = "http://api.example.com/v1"; return c }(),
-		"userinfo":                  func() openaiimage.Config { c := base; c.BaseURL = "https://user:pass@example.test/v1"; return c }(),
-		"query":                     func() openaiimage.Config { c := base; c.BaseURL = "https://example.test/v1?key=value"; return c }(),
-	}
-
-	for name, config := range tests {
-		t.Run(name, func(t *testing.T) {
-			if _, err := openaiimage.New(config); err == nil {
-				t.Fatal("expected configuration error")
-			}
-		})
 	}
 }
 
