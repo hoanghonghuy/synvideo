@@ -1,39 +1,57 @@
 # PM / AI Developer / Team Lead Workflow
 
+`docs/engineering/CONTROL_PLANE_PROTOCOL.md` defines remote authority, freshness, transition ordering, duplicate prevention and drift handling for every role.
+
 ## Roles
 ### PM
-Owns product intent, scope, priorities, user flows, acceptance criteria, roadmap, task readiness and documentation under `docs/`.
+Owns product intent, scope, priorities, user flows, acceptance criteria, roadmap, task readiness and control-plane documentation.
 
-PM may update `AGENTS.md` and `docs/**` directly on `develop` because these are control-plane/product changes rather than application implementation.
+PM may update `AGENTS.md` and `docs/**` directly on `develop` because these are control-plane/product changes rather than application implementation. Before planning or changing task state, PM inspects fresh remote issues/PRs/branches and current `develop`; PM must not treat a local checkout as authoritative.
+
+PM owns live task authorization and lifecycle through the authoritative GitHub task issue, with BOARD/task status fields maintained as mirrors/indexes. PM also owns explicit abandoned-claim recovery and material re-scope decisions.
 
 ### AI Developer
-Owns implementation for one approved task at a time. Never implements directly on `main` or `develop`.
+Owns implementation for one PM-authorized task at a time. Never implements directly on `main` or `develop`.
+
+A developer resolves live issue/PR/remote-branch state before local state. `READY` authorizes execution but does not prove availability: a canonical remote branch or active PR means the task is claimed.
 
 ### Team Lead
-Reviews implementation against the task/spec, architecture constraints, regressions, security, tests and real user behavior. Team Lead does not silently rewrite product decisions during review.
+Reviews implementation against the exact current remote PR head, current task/product contract, architecture constraints, regressions, security, tests and real user behavior. Team Lead does not silently rewrite product decisions during review and does not reuse stale-head approval/CI as evidence for a newer head.
 
 ## Branch model
-- `main`: stable/release-ready.
-- `develop`: integration branch + PM source of truth.
+- `main`: stable/release-ready and may intentionally lag development.
+- `develop`: current integration/control-plane baseline.
 - implementation: `feature/TASK-xxx-*`, `fix/TASK-xxx-*` → PR to `develop`.
+
+Generic/default-branch code search is not proof of current development state; inspect explicit `develop`, canonical task branch or exact PR head.
 
 ## Developer loop
 When idle:
-1. `git fetch origin`.
-2. inspect latest `origin/develop` task board.
-3. take only a `READY` task.
-4. update local `develop` with fast-forward where possible.
-5. create a dedicated task branch.
-6. implement/test.
-7. PR to `develop`.
-8. address Team Lead findings on the same task branch.
-9. after merge, return to latest `develop` and check the board again.
+1. inspect live GitHub task issues, active PRs and canonical task branches;
+2. fetch/refresh latest `origin/develop` and remote refs;
+3. read current BOARD/task spec from that refreshed baseline;
+4. select only PM-authorized executable work whose dependencies/order permit it;
+5. confirm it has no canonical remote claim branch/active PR/ownership ambiguity;
+6. atomically create the absent canonical remote branch at the selected `origin/develop` SHA;
+7. create/attach a dedicated worktree for that branch;
+8. implement/test using TDD and the current task contract;
+9. re-check live task state before delivery, then open/update the PR to `develop`;
+10. address Team Lead findings on the same branch/worktree/PR;
+11. after merge, return to refreshed remote state instead of assuming local mirrors are current.
 
 Do not continuously pull/merge `develop` while implementing an unrelated task. Sync only when upstream changes are required or at an appropriate integration point.
 
-## Status ownership
-PM owns board status and priority. Typical state flow:
+## Status and ownership
+Typical PM lifecycle:
 `BACKLOG → READY → IN_PROGRESS → REVIEW → (CHANGES_REQUESTED ↔ REVIEW) → DONE`.
-Additional states: `BLOCKED`, `CANCELLED`.
+Additional states: `BLOCKED`, `BLOCKED_EXTERNAL`, `CANCELLED`.
 
-AI Developer may report progress but does not self-certify `DONE`.
+The GitHub issue is the live authorization/lifecycle authority. BOARD/task status fields are maintained mirrors. Claim ownership is separate and is determined by the canonical remote task branch/active PR.
+
+AI Developers may report progress but do not self-certify `DONE`, take over another claim, or silently continue through a material PM re-scope.
+
+## Transition discipline
+- To activate work, freeze versioned task/contracts on `develop` first and change the issue to `READY` last.
+- To block/cancel unclaimed work, update the issue first, then mirrors.
+- To complete work, accept exact head → merge → close/update issue → reconcile BOARD/task mirrors.
+- Metadata drift is repaired using the authority rules; material contract drift stops implementation until PM/Team Lead resolves it.
