@@ -6,7 +6,7 @@
 ### PM
 Owns product intent, scope, priorities, user flows, acceptance criteria, roadmap, task readiness and control-plane documentation.
 
-PM may update `AGENTS.md` and `docs/**` directly on `develop` because these are control-plane/product changes rather than application implementation. Before planning or changing task state, PM inspects fresh remote issues/PRs/branches and current `develop`; PM must not treat a local checkout as authoritative.
+PM changes to `AGENTS.md`, `docs/**`, task metadata and other control-plane files must respect repository branch protection. When protection is enabled, use a short-lived control-plane/docs branch and PR to `develop`; do not bypass protected-branch rules merely because the change is non-implementation. Before planning or changing task state, PM inspects fresh remote issues/PRs/branches and current `develop`; PM must not treat a local checkout as authoritative.
 
 PM owns live task authorization and lifecycle through the authoritative GitHub task issue, with BOARD/task status fields maintained as mirrors/indexes. PM also owns explicit abandoned-claim recovery and material re-scope decisions.
 
@@ -20,10 +20,17 @@ Reviews implementation against the exact current remote PR head, current task/pr
 
 ## Branch model
 - `main`: stable/release-ready and may intentionally lag development.
-- `develop`: current integration/control-plane baseline.
+- `develop`: current integration/control-plane baseline and protected integration branch.
 - implementation: `feature/TASK-xxx-*`, `fix/TASK-xxx-*` → PR to `develop`.
+- PM/TL control-plane housekeeping when protection is enabled: short-lived `docs/*`, `chore/*` or equivalent → PR to `develop`.
 
 Generic/default-branch code search is not proof of current development state; inspect explicit `develop`, canonical task branch or exact PR head.
+
+## Protected-branch enforcement
+
+`main` and `develop` should reject direct history mutation, force pushes and branch deletion. `develop` requires PR integration and the current required CI checks. Because PM/TL/Developer automation may share one GitHub identity, do not rely on admin bypass to distinguish roles: repository protection should apply to administrators too, and role separation is enforced through branch/PR workflow rather than shared-account identity.
+
+The repository helper `scripts/admin/protect-branches.sh` applies the intended baseline through authenticated GitHub CLI. If protection policy changes, update this workflow and the script together.
 
 ## Developer loop
 When idle:
@@ -51,7 +58,7 @@ The GitHub issue is the live authorization/lifecycle authority. BOARD/task statu
 AI Developers may report progress but do not self-certify `DONE`, take over another claim, or silently continue through a material PM re-scope.
 
 ## Transition discipline
-- To activate work, freeze versioned task/contracts on `develop` first and change the issue to `READY` last.
-- To block/cancel unclaimed work, update the issue first, then mirrors.
+- To activate work, merge/finalize versioned task/contracts/order on protected `develop` first and change the issue to `READY` last.
+- To block/cancel unclaimed work, update the issue first, then reconcile mirrors through the protected control-plane PR path.
 - To complete work, accept exact head → merge → close/update issue → reconcile BOARD/task mirrors.
 - Metadata drift is repaired using the authority rules; material contract drift stops implementation until PM/Team Lead resolves it.
