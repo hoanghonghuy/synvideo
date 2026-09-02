@@ -33,10 +33,11 @@ func cloneRegistration(registration Registration) Registration {
 	}
 	for i, model := range registration.Models {
 		cloned.Models[i] = ModelRegistration{
-			Metadata:       cloneModelMetadata(model.Metadata),
-			TextGenerator:  model.TextGenerator,
-			ImageGenerator: model.ImageGenerator,
-			VideoGenerator: model.VideoGenerator,
+			Metadata:          cloneModelMetadata(model.Metadata),
+			TextGenerator:     model.TextGenerator,
+			ImageGenerator:    model.ImageGenerator,
+			VideoGenerator:    model.VideoGenerator,
+			SpeechSynthesizer: model.SpeechSynthesizer,
 		}
 	}
 	return cloned

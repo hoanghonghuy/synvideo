@@ -20,6 +20,7 @@ var (
 	ErrResultUnavailable         = errors.New("generated result is unavailable")
 	ErrUnknownVideoOperation     = errors.New("unknown video operation")
 	ErrDuplicateRegistration     = errors.New("duplicate provider registration")
+	ErrSpeechInputTooLong        = errors.New("speech input is too long")
 )
 
 // Category classifies provider-boundary failures for stable handling upstream.
@@ -40,6 +41,7 @@ const (
 	CategoryResultUnavailable         Category = "result_unavailable"
 	CategoryUnknownVideoOperation     Category = "unknown_video_operation"
 	CategoryDuplicateRegistration     Category = "duplicate_registration"
+	CategorySpeechInputTooLong        Category = "speech_input_too_long"
 )
 
 // BoundaryError is a provider-boundary failure with a safe presentation message.
@@ -142,5 +144,13 @@ func NewDuplicateRegistrationError(providerID ProviderID) error {
 		Category: CategoryDuplicateRegistration,
 		Message:  fmt.Sprintf("Provider %q is already registered.", providerID),
 		cause:    ErrDuplicateRegistration,
+	}
+}
+
+func NewSpeechInputTooLongError() error {
+	return &BoundaryError{
+		Category: CategorySpeechInputTooLong,
+		Message:  "The speech narration exceeds the selected provider's input limit.",
+		cause:    errors.Join(ErrInvalidRequest, ErrSpeechInputTooLong),
 	}
 }

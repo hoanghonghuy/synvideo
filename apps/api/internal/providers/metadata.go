@@ -25,10 +25,11 @@ func (m ModelMetadata) Supports(capability Capability) bool {
 
 // ModelRegistration binds a model to optional capability implementations.
 type ModelRegistration struct {
-	Metadata       ModelMetadata
-	TextGenerator  TextGenerator
-	ImageGenerator ImageGenerator
-	VideoGenerator VideoGenerator
+	Metadata          ModelMetadata
+	TextGenerator     TextGenerator
+	ImageGenerator    ImageGenerator
+	VideoGenerator    VideoGenerator
+	SpeechSynthesizer SpeechSynthesizer
 }
 
 // Registration registers one provider and its models in the catalog.
