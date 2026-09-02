@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
@@ -98,12 +99,30 @@ func (r *MediaAssetRepository) Delete(ctx context.Context, ownerID, projectID, a
 		DELETE FROM media_assets WHERE owner_id = $1 AND project_id = $2 AND id = $3;
 	`, ownerID, projectID, assetID)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "scene_media_bindings_asset_fk" {
+			return mediaasset.ErrInUse
+		}
 		return fmt.Errorf("delete media asset: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return mediaasset.ErrNotFound
 	}
 	return nil
+}
+
+func (r *MediaAssetRepository) HasReferences(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (bool, error) {
+	var referenced bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM scene_media_bindings
+			WHERE owner_id = $1 AND project_id = $2 AND asset_id = $3
+		)
+	`, ownerID, projectID, assetID).Scan(&referenced)
+	if err != nil {
+		return false, fmt.Errorf("check media asset references: %w", err)
+	}
+	return referenced, nil
 }
 
 type mediaAssetRow interface{ Scan(...any) error }

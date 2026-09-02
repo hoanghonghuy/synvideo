@@ -62,9 +62,11 @@ The frontend runs on Vite's default port unless overridden by Vite CLI options. 
 
 Development-only infrastructure defaults are documented in `.env.example`.
 
-Local object storage uses SeaweedFS `4.44` as a development-only S3-compatible endpoint on `http://localhost:8333`. MinIO Community Edition is intentionally not used for this foundation because its public repository is no longer maintained; production storage remains provider-neutral and should be selected by a later task.
+Local object storage uses SeaweedFS `4.44` as a development-only S3-compatible endpoint on `http://localhost:8333`. Configure the media API with the `SYNVIDEO_MEDIA_STORAGE_*` variables in `.env.example`; legacy `SYNVIDEO_S3_*` aliases remain accepted for local compatibility. MinIO Community Edition is intentionally not used for this foundation because its public repository is no longer maintained; production storage remains provider-neutral and should be selected by a later task.
 
 Project routes use `SYNVIDEO_LOCAL_ACTOR_ID` only in `development` and `test`. Production rejects that local actor fallback so project data is not accidentally exposed before a real authentication task exists.
+
+When media storage is configured, the API exposes bounded upload/list/metadata/content/delete routes under `/api/v1/projects/{project_id}/media-assets` and approved scene primary-visual binding routes under `/api/v1/projects/{project_id}/scene-plans/{version}`. Content serving supports full downloads and one standard byte range for preview playback; storage credentials and object keys are never returned by the API.
 
 ## Verification
 

@@ -115,6 +115,31 @@ func (s *Storage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	return &readCloser{ReadCloser: object, cancel: cancel}, nil
 }
 
+func (s *Storage) OpenRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 || length < 1 {
+		return nil, fmt.Errorf("%w", mediaasset.ErrStorageFailed)
+	}
+	info, err := s.Stat(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if offset >= info.Size || length > info.Size-offset {
+		return nil, fmt.Errorf("%w", mediaasset.ErrObjectNotFound)
+	}
+	operationCtx, cancel := s.operationContext(ctx)
+	options := minio.GetObjectOptions{}
+	if err := options.SetRange(offset, offset+length-1); err != nil {
+		cancel()
+		return nil, fmt.Errorf("%w", mediaasset.ErrStorageFailed)
+	}
+	object, err := s.client.GetObject(operationCtx, s.bucket, key, options)
+	if err != nil {
+		cancel()
+		return nil, mapError(err)
+	}
+	return &readCloser{ReadCloser: object, cancel: cancel}, nil
+}
+
 func (s *Storage) Delete(ctx context.Context, key string) error {
 	if err := mediaasset.ValidateObjectKey(key); err != nil {
 		return fmt.Errorf("%w", mediaasset.ErrStorageFailed)
@@ -161,6 +186,9 @@ func (s *Storage) operationContext(ctx context.Context) (context.Context, contex
 func mapError(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
+	}
+	if errors.Is(err, mediaasset.ErrTooLarge) {
+		return mediaasset.ErrTooLarge
 	}
 	response := minio.ToErrorResponse(err)
 	if response.StatusCode == 404 || response.Code == "NoSuchKey" || response.Code == "NoSuchObject" || response.Code == "NoSuchBucket" {

@@ -16,3 +16,9 @@ type Repository interface {
 	List(context.Context, uuid.UUID, uuid.UUID, ListOptions) (ListResult, error)
 	Delete(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 }
+
+// ReferenceChecker is implemented by repositories that can protect the
+// object-first deletion workflow from deleting a referenced object.
+type ReferenceChecker interface {
+	HasReferences(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (bool, error)
+}

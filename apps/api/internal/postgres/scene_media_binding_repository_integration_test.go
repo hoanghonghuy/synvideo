@@ -156,8 +156,8 @@ func TestSceneMediaBindingRepositoryIntegration(t *testing.T) {
 		t.Fatalf("draft plan assignment error=%v, want not approved", err)
 	}
 
-	if err := assetRepository.Delete(context.Background(), ownerA, projectA.ID, video.ID); err == nil {
-		t.Fatal("expected referenced asset deletion to be restricted")
+	if err := assetRepository.Delete(context.Background(), ownerA, projectA.ID, video.ID); !errors.Is(err, mediaasset.ErrInUse) {
+		t.Fatalf("expected referenced asset deletion to be restricted, got %v", err)
 	}
 	if _, err := assetRepository.Get(context.Background(), ownerA, projectA.ID, video.ID); err != nil {
 		t.Fatalf("referenced asset disappeared after rejected delete: %v", err)
