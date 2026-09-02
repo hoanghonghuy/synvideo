@@ -1,14 +1,14 @@
 # Remote Control-Plane Authority Protocol
 
-This protocol defines how PM, AI Developers and Team Lead resolve repository state when GitHub, `develop`, task documents and local workspaces can change independently.
+This protocol defines how PM, AI Developers and Team Lead resolve repository state when GitHub, `develop`, task documents and execution workspaces can change independently.
 
 ## Core invariant
 
-**Shared workflow decisions are remote-first. Local Git state is an execution cache/workspace, never proof of current shared state.**
+**Shared workflow decisions are remote-first. Local Git state or a cloud execution workspace is an execution cache/workspace, never proof of current shared state.**
 
-No agent may conclude that a task, branch, PR, review, check, dependency or product/control-plane change does not exist merely because it is absent from a local checkout or local remote-tracking refs.
+No agent may conclude that a task, branch, PR, review, check, dependency or product/control-plane change does not exist merely because it is absent from a local checkout, local remote-tracking refs, or an ephemeral cloud workspace.
 
-Before making a workflow decision, refresh or directly inspect the relevant GitHub remote state. If current remote state cannot be established, do not infer absence from stale local data.
+Before making a workflow decision, refresh or directly inspect the relevant GitHub remote state. If current remote state cannot be established, do not infer absence from stale execution state.
 
 `main` is the stable/release branch and may intentionally lag development. Current development decisions must explicitly target `develop`, the canonical task branch, or the exact PR head. Generic GitHub code search that implicitly reads the repository default branch is not sufficient evidence for current `develop` state.
 
@@ -20,22 +20,28 @@ Do not depend on repository-admin bypass to distinguish PM/TL from Developer aut
 
 The helper `scripts/admin/protect-branches.sh` applies the current baseline protection policy. Protection policy and this protocol must remain aligned.
 
+## Execution substrates
+
+`docs/engineering/EXECUTION_SUBSTRATES.md` defines execution isolation. The canonical remote task branch is the universal cross-agent claim boundary. A dedicated Git worktree is additionally required only for Developers that share a persistent local repository filesystem with other tasks/agents.
+
+Scheduled/cloud/API-isolated Developers must not invent local-worktree requirements when no shared filesystem exists, but they still obey the same remote claim, protected-branch, TDD, exact-head CI and PR rules.
+
 ## Authority by concern
 
 Different concerns have different authorities; there is no single file that wins every conflict.
 
 | Concern | Authority |
 |---|---|
-| Approved product behavior | accepted product specs/ADRs at current `origin/develop` |
-| Engineering/process constraints | `AGENTS.md` and `docs/engineering/**` at current `origin/develop` |
-| Task scope, acceptance criteria, canonical branch, frozen contracts | `docs/tasks/TASK-XXX.md` at current `origin/develop` |
+| Approved product behavior | accepted product specs/ADRs at current `origin/develop` / remote `develop` |
+| Engineering/process constraints | `AGENTS.md` and `docs/engineering/**` at current `develop` |
+| Task scope, acceptance criteria, canonical branch, frozen contracts | `docs/tasks/TASK-XXX.md` at current `develop` |
 | PM execution authorization/lifecycle (`READY`, `BLOCKED`, `CANCELLED`, etc.) | authoritative GitHub task issue |
 | Task claim / cross-agent ownership | canonical remote task branch, created atomically only-if-absent |
 | Implementation under review | exact remote task branch / PR head SHA |
 | Review state | latest PR head + latest review submissions/threads/comments + checks for that exact head |
 | Merge/completion fact | merged PR plus PM/Team Lead issue closure/acceptance record |
-| Queue overview and relative PM ordering | `docs/tasks/BOARD.md` at current `origin/develop` |
-| Local branch/worktree/uncommitted files | local execution state only; never shared workflow authority |
+| Queue overview and relative PM ordering | `docs/tasks/BOARD.md` at current `develop` |
+| Local worktree / ephemeral cloud workspace / uncommitted execution state | execution state only; never shared workflow authority |
 
 `BOARD.md` and `Status:` lines inside task files are useful mirrors/indexes, but a stale mirror must not make an agent pretend that fresher live GitHub state does not exist.
 
@@ -53,18 +59,18 @@ Before planning, activating, blocking, cancelling or completing work:
 Before selecting or continuing implementation:
 1. inspect the live GitHub task issue, canonical remote branch and active PR state;
 2. for an active PR, inspect its exact current head, latest reviews/comments and current checks;
-3. fetch/refresh `origin/develop` and remote branch refs before reading versioned control-plane files;
-4. read the task spec and referenced contracts from the refreshed `origin/develop` baseline;
-5. only then inspect/use local branches and worktrees for execution.
+3. resolve current `develop` and remote branch refs before reading versioned control-plane files;
+4. read the task spec and referenced contracts from that refreshed remote baseline;
+5. only then inspect/use the execution workspace appropriate to the substrate.
 
-Never reset, clean or overwrite legitimate local uncommitted work merely because remote state changed.
+On a shared local filesystem, never reset, clean or overwrite legitimate local uncommitted work merely because remote state changed. In a cloud/API substrate, never assume an ephemeral workspace snapshot is fresher than GitHub remote state.
 
 ### Team Lead
 Before reviewing or merging:
 1. resolve the exact current PR head SHA and base branch;
 2. read the latest PR diff/changed files from remote;
 3. read current reviews, review threads/comments and checks for that exact head;
-4. read the live task issue and the task/product/engineering contracts from current `origin/develop`;
+4. read the live task issue and the task/product/engineering contracts from current `develop`;
 5. anchor the verdict to the exact reviewed head SHA.
 
 A review or green check from an older head is not reusable evidence after the PR head changes.
@@ -73,11 +79,11 @@ A review or green check from an older head is not reusable evidence after the PR
 
 A new task is claimable only when all of the following are true:
 - the authoritative GitHub issue currently authorizes execution (normally `READY`);
-- the task spec exists on current `origin/develop` and provides an executable scope/branch/acceptance contract;
+- the task spec exists on current `develop` and provides an executable scope/branch/acceptance contract;
 - live dependency facts satisfy the task gate;
 - the canonical remote branch does not already exist;
 - no active PR already represents the task;
-- no known local task branch/worktree creates unresolved ownership ambiguity on the current machine.
+- for a shared local filesystem only, no known local task branch/worktree creates unresolved machine-local ownership ambiguity.
 
 Relative priority comes from the PM-controlled board/issue metadata. If multiple live `READY` tasks exist but the available remote control-plane data gives no safe ordering, report the ambiguity rather than inventing priority.
 
@@ -95,8 +101,8 @@ Examples: conflicting task scope, different canonical branch names, incompatible
 
 Do not guess which behavior to build. PM/Team Lead must reconcile the contract before implementation proceeds.
 
-### Local drift — refresh before deciding
-A stale local `develop`, stale remote-tracking ref or missing local branch is not evidence that the corresponding remote object is absent.
+### Execution-workspace drift — refresh before deciding
+A stale local `develop`, stale remote-tracking ref, missing local branch, or stale ephemeral cloud workspace is not evidence that the corresponding remote object is absent.
 
 ## PM transition ordering
 
@@ -146,8 +152,10 @@ A generic coding agent never deletes or takes over an existing canonical remote 
 PM/Team Lead may recover an apparently abandoned claim only after checking:
 - no active PR represents the branch;
 - the branch head and unmerged commits are understood;
-- no known active agent/worktree still owns it;
+- no known active agent/workspace still owns it;
 - any useful unmerged work is preserved.
+
+For local/shared-filesystem execution, active worktrees/processes are part of the ownership check. For scheduled/cloud/API-isolated execution, inspect active automation/agent runs or other platform ownership signals when available instead of requiring a local worktree to exist.
 
 If the branch contains useful work, prefer explicit reassignment of that existing branch. Delete/release an empty/stale claim only by an explicit PM/Team Lead decision, then re-run the normal atomic claim flow.
 
