@@ -19,7 +19,8 @@ import (
 const (
 	DefaultBaseURL          = "https://api.openai.com/v1"
 	DefaultTimeout          = 30 * time.Second
-	DefaultMaxInputRunes    = 4096
+	DefaultMaxInputRunes    = 2000
+	DefaultMaxInputBytes    = 8000
 	DefaultMaxResponseBytes = 64 << 20
 )
 
@@ -94,6 +95,7 @@ type Adapter struct {
 	credentialSource SecretSource
 	models           map[providers.ModelID]modelConfig
 	voices           map[providers.VoiceID]voiceConfig
+	defaultFormat    providers.AudioFormat
 	formats          map[providers.AudioFormat]struct{}
 	client           *http.Client
 	maxInputRunes    int
@@ -130,8 +132,12 @@ func New(config Config) (*Adapter, error) {
 	if maxInputRunes == 0 {
 		maxInputRunes = DefaultMaxInputRunes
 	}
-	if config.MaxInputBytes < 0 {
+	maxInputBytes := config.MaxInputBytes
+	if maxInputBytes < 0 {
 		return nil, fmt.Errorf("%w: maximum input bytes cannot be negative", ErrInvalidConfiguration)
+	}
+	if maxInputBytes == 0 {
+		maxInputBytes = DefaultMaxInputBytes
 	}
 	maxResponseBytes := config.MaxResponseBytes
 	if maxResponseBytes < 0 {
@@ -146,6 +152,7 @@ func New(config Config) (*Adapter, error) {
 	if len(configuredFormats) == 0 {
 		configuredFormats = []providers.AudioFormat{providers.AudioFormatMP3, providers.AudioFormatWAV}
 	}
+	defaultFormat := configuredFormats[0]
 	for _, format := range configuredFormats {
 		if !format.Valid() {
 			return nil, fmt.Errorf("%w: unsupported output format", ErrInvalidConfiguration)
@@ -213,8 +220,8 @@ func New(config Config) (*Adapter, error) {
 
 	return &Adapter{
 		providerID: config.ProviderID, endpoint: endpoint, credentialSource: config.CredentialSource,
-		models: models, voices: voices, formats: formats, client: client,
-		maxInputRunes: maxInputRunes, maxInputBytes: config.MaxInputBytes, maxResponseBytes: maxResponseBytes,
+		models: models, voices: voices, defaultFormat: defaultFormat, formats: formats, client: client,
+		maxInputRunes: maxInputRunes, maxInputBytes: maxInputBytes, maxResponseBytes: maxResponseBytes,
 	}, nil
 }
 
@@ -290,7 +297,7 @@ func speechEndpoint(rawBaseURL string) (string, error) {
 	if host == "" {
 		return "", errors.New("base URL host is required")
 	}
-	if parsed.Scheme == "http" && !isLocalOrTestHost(host) {
+	if parsed.Scheme == "http" && !isLoopbackHost(host) {
 		return "", errors.New("https is required for non-local base URLs")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/audio/speech"
@@ -323,8 +330,8 @@ func hasUnsafePath(path string) bool {
 	return false
 }
 
-func isLocalOrTestHost(host string) bool {
-	if host == "localhost" || host == "test" || strings.HasSuffix(host, ".test") {
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
 		return true
 	}
 	ip := net.ParseIP(host)

@@ -33,12 +33,14 @@ func TestNewRegistrationBindsConfiguredTTSModelsAndVoices(t *testing.T) {
 
 func TestNewRejectsInvalidBoundsAndUnsafeBaseURL(t *testing.T) {
 	tests := map[string]func(*openaitts.Config){
-		"missing credential":  func(c *openaitts.Config) { c.CredentialSource = nil },
-		"missing models":      func(c *openaitts.Config) { c.Models = nil },
-		"missing voices":      func(c *openaitts.Config) { c.Voices = nil },
-		"zero input bound":    func(c *openaitts.Config) { c.MaxInputRunes = -1 },
-		"zero response bound": func(c *openaitts.Config) { c.MaxResponseBytes = -1 },
-		"public http":         func(c *openaitts.Config) { c.BaseURL = "http://api.example.com/v1" },
+		"missing credential":        func(c *openaitts.Config) { c.CredentialSource = nil },
+		"missing models":            func(c *openaitts.Config) { c.Models = nil },
+		"missing voices":            func(c *openaitts.Config) { c.Voices = nil },
+		"zero input bound":          func(c *openaitts.Config) { c.MaxInputRunes = -1 },
+		"negative input byte bound": func(c *openaitts.Config) { c.MaxInputBytes = -1 },
+		"zero response bound":       func(c *openaitts.Config) { c.MaxResponseBytes = -1 },
+		"public http":               func(c *openaitts.Config) { c.BaseURL = "http://api.example.com/v1" },
+		"non-loopback test domain":  func(c *openaitts.Config) { c.BaseURL = "http://api.test/v1" },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -77,5 +79,17 @@ func TestNewUsesCanonicalDefaultBaseURL(t *testing.T) {
 	config.BaseURL = server.URL + "/v1"
 	if _, err := openaitts.New(config); err != nil {
 		t.Fatalf("new with local base URL: %v", err)
+	}
+
+	for _, localURL := range []string{
+		"http://localhost:8080/v1",
+		"http://127.0.0.1:8080/v1",
+		"http://[::1]:8080/v1",
+	} {
+		cfg := validConfig()
+		cfg.BaseURL = localURL
+		if _, err := openaitts.New(cfg); err != nil {
+			t.Fatalf("new with local URL %q: %v", localURL, err)
+		}
 	}
 }

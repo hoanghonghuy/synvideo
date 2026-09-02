@@ -55,7 +55,7 @@ func (s *modelSynthesizer) SynthesizeSpeech(ctx context.Context, req providers.S
 	}
 	format := req.Format
 	if format == "" {
-		format = providers.AudioFormatMP3
+		format = s.adapter.defaultFormat
 	}
 	if _, ok := s.adapter.formats[format]; !ok {
 		return providers.SpeechSynthesisResponse{}, providers.NewInvalidRequestError(errors.New("requested speech format is not configured"))

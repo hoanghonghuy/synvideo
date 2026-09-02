@@ -273,3 +273,114 @@ func (b *blockingBody) Close() error {
 	b.closeOnce.Do(func() { close(b.closed) })
 	return nil
 }
+
+func TestSynthesizeSpeechDefaultEmptyFormatUsesFirstConfiguredFormat(t *testing.T) {
+	var receivedFormat string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Format string `json:"response_format"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		receivedFormat = body.Format
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = io.WriteString(w, "RIFFwav-bytes")
+	}))
+	defer server.Close()
+
+	config := validConfig()
+	config.BaseURL = server.URL + "/v1"
+	config.SupportedFormats = []providers.AudioFormat{providers.AudioFormatWAV}
+	adapter, err := openaitts.New(config)
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	synth, err := adapter.ForModel("speech")
+	if err != nil {
+		t.Fatalf("bind model: %v", err)
+	}
+	response, err := synth.SynthesizeSpeech(context.Background(), providers.SpeechSynthesisRequest{
+		Text:    "test narration",
+		VoiceID: "narrator",
+		Format:  "",
+	})
+	if err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	if receivedFormat != "wav" {
+		t.Fatalf("upstream format = %q, want wav", receivedFormat)
+	}
+	if response.Audio.MIMEType() != "audio/wav" {
+		t.Fatalf("response MIME = %q, want audio/wav", response.Audio.MIMEType())
+	}
+}
+
+func TestSynthesizeSpeechRejectsInputBytesTooLongBeforeCredentialOrNetwork(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	defer server.Close()
+
+	config := validConfig()
+	config.BaseURL = server.URL + "/v1"
+	config.MaxInputRunes = 100
+	config.MaxInputBytes = 10
+	config.CredentialSource = openaitts.SecretSourceFunc(func(context.Context) (string, error) {
+		t.Fatal("credential source must not be called")
+		return "", nil
+	})
+	adapter, err := openaitts.New(config)
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	synth, err := adapter.ForModel("speech")
+	if err != nil {
+		t.Fatalf("bind model: %v", err)
+	}
+
+	input := "🎉✨🚀🔥"
+	_, err = synth.SynthesizeSpeech(context.Background(), providers.SpeechSynthesisRequest{
+		Text:    input,
+		VoiceID: "narrator",
+	})
+	if !errors.Is(err, providers.ErrSpeechInputTooLong) {
+		t.Fatalf("error = %v, want ErrSpeechInputTooLong", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatal("too-long bytes input made a network request")
+	}
+}
+
+func TestSynthesizeSpeechDefaultConservativeBoundsRejectExceedingInputBeforeCredentialOrNetwork(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	defer server.Close()
+
+	config := validConfig()
+	config.BaseURL = server.URL + "/v1"
+	config.CredentialSource = openaitts.SecretSourceFunc(func(context.Context) (string, error) {
+		t.Fatal("credential source must not be called")
+		return "", nil
+	})
+	adapter, err := openaitts.New(config)
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	synth, err := adapter.ForModel("speech")
+	if err != nil {
+		t.Fatalf("bind model: %v", err)
+	}
+
+	longRunes := strings.Repeat("a", 2001)
+	_, err = synth.SynthesizeSpeech(context.Background(), providers.SpeechSynthesisRequest{
+		Text:    longRunes,
+		VoiceID: "narrator",
+	})
+	if !errors.Is(err, providers.ErrSpeechInputTooLong) {
+		t.Fatalf("error = %v, want ErrSpeechInputTooLong for 2001 runes", err)
+	}
+
+	if calls.Load() != 0 {
+		t.Fatal("over-bound input made a network request")
+	}
+}
