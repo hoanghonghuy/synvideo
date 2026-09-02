@@ -23,6 +23,7 @@ const project = ref<Project | null>(null)
 const assets = ref<MediaAsset[]>([])
 const plans = ref<ScenePlanSummary[]>([])
 const selectedPlan = ref<ScenePlan | null>(null)
+const targetPlanVersion = ref<number | null>(null)
 const bindings = ref<Record<string, SceneMediaEntry>>({})
 const histories = reactive<Record<string, SceneMediaEntry[]>>({})
 const historyOpen = ref<Record<string, boolean>>({})
@@ -30,10 +31,11 @@ const loading = ref(true)
 const mediaLoading = ref(true)
 const mediaLoaded = ref(false)
 const mediaErrorCode = ref('')
-const planErrorCode = ref('')
+const planListErrorCode = ref('')
+const planLoadErrorCode = ref('')
 const planLoading = ref(false)
 const assignmentErrors = ref<Record<string, string>>({})
-const pendingAssignments = ref<string[]>([])
+const pendingRequests = ref<Set<string>>(new Set())
 const deleteTarget = ref<MediaAsset | null>(null)
 const deleteErrorCode = ref('')
 const uploadErrorCode = ref('')
@@ -77,16 +79,18 @@ async function loadWorkspace() {
   mediaLoading.value = true
   mediaLoaded.value = false
   mediaErrorCode.value = ''
-  planErrorCode.value = ''
+  planListErrorCode.value = ''
+  planLoadErrorCode.value = ''
   project.value = null
   assets.value = []
   plans.value = []
   selectedPlan.value = null
+  targetPlanVersion.value = null
   bindings.value = {}
   Object.keys(histories).forEach((key) => delete histories[key])
   historyOpen.value = {}
   assignmentErrors.value = {}
-  pendingAssignments.value = []
+  pendingRequests.value.clear()
   deleteTarget.value = null
   deleteErrorCode.value = ''
   previewFailures.value = []
@@ -111,10 +115,10 @@ async function loadWorkspace() {
       const approved = planResult.value.find((plan) => plan.status === 'approved')
       if (approved) await loadApprovedPlan(approved.version, seq)
     } else {
-      planErrorCode.value = errorCode(planResult.reason)
+      planListErrorCode.value = errorCode(planResult.reason)
     }
   } catch (error) {
-    if (seq === workspaceLoadSeq) planErrorCode.value = errorCode(error)
+    if (seq === workspaceLoadSeq) planListErrorCode.value = errorCode(error)
   } finally {
     if (seq === workspaceLoadSeq) loading.value = false
   }
@@ -122,8 +126,9 @@ async function loadWorkspace() {
 
 async function loadApprovedPlan(version: number, workspaceSeq = workspaceLoadSeq) {
   const seq = ++planLoadSeq
+  targetPlanVersion.value = version
   planLoading.value = true
-  planErrorCode.value = ''
+  planLoadErrorCode.value = ''
   selectedPlan.value = null
   bindings.value = {}
   Object.keys(histories).forEach((key) => delete histories[key])
@@ -138,7 +143,7 @@ async function loadApprovedPlan(version: number, workspaceSeq = workspaceLoadSeq
     selectedPlan.value = plan
     applyBindings(currentBindings)
   } catch (error) {
-    if (workspaceSeq === workspaceLoadSeq && seq === planLoadSeq) planErrorCode.value = errorCode(error)
+    if (workspaceSeq === workspaceLoadSeq && seq === planLoadSeq) planLoadErrorCode.value = errorCode(error)
   } finally {
     if (workspaceSeq === workspaceLoadSeq && seq === planLoadSeq) planLoading.value = false
   }
@@ -157,7 +162,9 @@ function assetFor(sceneKey: string): MediaAsset | undefined {
 }
 
 function isPending(sceneKey: string) {
-  return pendingAssignments.value.includes(sceneKey)
+  if (!selectedPlan.value) return false
+  const token = `${workspaceLoadSeq}:${planLoadSeq}:${selectedPlan.value.version}:${sceneKey}`
+  return pendingRequests.value.has(token)
 }
 
 async function assign(scene: Scene, asset: MediaAsset) {
@@ -165,7 +172,8 @@ async function assign(scene: Scene, asset: MediaAsset) {
   const workspaceSeq = workspaceLoadSeq
   const version = selectedPlan.value.version
   const planSeq = planLoadSeq
-  pendingAssignments.value = [...pendingAssignments.value, scene.key]
+  const token = `${workspaceSeq}:${planSeq}:${version}:${scene.key}`
+  pendingRequests.value.add(token)
   assignmentErrors.value = { ...assignmentErrors.value, [scene.key]: '' }
   try {
     const updated = await assignPrimaryVisual(projectID.value, version, scene.key, asset.id)
@@ -181,11 +189,11 @@ async function assign(scene: Scene, asset: MediaAsset) {
     histories[scene.key] = history
     historyOpen.value = { ...historyOpen.value, [scene.key]: true }
   } catch (error) {
-    if (workspaceSeq === workspaceLoadSeq) {
+    if (workspaceSeq === workspaceLoadSeq && planSeq === planLoadSeq && selectedPlan.value?.version === version) {
       assignmentErrors.value = { ...assignmentErrors.value, [scene.key]: errorCode(error) }
     }
   } finally {
-    pendingAssignments.value = pendingAssignments.value.filter((key) => key !== scene.key)
+    pendingRequests.value.delete(token)
   }
 }
 
@@ -345,10 +353,10 @@ const supportedMIME = new Set([
       {{ t('media.states.loading') }}
     </p>
     <div
-      v-else-if="planErrorCode && !project"
+      v-else-if="planListErrorCode && !project"
       class="notice error"
     >
-      <p>{{ errorText('errors', planErrorCode) }}</p>
+      <p>{{ errorText('errors', planListErrorCode) }}</p>
       <button
         class="secondary-button"
         type="button"
@@ -401,6 +409,7 @@ const supportedMIME = new Set([
           <button
             v-if="uploading"
             class="secondary-button"
+            data-testid="cancel-upload"
             type="button"
             @click="cancelUpload"
           >
@@ -541,11 +550,11 @@ const supportedMIME = new Set([
       </template>
 
       <div
-        v-if="planErrorCode && !approvedPlans.length"
+        v-if="planListErrorCode"
         class="notice error"
         data-testid="scene-plan-list-error"
       >
-        <p>{{ errorText('errors', planErrorCode) }}</p>
+        <p>{{ errorText('errors', planListErrorCode) }}</p>
         <button
           class="secondary-button"
           type="button"
@@ -555,7 +564,7 @@ const supportedMIME = new Set([
         </button>
       </div>
       <section
-        v-if="approvedPlans.length"
+        v-else-if="approvedPlans.length"
         class="scene-assignment-section"
       >
         <div class="media-toolbar">
@@ -567,7 +576,7 @@ const supportedMIME = new Set([
           </div>
           <label class="control-group">{{ t('media.assignment.planVersion') }}
             <select
-              :value="selectedPlan?.version ?? ''"
+              :value="selectedPlan?.version ?? targetPlanVersion ?? ''"
               @change="loadApprovedPlan(Number(($event.target as HTMLSelectElement).value))"
             >
               <option
@@ -586,15 +595,15 @@ const supportedMIME = new Set([
           {{ t('media.states.loadingPlan') }}
         </p>
         <div
-          v-else-if="planErrorCode"
+          v-else-if="planLoadErrorCode"
           class="notice error"
           data-testid="scene-plan-error"
         >
-          <p>{{ errorText('errors', planErrorCode) }}</p>
+          <p>{{ errorText('errors', planLoadErrorCode) }}</p>
           <button
             class="secondary-button"
             type="button"
-            @click="selectedPlan && loadApprovedPlan(selectedPlan.version)"
+            @click="targetPlanVersion !== null && loadApprovedPlan(targetPlanVersion)"
           >
             {{ t('media.actions.retry') }}
           </button>
@@ -661,6 +670,7 @@ const supportedMIME = new Set([
               <span
                 v-if="assignmentErrors[scene.key]"
                 class="error-text"
+                :data-testid="`assignment-error-${scene.key}`"
               >{{ errorText('errors', assignmentErrors[scene.key]!) }}</span>
               <button
                 class="text-button"
@@ -685,18 +695,34 @@ const supportedMIME = new Set([
                   v-for="entry in histories[scene.key]"
                   :key="entry.binding?.id ?? `${entry.scene_key}-${entry.binding?.binding_version}`"
                   class="history-entry"
+                  :data-testid="`history-entry-${entry.binding?.binding_version ?? '0'}`"
                 >
-                  <img
-                    v-if="entry.asset?.kind === 'image'"
-                    :src="mediaAssetContentURL(project.id, entry.asset.id)"
-                    :alt="safeFilename(entry.asset)"
-                  >
-                  <span>{{ t('media.assignment.bindingVersion', { value: entry.binding?.binding_version ?? '?' }) }}</span>
-                  <span>{{ entry.asset ? safeFilename(entry.asset) : t('media.assignment.missingAsset') }}</span>
+                  <div class="history-preview">
+                    <img
+                      v-if="entry.asset?.kind === 'image'"
+                      :src="mediaAssetContentURL(project.id, entry.asset.id)"
+                      :alt="safeFilename(entry.asset)"
+                    >
+                    <video
+                      v-else-if="entry.asset?.kind === 'video'"
+                      controls
+                      preload="metadata"
+                      :src="mediaAssetContentURL(project.id, entry.asset.id)"
+                      :aria-label="safeFilename(entry.asset)"
+                    />
+                    <span v-else>{{ entry.asset ? t(`media.kinds.${entry.asset.kind}`) : t('media.assignment.missingAsset') }}</span>
+                  </div>
+                  <div class="history-entry-details">
+                    <strong>{{ t('media.assignment.bindingVersion', { value: entry.binding?.binding_version ?? '?' }) }}</strong>
+                    <span>{{ t(`media.bindingStatus.${entry.binding?.status ?? 'superseded'}`, entry.binding?.status ?? '') }}<template v-if="entry.binding?.created_at"> · {{ d(new Date(entry.binding.created_at), 'long') }}</template></span>
+                    <span v-if="entry.asset">{{ safeFilename(entry.asset) }} · {{ t(`media.kinds.${entry.asset.kind}`) }} · {{ t(`media.origins.${entry.asset.origin}`) }} · {{ formatBytes(entry.asset.byte_size) }}</span>
+                    <span v-if="entry.asset && technicalDetails(entry.asset)">{{ technicalDetails(entry.asset) }}</span>
+                  </div>
                   <button
                     v-if="entry.asset"
                     class="text-button"
                     type="button"
+                    :data-testid="`restore-history-${entry.binding?.binding_version ?? '0'}`"
                     @click="restore(scene, entry)"
                   >
                     {{ t('media.actions.restore') }}

@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { i18n } from '@/locales'
@@ -100,6 +100,10 @@ beforeEach(() => {
   i18n.global.locale.value = 'vi'
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('MediaWorkspaceView', () => {
   it('keeps the library usable when there is no approved Scene Plan', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
@@ -124,6 +128,44 @@ describe('MediaWorkspaceView', () => {
 
     expect(wrapper.find('[data-testid="media-library-error"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="media-empty-state"]').exists()).toBe(false)
+  })
+
+  it('does not turn a failed Scene Plan list into a false no-approved-plan state', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, { error: { code: 'request_failed' } }, 503)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-list-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="scene-assignment-disabled"]').exists()).toBe(false)
+  })
+
+  it('retries the exact approved plan version after its initial load fails', async () => {
+    let planAttempts = 0
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    routeFn('GET', `/api/v1/projects/${projectId}/scene-plans/2`, () => {
+      planAttempts += 1
+      return planAttempts === 1 ? jsonResponse({ error: { code: 'request_failed' } }, 503) : jsonResponse(approvedPlan)
+    })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+      { scene_key: 'scene-body-1', role: 'primary_visual' },
+    ])
+
+    const wrapper = await mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="scene-plan-error"] .secondary-button').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="media-asset-' + imageId + '"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="scene-plan-error"] .secondary-button').trigger('click')
+    await flushPromises()
+
+    expect(planAttempts).toBe(2)
+    expect(wrapper.find('[data-testid="scene-row-scene-intro-1"]').exists()).toBe(true)
   })
 
   it('isolates one preview failure from the rest of the library', async () => {
@@ -159,6 +201,77 @@ describe('MediaWorkspaceView', () => {
       `/api/v1/projects/${projectId}/media-assets`,
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('uploads a supported file as multipart data and inserts the returned asset', async () => {
+    const uploaded = { ...image, original_filename: 'uploaded.png' }
+    vi.stubGlobal('XMLHttpRequest', undefined)
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [])
+    route('POST', `/api/v1/projects/${projectId}/media-assets`, uploaded, 201)
+
+    const wrapper = await mountView()
+    await flushPromises()
+    const input = wrapper.find('input[type="file"]')
+    const supported = new File(['png'], 'uploaded.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { value: [supported], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
+    const uploadCall = fetchMock.mock.calls.find(([url, init]) => url === `/api/v1/projects/${projectId}/media-assets` && init?.method === 'POST')
+    expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData)
+    expect((uploadCall?.[1]?.headers as Record<string, string> | undefined)?.['Content-Type']).toBeUndefined()
+  })
+
+  it('supports cancelling an in-flight upload without changing the library', async () => {
+    vi.stubGlobal('XMLHttpRequest', undefined)
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [])
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === `/api/v1/projects/${projectId}/media-assets` && init?.method === 'POST') {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')))
+        })
+      }
+      const method = init?.method ?? 'GET'
+      const match = [...handlers].reverse().find((item) => (!item.method || item.method === method) && item.path === url)
+      return Promise.resolve(match ? match.handler(url, init) : jsonResponse({ error: { code: 'not_found' } }, 404))
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+    const input = wrapper.find('input[type="file"]')
+    const supported = new File(['png'], 'pending.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { value: [supported], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    await wrapper.find('[data-testid="cancel-upload"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="upload-error"]').exists()).toBe(false)
+    expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
+  })
+
+  it('presents a transport failure without removing existing assets', async () => {
+    vi.stubGlobal('XMLHttpRequest', undefined)
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [])
+    route('POST', `/api/v1/projects/${projectId}/media-assets`, { error: { code: 'MEDIA_ASSET_STORAGE_FAILED' } }, 502)
+
+    const wrapper = await mountView()
+    await flushPromises()
+    const input = wrapper.find('input[type="file"]')
+    const supported = new File(['png'], 'failed.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { value: [supported], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="upload-error"]').exists()).toBe(true)
+    expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
   })
 
   it('renders approved scenes in order and assigns a visual without optimistic replacement', async () => {
@@ -266,10 +379,301 @@ describe('MediaWorkspaceView', () => {
     expect(wrapper.text()).toContain('Du an khac')
     expect(wrapper.text()).not.toContain('Video phan canh')
   })
+
+  it('renders scene plan list error notice and does not show false no-approved-plan guidance', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, { error: { code: 'request_failed' } }, 500)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-list-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="scene-assignment-disabled"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Chưa có Scene Plan đã duyệt')
+  })
+
+  it('allows retrying selected plan load after failure without losing loaded media', async () => {
+    let callCount = 0
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    handlers.push({
+      method: 'GET',
+      path: `/api/v1/projects/${projectId}/scene-plans/2`,
+      handler: () => {
+        callCount++
+        if (callCount === 1) return jsonResponse({ error: { code: 'request_failed' } }, 500)
+        return jsonResponse(approvedPlan, 200)
+      },
+    })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+      { scene_key: 'scene-body-1', role: 'primary_visual' },
+    ])
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-error"]').exists()).toBe(true)
+    expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
+
+    await wrapper.find('[data-testid="scene-plan-error"] .secondary-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="scene-row-scene-intro-1"]').exists()).toBe(true)
+  })
+
+  it('scopes assignment errors and completion to exact plan version without corrupting newer plan', async () => {
+    let rejectV2Assign!: (error: Error) => void
+    const v2AssignPromise = new Promise((_, reject) => { rejectV2Assign = reject })
+
+    const secondSummary = { ...approvedSummary, version: 3 }
+    const secondPlan = { ...approvedPlan, version: 3, scenes: [{ ...approvedPlan.scenes[0], key: 'scene-intro-1' }] }
+
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary, secondSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/3`, secondPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+    ])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/3/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+    ])
+    handlers.push({
+      method: 'PUT',
+      path: `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`,
+      handler: () => v2AssignPromise,
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    // Trigger assignment on v2
+    await wrapper.find(`[data-testid="asset-option-${imageId}-scene-intro-1"]`).trigger('click')
+
+    // Switch to v3 before v2 assignment finishes
+    await wrapper.findAll('select')[2]?.setValue('3')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-row-scene-intro-1"]').exists()).toBe(true)
+
+    // Now v2 assignment fails late
+    rejectV2Assign(new Error('late failure'))
+    await flushPromises()
+
+    // Version 3 must not show the v2 assignment error
+    expect(wrapper.find('.error-text').exists()).toBe(false)
+  })
+
+  it('scopes assignment completion and errors across project route switch', async () => {
+    let rejectProj1Assign!: (error: Error) => void
+    const proj1AssignPromise = new Promise((_, reject) => { rejectProj1Assign = reject })
+
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+    ])
+    handlers.push({
+      method: 'PUT',
+      path: `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`,
+      handler: () => proj1AssignPromise,
+    })
+
+    route('GET', `/api/v1/projects/${otherProjectId}`, otherProject)
+    route('GET', `/api/v1/projects/${otherProjectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${otherProjectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${otherProjectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${otherProjectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual' },
+    ])
+
+    const wrapper = await mountView(projectId)
+    await flushPromises()
+
+    // Start assign on Project 1
+    await wrapper.find(`[data-testid="asset-option-${imageId}-scene-intro-1"]`).trigger('click')
+
+    // Route switch to Project 2
+    await wrapper.vm.$router.push(`/projects/${otherProjectId}/media`)
+    await flushPromises()
+
+    // Project 1 assignment fails late
+    rejectProj1Assign(new Error('delayed error'))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Du an khac')
+    expect(wrapper.find('.error-text').exists()).toBe(false)
+  })
+
+  it('renders replacement history with binding version, status, time, provenance, and video/image preview', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image, video] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId, status: 'active', assigned_at: '2026-08-31T10:00:00Z' }, asset: video },
+    ])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual/history`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId, status: 'active', assigned_at: '2026-08-31T10:00:00Z' }, asset: video },
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 1, asset_id: imageId, status: 'replaced', assigned_at: '2026-08-31T09:00:00Z' }, asset: image },
+    ])
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="history-toggle-scene-intro-1"]').trigger('click')
+    await flushPromises()
+
+    const historyContainer = wrapper.find('[data-testid="scene-history-scene-intro-1"]')
+    expect(historyContainer.exists()).toBe(true)
+
+    // Check video preview in history
+    expect(historyContainer.find('video').exists()).toBe(true)
+    // Check image preview in history
+    expect(historyContainer.find('img').exists()).toBe(true)
+    // Check binding version and status labels
+    expect(historyContainer.text()).toContain('Bản gán 2')
+    expect(historyContainer.text()).toContain('Đang áp dụng')
+    expect(historyContainer.text()).toContain('Bản gán 1')
+    expect(historyContainer.text()).toContain('Đã thay thế')
+    expect(historyContainer.text()).toContain('intro.png')
+    expect(historyContainer.text()).toContain('demo.mp4')
+  })
+
+  it('preserves the old current visual during replacement until server success', async () => {
+    let resolveAssign!: (value: unknown) => void
+    const assignPromise = new Promise((resolve) => { resolveAssign = resolve })
+
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image, video] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 1, asset_id: imageId, status: 'active' }, asset: image },
+    ])
+    handlers.push({
+      method: 'PUT',
+      path: `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`,
+      handler: () => assignPromise,
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="scene-current-${imageId}"]`).exists()).toBe(true)
+
+    // Click assign video
+    await wrapper.find(`[data-testid="asset-option-${videoId}-scene-intro-1"]`).trigger('click')
+
+    // While in-flight, image visual is preserved
+    expect(wrapper.find(`[data-testid="scene-current-${imageId}"]`).exists()).toBe(true)
+    expect(wrapper.find(`[data-testid="scene-current-${videoId}"]`).exists()).toBe(false)
+    expect(wrapper.text()).toContain('Đang lưu gán visual...')
+
+    // Now server succeeds
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId, status: 'active' }, asset: video },
+    ])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual/history`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId }, asset: video },
+    ])
+    resolveAssign(jsonResponse({
+      scene_key: 'scene-intro-1',
+      role: 'primary_visual',
+      binding: { binding_version: 2, asset_id: videoId, status: 'active' },
+      asset: video,
+    }))
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="scene-current-${videoId}"]`).exists()).toBe(true)
+  })
+
+  it('supports idempotent same-asset assignment', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 1, asset_id: imageId, status: 'active' }, asset: image },
+    ])
+    route('PUT', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`, {
+      scene_key: 'scene-intro-1',
+      role: 'primary_visual',
+      binding: { binding_version: 2, asset_id: imageId, status: 'active' },
+      asset: image,
+    })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual/history`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: imageId }, asset: image },
+    ])
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    // Assign same asset again
+    await wrapper.find(`[data-testid="asset-option-${imageId}-scene-intro-1"]`).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="scene-current-${imageId}"]`).exists()).toBe(true)
+    expect(wrapper.find('.error-text').exists()).toBe(false)
+  })
+
+  it('restores a historical asset by triggering a normal new assignment', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image, video] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedSummary])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId, status: 'active' }, asset: video },
+    ])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual/history`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 2, asset_id: videoId, status: 'active' }, asset: video },
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 1, asset_id: imageId, status: 'replaced' }, asset: image },
+    ])
+    route('PUT', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`, {
+      scene_key: 'scene-intro-1',
+      role: 'primary_visual',
+      binding: { binding_version: 3, asset_id: imageId, status: 'active' },
+      asset: image,
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="history-toggle-scene-intro-1"]').trigger('click')
+    await flushPromises()
+
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/media-bindings`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 3, asset_id: imageId, status: 'active' }, asset: image },
+    ])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual/history`, [
+      { scene_key: 'scene-intro-1', role: 'primary_visual', binding: { binding_version: 3, asset_id: imageId, status: 'active' }, asset: image },
+    ])
+
+    // Click restore on version 1 entry (image)
+    await wrapper.find('[data-testid="restore-history-1"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/projects/${projectId}/scene-plans/2/scenes/scene-intro-1/primary-visual`,
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ asset_id: imageId }) }),
+    )
+    expect(wrapper.find(`[data-testid="scene-current-${imageId}"]`).exists()).toBe(true)
+  })
 })
 
 function route(method: string | undefined, path: string, body: unknown, status = 200) {
   handlers.push({ method, path, handler: () => jsonResponse(body, status) })
+}
+
+function routeFn(method: string | undefined, path: string, handler: Handler) {
+  handlers.push({ method, path, handler })
 }
 
 async function mountView(initialProjectId = projectId) {

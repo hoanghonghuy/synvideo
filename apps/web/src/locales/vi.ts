@@ -436,6 +436,16 @@ export default {
       noHistory: 'Chưa có lịch sử gán visual.',
       bindingVersion: 'Bản gán {value}',
       missingAsset: 'Media không còn khả dụng',
+      status: {
+        active: 'Đang dùng',
+        superseded: 'Đã thay thế',
+      },
+    },
+    bindingStatus: {
+      active: 'Đang áp dụng',
+      replaced: 'Đã thay thế',
+      superseded: 'Đã thay thế',
+      archived: 'Lưu trữ',
     },
     delete: {
       title: 'Xác nhận xóa Media',
