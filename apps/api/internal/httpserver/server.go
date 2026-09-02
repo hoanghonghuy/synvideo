@@ -47,8 +47,9 @@ type ScriptService interface {
 }
 
 type MediaServices struct {
-	Assets   MediaAssetService
-	Bindings SceneMediaService
+	Assets          MediaAssetService
+	Bindings        SceneMediaService
+	GeneratedImages GeneratedImageGenerationService
 }
 
 func New(
@@ -147,6 +148,11 @@ func New(
 			mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans/{version}/media-bindings", handler.listCurrent)
 			mux.HandleFunc("PUT /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/primary-visual", handler.assignPrimaryVisual)
 			mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/primary-visual/history", handler.history)
+		}
+		if services.GeneratedImages != nil && actorResolver != nil {
+			handler := generatedImageGenerationHandler{service: services.GeneratedImages, actorResolver: actorResolver}
+			mux.HandleFunc("POST /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/image-generations", handler.create)
+			mux.HandleFunc("GET /api/v1/projects/{id}/image-generations/{job_id}", handler.get)
 		}
 	}
 
