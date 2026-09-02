@@ -13,6 +13,9 @@ Establish provider-neutral TTS/voice contracts and the first live OpenAI speech 
 ## Frozen contract
 `docs/contracts/TTS_PROVIDER_V1.md`.
 
+## Current API revalidation
+Revalidated 2026-09-02: OpenAI speech generation remains available through `/v1/audio/speech`; current model catalog includes GPT-4o Mini TTS for speech generation. The contract remains structurally valid because external model/voice mapping is adapter configuration rather than a hard-coded model identity.
+
 ## Primary ownership when activated
 - minimum TTS-specific extension under `apps/api/internal/providers/**`;
 - deterministic TTS fake;
@@ -36,8 +39,6 @@ Approved scene narration can exceed a provider's per-request TTS limit. This ada
 Implement all registry/fake/live-adapter tests in `TTS_PROVIDER_V1`, including exact narration preservation, over-limit no-network behavior, stream close/cancel and credential/raw-body sentinel safety.
 
 ## Activation gate
-Do not claim until TASK-025 is merged. TASK-026 and TASK-027 may usually run in parallel afterward because their live adapter packages are isolated, subject to PM/TL confirming the minimal core providers write surface does not overlap an active fix.
-
-Revalidate current OpenAI speech endpoint/model/voice behavior at activation time.
+Dependency and current-provider revalidation gates are satisfied. This task remains BACKLOG only because TASK-022, TASK-023 and TASK-026 occupy the normal maximum three implementation slots. Promote TASK-027 immediately when one slot is released, provided no active provider-core fix overlaps the minimal TTS registry extension.
 
 Do not self-mark READY/DONE or self-merge.
