@@ -1,11 +1,12 @@
 # TASK-024 — Media Library + scene assignment workspace
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
-Planned wave: WAVE-F1-J candidate
-Branch when activated: `feature/TASK-024-media-workspace`
-Base: `develop`
-Depends on: TASK-022 and TASK-023 accepted/stable.
+Planned wave: WAVE-F1-J
+Branch: `feature/TASK-024-media-workspace`
+Base: latest `develop`
+Depends on: TASK-022 and TASK-023 accepted/stable — satisfied.
+Issue: #42
 
 ## Goal
 Deliver the creator-facing Media Library and manual scene primary-visual assignment workflow without waiting for AI generation providers.
@@ -13,7 +14,7 @@ Deliver the creator-facing Media Library and manual scene primary-visual assignm
 ## Frozen contract
 `docs/contracts/MEDIA_LIBRARY_WORKSPACE_V1.md`.
 
-## Primary ownership when activated
+## Primary ownership
 - `apps/web/src/features/media/**` or cohesive Media Library feature;
 - Media/Scene Binding frontend API/types/tests;
 - minimal `/projects/:id/media` route;
@@ -39,12 +40,9 @@ No AI image/video generation, stock search, audio/TTS, crop/fit/timing editor, r
 ## TDD
 Cover every regression in `MEDIA_LIBRARY_WORKSPACE_V1`, especially one-preview failure isolation, in-use delete conflict, per-scene replacement state, plan version switch and stale async route protection.
 
-## Activation gate
-Do **not** claim yet.
+## Claim gate
+TASK-022 and TASK-023 are DONE and the shared frontend hotspot is released. This task is claimable now.
 
-Before READY:
-- TASK-022 releases frontend router/locale/navigation hotspot;
-- TASK-023 backend Media/Binding API accepted or exact contract verified against implementation;
-- no active frontend task owns the same shared route/navigation files.
+Claim atomically from the then-current `origin/develop` using `feature/TASK-024-media-workspace`. Truthful RED → GREEN → REFACTOR, focused frontend tests, full `npm --prefix apps/web run verify`, and fresh PR CI are required.
 
-Do not self-mark READY/DONE or self-merge.
+Do not self-mark DONE or self-merge.
