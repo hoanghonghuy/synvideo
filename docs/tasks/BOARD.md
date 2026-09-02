@@ -27,24 +27,34 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-019 | Script creator workspace | DONE | PR #47 accepted; squash `da01e58c...`. |
 | TASK-020 | Scene media binding foundation | DONE | PR #46 accepted; squash `b80b8e7b...`. |
 | TASK-021 | Scene Plan durable generation + API integration | DONE | Issue #39 completed. PR #50 accepted head `3a78f24a...`, CI #242, TL review `5084672798`, squash `9d2b5306...`. |
-| TASK-022 | Scene Plan creator workspace | READY | Issue #40. Frontend-only Stage 7 workspace; remote branch absent at promotion. |
-| TASK-023 | Media Library + Scene Binding API integration | READY | Issue #41. Backend media/runtime slot; range-read extension revalidated against accepted ObjectStorage; remote branch absent at promotion. |
+| TASK-022 | Scene Plan creator workspace | CHANGES_REQUESTED | Issue #40 / PR #51. Head `1f5d00fc...`, CI #252, TL review `5085479067`. Fix partial-load truthfulness, resume ordering, Unicode/key-safe split, validation-error accessibility and Proposal lineage display. |
+| TASK-023 | Media Library + Scene Binding API integration | READY | Issue #41. Backend media/runtime slot; range-read extension revalidated against accepted ObjectStorage; remote branch still absent at latest check. |
 | TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. Depends on accepted TASK-023 API and shares frontend router/locale surfaces with TASK-022. |
 | TASK-025 | Provider-neutral visual generation foundation | DONE | Issue #43 completed. PR #49 accepted head `e090ed3e...`, CI #230, TL review `5080539748`, squash `1c550f316...`. |
-| TASK-026 | Live OpenAI image generation adapter | READY | Issue #44. Current official API revalidated 2026-09-02: `/v1/images/generations`, current image model `gpt-image-2`; isolated provider-adapter surface. |
+| TASK-026 | Live OpenAI image generation adapter | READY | Issue #44. Current official API revalidated 2026-09-02; isolated provider-adapter surface; remote branch still absent at latest check. |
 | TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. Dependency is satisfied and current speech endpoint remains available, but deliberately queued behind the 3-worktree cap; promote when a slot frees. |
 
-## Current implementation slots
+## Current implementation / review slots
 
-- **Dev A — TASK-022 `READY`**: claim `feature/TASK-022-scene-plan-workspace`. Frontend-only Scene Plan workspace/router/locale surfaces.
-- **Dev B — TASK-023 `READY`**: claim `feature/TASK-023-media-library-api`. Owns backend Media Library/Scene Binding HTTP + storage runtime/range-read composition.
-- **Dev C — TASK-026 `READY`**: claim `feature/TASK-026-openai-image-provider`. Owns isolated `providers/openaiimage/**` adapter/tests only.
+- **Dev A — TASK-022 `CHANGES_REQUESTED`**: continue only existing PR #51/worktree. Frontend-only Scene Plan workspace/router/locale surfaces.
+- **Dev B — TASK-023 `READY`**: branch was still absent at latest check; may claim `feature/TASK-023-media-library-api` from latest `origin/develop`. Owns backend Media Library/Scene Binding HTTP + storage runtime/range-read composition.
+- **Dev C — TASK-026 `READY`**: branch was still absent at latest check; may claim `feature/TASK-026-openai-image-provider` from latest `origin/develop`. Owns isolated `providers/openaiimage/**` adapter/tests only.
 
-These three tasks are intentionally concurrent because their write surfaces are separated: frontend workspace vs backend media/runtime vs isolated provider adapter.
+These lanes remain intentionally concurrent because their write surfaces are separated: frontend workspace vs backend media/runtime vs isolated provider adapter.
+
+## Current review gate — TASK-022 / PR #51
+
+Do not merge until:
+1. failed generation-options / Project / plan-list / approved-Script context loads remain explicit retryable failures and are not disguised as valid empty/config states;
+2. refresh resume cannot race with initial workspace loading and overwrite the exact `scene_plan_version` returned by a succeeded durable job;
+3. split uses Unicode-safe boundaries and rejects invalid/duplicate/>64-rune scene keys before local mutation;
+4. backend field validation errors are rendered/accessibly associated with the relevant scene controls, with safe fallback;
+5. immutable `source_proposal_version` is visible alongside Script lineage;
+6. deterministic regressions and fresh exact-head frontend CI are green.
 
 ## Why TASK-027 remains BACKLOG
 
-TASK-027 is no longer dependency-blocked. Current OpenAI speech generation remains available through `/v1/audio/speech`, and its contract can be activated. It stays BACKLOG only to enforce the normal maximum of three implementation worktrees and avoid an accidental fourth claim. Promote it as soon as one of TASK-022/023/026 merges or otherwise releases a slot.
+TASK-027 is no longer dependency-blocked. It stays BACKLOG only to enforce the normal maximum of three implementation worktrees. Promote it when one current lane merges/releases a slot, provided no provider-core fix overlaps its minimal registry extension.
 
 ## Parallel safety
 
@@ -56,15 +66,15 @@ TASK-027 is no longer dependency-blocked. Current OpenAI speech generation remai
 
 ## Next activation path
 
-1. Run TASK-022, TASK-023 and TASK-026 in parallel.
-2. When TASK-022 merges, activate TASK-024 Media Library workspace if TASK-023 API is accepted; otherwise use the freed slot for TASK-027.
+1. Fix/review TASK-022 while TASK-023 and TASK-026 can start independently.
+2. When TASK-022 merges, activate TASK-024 only if TASK-023 API is already accepted; otherwise use the freed slot for TASK-027.
 3. When TASK-023 merges, TASK-024 becomes dependency-eligible after frontend hotspot release.
 4. When TASK-026 or any current slot frees, promote TASK-027 TTS foundation.
 5. Follow with secure multi-capability owner runtime/settings, durable per-scene visual/audio acquisition jobs, generated-output ingestion into Media Asset + Scene binding, captions/music, Scene Editor, render/export, publishing/channel management and production hardening/E2E.
 
 ## Product checkpoint
 
-Stage 5 Script is creator-usable end to end. Stage 7 Scene Plan backend is complete; TASK-022 supplies the creator-facing workspace. In parallel, TASK-023 turns accepted Media Asset + Scene Binding foundations into real creator APIs, while TASK-026 provides the first live image-generation adapter behind the accepted visual capability port.
+Stage 5 Script is creator-usable end to end. Stage 7 Scene Plan backend is complete; TASK-022 supplies the creator-facing workspace and is currently in review-fix. In parallel, TASK-023 turns accepted Media Asset + Scene Binding foundations into real creator APIs, while TASK-026 provides the first live image-generation adapter behind the accepted visual capability port.
 
 ## Architecture gates
 
