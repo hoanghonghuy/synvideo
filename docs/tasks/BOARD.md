@@ -27,30 +27,32 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-019 | Script creator workspace | DONE | PR #47 accepted; squash `da01e58c...`. |
 | TASK-020 | Scene media binding foundation | DONE | PR #46 accepted; squash `b80b8e7b...`. |
 | TASK-021 | Scene Plan durable generation + API integration | DONE | Issue #39 completed. PR #50 accepted head `3a78f24a...`, CI #242, TL review `5084672798`, squash `9d2b5306...`. |
-| TASK-022 | Scene Plan creator workspace | CHANGES_REQUESTED | Issue #40 / PR #51. Head `1f5d00fc...`, CI #252, TL review `5085479067`. Fix partial-load truthfulness, resume ordering, Unicode/key-safe split, validation-error accessibility and Proposal lineage display. |
-| TASK-023 | Media Library + Scene Binding API integration | READY | Issue #41. Backend media/runtime slot; range-read extension revalidated against accepted ObjectStorage; remote branch still absent at latest check. |
+| TASK-022 | Scene Plan creator workspace | CHANGES_REQUESTED | Issue #40 / PR #51. Head `1f5d00fc...`, CI #252. Consolidated TL reviews `5085479067` + `5088647732`; Issue #40 is authoritative. |
+| TASK-023 | Media Library + Scene Binding API integration | READY | Issue #41. Backend media/runtime slot; range-read extension revalidated against accepted ObjectStorage. No PR open at latest check. |
 | TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. Depends on accepted TASK-023 API and shares frontend router/locale surfaces with TASK-022. |
 | TASK-025 | Provider-neutral visual generation foundation | DONE | Issue #43 completed. PR #49 accepted head `e090ed3e...`, CI #230, TL review `5080539748`, squash `1c550f316...`. |
-| TASK-026 | Live OpenAI image generation adapter | READY | Issue #44. Current official API revalidated 2026-09-02; isolated provider-adapter surface; remote branch still absent at latest check. |
+| TASK-026 | Live OpenAI image generation adapter | READY | Issue #44. Current official API revalidated 2026-09-02; isolated provider-adapter surface. No PR open at latest check. |
 | TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. Dependency is satisfied and current speech endpoint remains available, but deliberately queued behind the 3-worktree cap; promote when a slot frees. |
 
 ## Current implementation / review slots
 
 - **Dev A — TASK-022 `CHANGES_REQUESTED`**: continue only existing PR #51/worktree. Frontend-only Scene Plan workspace/router/locale surfaces.
-- **Dev B — TASK-023 `READY`**: branch was still absent at latest check; may claim `feature/TASK-023-media-library-api` from latest `origin/develop`. Owns backend Media Library/Scene Binding HTTP + storage runtime/range-read composition.
-- **Dev C — TASK-026 `READY`**: branch was still absent at latest check; may claim `feature/TASK-026-openai-image-provider` from latest `origin/develop`. Owns isolated `providers/openaiimage/**` adapter/tests only.
+- **Dev B — TASK-023 `READY`**: may claim/continue `feature/TASK-023-media-library-api` from latest `origin/develop`; no PR was open at latest check. Owns backend Media Library/Scene Binding HTTP + storage runtime/range-read composition.
+- **Dev C — TASK-026 `READY`**: may claim/continue `feature/TASK-026-openai-image-provider` from latest `origin/develop`; no PR was open at latest check. Owns isolated `providers/openaiimage/**` adapter/tests only.
 
 These lanes remain intentionally concurrent because their write surfaces are separated: frontend workspace vs backend media/runtime vs isolated provider adapter.
 
 ## Current review gate — TASK-022 / PR #51
 
-Do not merge until:
-1. failed generation-options / Project / plan-list / approved-Script context loads remain explicit retryable failures and are not disguised as valid empty/config states;
+Issue #40 is authoritative. Do not merge until:
+1. generation-options / Project / plans / approved-Script / initial-version failures remain explicit retryable failures and are not disguised as valid empty/config states;
 2. refresh resume cannot race with initial workspace loading and overwrite the exact `scene_plan_version` returned by a succeeded durable job;
-3. split uses Unicode-safe boundaries and rejects invalid/duplicate/>64-rune scene keys before local mutation;
-4. backend field validation errors are rendered/accessibly associated with the relevant scene controls, with safe fallback;
-5. immutable `source_proposal_version` is visible alongside Script lineage;
-6. deterministic regressions and fresh exact-head frontend CI are green.
+3. dirty history switching provides Save / Discard / Cancel, with Save preserving and then opening the originally requested target version;
+4. transient generation-status failure retries the same durable job and cannot expose an action that POSTs a replacement while queued/running;
+5. split uses Unicode-safe boundaries and rejects invalid/duplicate/>64-rune scene keys before local mutation;
+6. backend field validation errors are rendered/accessibly associated with the relevant scene controls, with safe fallback;
+7. immutable `source_proposal_version` is visible alongside Script lineage;
+8. deterministic regressions cover all gates, branch syncs latest `develop`, and fresh exact-head frontend CI is green.
 
 ## Why TASK-027 remains BACKLOG
 
@@ -66,7 +68,7 @@ TASK-027 is no longer dependency-blocked. It stays BACKLOG only to enforce the n
 
 ## Next activation path
 
-1. Fix/review TASK-022 while TASK-023 and TASK-026 can start independently.
+1. Fix/review TASK-022 while TASK-023 and TASK-026 can proceed independently.
 2. When TASK-022 merges, activate TASK-024 only if TASK-023 API is already accepted; otherwise use the freed slot for TASK-027.
 3. When TASK-023 merges, TASK-024 becomes dependency-eligible after frontend hotspot release.
 4. When TASK-026 or any current slot frees, promote TASK-027 TTS foundation.
