@@ -447,37 +447,37 @@ func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
 			},
 		},
 		{
-			name: "oversized proposal voice direction",
+			name: "oversized proposal voice direction (3001 runes)",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
-				p.Proposal.VoiceDirection = strings.Repeat("a", 5001)
+				p.Proposal.VoiceDirection = strings.Repeat("a", 3001)
 				b, _ := json.Marshal(p)
 				j.Payload = b
 			},
 		},
 		{
-			name: "oversized proposal music direction",
+			name: "oversized proposal music direction (3001 runes)",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
-				p.Proposal.MusicDirection = strings.Repeat("a", 5001)
+				p.Proposal.MusicDirection = strings.Repeat("a", 3001)
 				b, _ := json.Marshal(p)
 				j.Payload = b
 			},
 		},
 		{
-			name: "oversized proposal caption direction",
+			name: "oversized proposal caption direction (3001 runes)",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
-				p.Proposal.CaptionDirection = strings.Repeat("a", 5001)
+				p.Proposal.CaptionDirection = strings.Repeat("a", 3001)
 				b, _ := json.Marshal(p)
 				j.Payload = b
 			},
 		},
 		{
-			name: "proposal warnings exceeding max items",
+			name: "proposal warnings exceeding max items (21 items)",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
-				p.Proposal.Warnings = make([]string, 101)
+				p.Proposal.Warnings = make([]string, 21)
 				for i := range p.Proposal.Warnings {
 					p.Proposal.Warnings[i] = "warning"
 				}
@@ -486,13 +486,49 @@ func TestHandler_Handle_StrictPayloadDecoding(t *testing.T) {
 			},
 		},
 		{
-			name: "proposal research gaps exceeding max items",
+			name: "proposal warnings with blank item",
 			modifyJob: func(j *jobs.Job) {
 				p := validScenePlanPayload()
-				p.Proposal.ResearchGaps = make([]string, 101)
+				p.Proposal.Warnings = []string{"valid warning", "   "}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal warnings with item exceeding max length (1001 runes)",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.Warnings = []string{strings.Repeat("a", 1001)}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal research gaps exceeding max items (21 items)",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.ResearchGaps = make([]string, 21)
 				for i := range p.Proposal.ResearchGaps {
 					p.Proposal.ResearchGaps[i] = "gap"
 				}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal research gaps with blank item",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.ResearchGaps = []string{"valid gap", "   "}
+				b, _ := json.Marshal(p)
+				j.Payload = b
+			},
+		},
+		{
+			name: "proposal research gaps with item exceeding max length (1001 runes)",
+			modifyJob: func(j *jobs.Job) {
+				p := validScenePlanPayload()
+				p.Proposal.ResearchGaps = []string{strings.Repeat("a", 1001)}
 				b, _ := json.Marshal(p)
 				j.Payload = b
 			},
@@ -526,25 +562,67 @@ func (r *trackingResolver) ResolveTextGenerator(ctx context.Context, ownerID uui
 }
 
 func TestHandler_Handle_ResolverNotCalledOnInvalidPayload(t *testing.T) {
-	resolver := &trackingResolver{}
-	scenePlanRepo := &mockScenePlanRepo{}
-	handler := sceneplangenerationjob.NewHandlerWithResolver(resolver, scenePlanRepo)
-
-	job := sampleScenePlanJob(validScenePlanPayload())
-	// Corrupt payload with duplicate section keys
-	p := validScenePlanPayload()
-	p.Script.Sections = []sceneplangeneration.ScriptSection{
-		{Key: "dup-key", Heading: "H1", Body: "B1"},
-		{Key: "dup-key", Heading: "H2", Body: "B2"},
+	cases := []struct {
+		name          string
+		modifyPayload func(p *sceneplangenerationjob.Payload)
+	}{
+		{
+			name: "invalid script: duplicate section keys",
+			modifyPayload: func(p *sceneplangenerationjob.Payload) {
+				p.Script.Sections = []sceneplangeneration.ScriptSection{
+					{Key: "dup-key", Heading: "H1", Body: "B1"},
+					{Key: "dup-key", Heading: "H2", Body: "B2"},
+				}
+			},
+		},
+		{
+			name: "invalid proposal: oversized voice direction (3001 runes)",
+			modifyPayload: func(p *sceneplangenerationjob.Payload) {
+				p.Proposal.VoiceDirection = strings.Repeat("a", 3001)
+			},
+		},
+		{
+			name: "invalid proposal: blank warning item",
+			modifyPayload: func(p *sceneplangenerationjob.Payload) {
+				p.Proposal.Warnings = []string{"   "}
+			},
+		},
+		{
+			name: "invalid proposal: 21 warning items",
+			modifyPayload: func(p *sceneplangenerationjob.Payload) {
+				p.Proposal.Warnings = make([]string, 21)
+				for i := range p.Proposal.Warnings {
+					p.Proposal.Warnings[i] = "warning"
+				}
+			},
+		},
+		{
+			name: "invalid proposal: 1001 runes research gap item",
+			modifyPayload: func(p *sceneplangenerationjob.Payload) {
+				p.Proposal.ResearchGaps = []string{strings.Repeat("g", 1001)}
+			},
+		},
 	}
-	job.Payload, _ = json.Marshal(p)
 
-	_, err := handler.Handle(context.Background(), job)
-	if err == nil {
-		t.Fatal("expected error on invalid payload, got nil")
-	}
-	if resolver.called {
-		t.Fatal("expected resolver to NOT be called for invalid payload before validation")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := &trackingResolver{}
+			scenePlanRepo := &mockScenePlanRepo{}
+			handler := sceneplangenerationjob.NewHandlerWithResolver(resolver, scenePlanRepo)
+
+			job := sampleScenePlanJob(validScenePlanPayload())
+			p := validScenePlanPayload()
+			tc.modifyPayload(&p)
+			job.Payload, _ = json.Marshal(p)
+
+			_, err := handler.Handle(context.Background(), job)
+			if err == nil {
+				t.Fatal("expected error on invalid payload, got nil")
+			}
+			if resolver.called {
+				t.Fatal("expected resolver to NOT be called for invalid payload before validation")
+			}
+		})
 	}
 }
 

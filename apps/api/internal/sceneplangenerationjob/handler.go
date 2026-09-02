@@ -230,20 +230,38 @@ func validatePayload(payload *Payload, job jobs.Job) error {
 	if len([]rune(strings.TrimSpace(payload.Proposal.VisualDirection))) > 5000 {
 		return errors.New("proposal visual_direction exceeds maximum length (5000)")
 	}
-	if len([]rune(strings.TrimSpace(payload.Proposal.VoiceDirection))) > 5000 {
-		return errors.New("proposal voice_direction exceeds maximum length (5000)")
+	if len([]rune(strings.TrimSpace(payload.Proposal.VoiceDirection))) > 3000 {
+		return errors.New("proposal voice_direction exceeds maximum length (3000)")
 	}
-	if len([]rune(strings.TrimSpace(payload.Proposal.MusicDirection))) > 5000 {
-		return errors.New("proposal music_direction exceeds maximum length (5000)")
+	if len([]rune(strings.TrimSpace(payload.Proposal.MusicDirection))) > 3000 {
+		return errors.New("proposal music_direction exceeds maximum length (3000)")
 	}
-	if len([]rune(strings.TrimSpace(payload.Proposal.CaptionDirection))) > 5000 {
-		return errors.New("proposal caption_direction exceeds maximum length (5000)")
+	if len([]rune(strings.TrimSpace(payload.Proposal.CaptionDirection))) > 3000 {
+		return errors.New("proposal caption_direction exceeds maximum length (3000)")
 	}
-	if len(payload.Proposal.Warnings) > 100 {
-		return errors.New("proposal warnings exceed maximum items (100)")
+	if len(payload.Proposal.Warnings) > 20 {
+		return fmt.Errorf("proposal warnings exceed maximum items (20): %d", len(payload.Proposal.Warnings))
 	}
-	if len(payload.Proposal.ResearchGaps) > 100 {
-		return errors.New("proposal research_gaps exceed maximum items (100)")
+	for i, w := range payload.Proposal.Warnings {
+		trimmed := strings.TrimSpace(w)
+		if trimmed == "" {
+			return fmt.Errorf("proposal warning %d is required", i)
+		}
+		if len([]rune(trimmed)) > 1000 {
+			return fmt.Errorf("proposal warning %d exceeds maximum length (1000)", i)
+		}
+	}
+	if len(payload.Proposal.ResearchGaps) > 20 {
+		return fmt.Errorf("proposal research_gaps exceed maximum items (20): %d", len(payload.Proposal.ResearchGaps))
+	}
+	for i, g := range payload.Proposal.ResearchGaps {
+		trimmed := strings.TrimSpace(g)
+		if trimmed == "" {
+			return fmt.Errorf("proposal research gap %d is required", i)
+		}
+		if len([]rune(trimmed)) > 1000 {
+			return fmt.Errorf("proposal research gap %d exceeds maximum length (1000)", i)
+		}
 	}
 	return nil
 }
