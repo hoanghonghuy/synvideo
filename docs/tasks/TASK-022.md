@@ -2,7 +2,7 @@
 
 Status: READY
 Milestone: F1 Creative Workflow
-Wave: WAVE-F1-I
+Wave: WAVE-F1-J parallel lane
 Branch: `feature/TASK-022-scene-plan-workspace`
 Base: `develop`
 Issue: #40
@@ -46,7 +46,7 @@ Cover every frontend regression in `SCENE_PLAN_WORKSPACE_V1`, including split/me
 - TASK-019 merged and frontend router/locale/navigation hotspot is released;
 - TASK-021 backend/API accepted and revalidated against frozen workspace contract;
 - remote branch `feature/TASK-022-scene-plan-workspace` was absent at promotion;
-- no other active frontend task owns the same shared route/navigation surfaces.
+- TASK-023 is backend-only and TASK-026 is isolated provider-adapter work, so neither overlaps this frontend lane.
 
 ## Worktree / claim
 Atomically create remote `feature/TASK-022-scene-plan-workspace` from latest `origin/develop`, then use a dedicated TASK-022 worktree. Shared/control checkout remains on `develop`.
