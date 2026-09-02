@@ -19,6 +19,8 @@ type ProviderSettingsService interface {
 	ListSettings(ctx context.Context, ownerID uuid.UUID) (providersettings.ProviderSettingsListResponse, error)
 	PutSetting(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, input providersettings.PutSettingInput) (providersettings.ProviderSettingView, error)
 	DeleteSetting(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, revision int) error
+	GetOwnerImageGenerationOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.ImageGenerationOptionsResponse, error)
+	GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.TTSOptionsResponse, error)
 }
 
 type providerSettingsHandler struct {
@@ -115,6 +117,36 @@ func (h providerSettingsHandler) delete(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h providerSettingsHandler) getImageGenerationOptions(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	resp, err := h.service.GetOwnerImageGenerationOptions(r.Context(), principal.OwnerID)
+	if err != nil {
+		writeProviderSettingsAPIError(w, err)
+		return
+	}
+
+	writeProjectJSON(w, http.StatusOK, resp)
+}
+
+func (h providerSettingsHandler) getTTSOptions(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	resp, err := h.service.GetOwnerTTSOptions(r.Context(), principal.OwnerID)
+	if err != nil {
+		writeProviderSettingsAPIError(w, err)
+		return
+	}
+
+	writeProjectJSON(w, http.StatusOK, resp)
 }
 
 func (h providerSettingsHandler) resolvePrincipal(w http.ResponseWriter, r *http.Request) (project.Principal, bool) {

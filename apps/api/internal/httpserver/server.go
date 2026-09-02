@@ -115,6 +115,8 @@ func New(
 		mux.HandleFunc("GET /api/v1/ai/provider-settings", handler.list)
 		mux.HandleFunc("PUT /api/v1/ai/provider-settings/{provider_id}", handler.put)
 		mux.HandleFunc("DELETE /api/v1/ai/provider-settings/{provider_id}", handler.delete)
+		mux.HandleFunc("GET /api/v1/ai/image-generation-options", handler.getImageGenerationOptions)
+		mux.HandleFunc("GET /api/v1/ai/tts-options", handler.getTTSOptions)
 	}
 	if scriptGenerationService != nil && actorResolver != nil {
 		handler := scriptGenerationHandler{service: scriptGenerationService, actorResolver: actorResolver}

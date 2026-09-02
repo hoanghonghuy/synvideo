@@ -42,6 +42,14 @@ func (f *fakeProviderSettingsService) DeleteSetting(ctx context.Context, ownerID
 	return nil
 }
 
+func (f *fakeProviderSettingsService) GetOwnerImageGenerationOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.ImageGenerationOptionsResponse, error) {
+	return providersettings.ImageGenerationOptionsResponse{}, nil
+}
+
+func (f *fakeProviderSettingsService) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.TTSOptionsResponse, error) {
+	return providersettings.TTSOptionsResponse{}, nil
+}
+
 func TestProviderSettingsHTTP(t *testing.T) {
 	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	resolver := fixedResolver{ownerID: ownerID}
