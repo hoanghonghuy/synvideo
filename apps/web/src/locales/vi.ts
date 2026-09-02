@@ -367,6 +367,11 @@ export default {
       voices: 'Các giọng nói (TTS)',
       revision: 'Phiên bản {value}',
     },
+    capabilities: {
+      text: 'Text Generation',
+      image: 'Image Generation',
+      tts: 'Text-to-Speech',
+    },
     actions: {
       save: 'Lưu cài đặt',
       saving: 'Đang lưu...',

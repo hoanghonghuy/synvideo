@@ -6,6 +6,8 @@ import {
   saveProviderSetting,
   deleteProviderSetting,
   ProviderApiError,
+  type Capability,
+  type ModelSettingView,
   type ProviderSettingView,
 } from './api'
 
@@ -16,10 +18,11 @@ const providers = ref<ProviderSettingView[]>([])
 const generalError = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 
-// Local form state per provider
 interface ProviderFormState {
   enabled: boolean
-  selectedModels: Record<string, boolean>
+  selectedTextModels: Record<string, boolean>
+  selectedImageModels: Record<string, boolean>
+  selectedTTSModels: Record<string, boolean>
   selectedVoices: Record<string, boolean>
   apiKeyInput: string
   showKey: boolean
@@ -34,7 +37,9 @@ function getFormState(providerId: string): ProviderFormState {
   if (!formStates[providerId]) {
     formStates[providerId] = {
       enabled: false,
-      selectedModels: {},
+      selectedTextModels: {},
+      selectedImageModels: {},
+      selectedTTSModels: {},
       selectedVoices: {},
       apiKeyInput: '',
       showKey: false,
@@ -46,10 +51,22 @@ function getFormState(providerId: string): ProviderFormState {
   return formStates[providerId]
 }
 
+function modelHasCapability(m: ModelSettingView, cap: Capability): boolean {
+  return m.capabilities.includes(cap)
+}
+
+function modelsForCapability(p: ProviderSettingView, cap: Capability): ModelSettingView[] {
+  return p.models.filter((m) => modelHasCapability(m, cap))
+}
+
 function initFormState(p: ProviderSettingView) {
-  const modelsMap: Record<string, boolean> = {}
+  const textMap: Record<string, boolean> = {}
+  const imageMap: Record<string, boolean> = {}
+  const ttsMap: Record<string, boolean> = {}
   p.models.forEach((m) => {
-    modelsMap[m.id] = m.enabled
+    if (modelHasCapability(m, 'text')) textMap[m.id] = m.enabled_text
+    if (modelHasCapability(m, 'image')) imageMap[m.id] = m.enabled_image
+    if (modelHasCapability(m, 'tts')) ttsMap[m.id] = m.enabled_tts
   })
 
   const voicesMap: Record<string, boolean> = {}
@@ -59,7 +76,9 @@ function initFormState(p: ProviderSettingView) {
 
   formStates[p.id] = {
     enabled: p.enabled,
-    selectedModels: modelsMap,
+    selectedTextModels: textMap,
+    selectedImageModels: imageMap,
+    selectedTTSModels: ttsMap,
     selectedVoices: voicesMap,
     apiKeyInput: '',
     showKey: false,
@@ -91,6 +110,12 @@ async function loadSettings(showSpinner = false) {
   }
 }
 
+function selectedIDs(map: Record<string, boolean>): string[] {
+  return Object.entries(map)
+    .filter(([, isSelected]) => isSelected)
+    .map(([id]) => id)
+}
+
 async function handleSave(provider: ProviderSettingView) {
   const form = formStates[provider.id]
   if (!form) return
@@ -99,14 +124,18 @@ async function handleSave(provider: ProviderSettingView) {
   generalError.value = null
   successMessage.value = null
 
-  const enabledModelIDs = Object.entries(form.selectedModels)
-    .filter(([, isSelected]) => isSelected)
-    .map(([id]) => id)
-  const enabledVoiceIDs = Object.entries(form.selectedVoices)
-    .filter(([, isSelected]) => isSelected)
-    .map(([id]) => id)
+  const enabledTextModelIDs = selectedIDs(form.selectedTextModels)
+  const enabledImageModelIDs = selectedIDs(form.selectedImageModels)
+  const enabledTTSModelIDs = selectedIDs(form.selectedTTSModels)
+  const enabledVoiceIDs = selectedIDs(form.selectedVoices)
 
-  if (form.enabled && enabledModelIDs.length === 0 && enabledVoiceIDs.length === 0) {
+  if (
+    form.enabled
+    && enabledTextModelIDs.length === 0
+    && enabledImageModelIDs.length === 0
+    && enabledTTSModelIDs.length === 0
+    && enabledVoiceIDs.length === 0
+  ) {
     form.error = t('providerSettings.errors.atLeastOneModel')
     return
   }
@@ -124,12 +153,14 @@ async function handleSave(provider: ProviderSettingView) {
       enabled: boolean
       enabled_text_model_ids: string[]
       enabled_image_model_ids: string[]
+      enabled_tts_model_ids: string[]
       enabled_voice_ids: string[]
       api_key?: string
     } = {
       enabled: form.enabled,
-      enabled_text_model_ids: enabledModelIDs,
-      enabled_image_model_ids: enabledModelIDs,
+      enabled_text_model_ids: enabledTextModelIDs,
+      enabled_image_model_ids: enabledImageModelIDs,
+      enabled_tts_model_ids: enabledTTSModelIDs,
       enabled_voice_ids: enabledVoiceIDs,
     }
 
@@ -142,10 +173,8 @@ async function handleSave(provider: ProviderSettingView) {
 
     const updated = await saveProviderSetting(provider.id, payload)
 
-    // Clear API key input from memory immediately after save
     form.apiKeyInput = ''
 
-    // Update local provider view
     const idx = providers.value.findIndex((p) => p.id === provider.id)
     if (idx !== -1) {
       providers.value[idx] = updated
@@ -319,18 +348,51 @@ onMounted(() => {
           <div class="form-group">
             <label class="group-label">{{ t('providerSettings.fields.models') }}</label>
             <div class="models-grid">
-              <label
-                v-for="model in provider.models"
-                :key="model.id"
-                class="checkbox-label model-option"
-              >
-                <input
-                  v-model="getFormState(provider.id).selectedModels[model.id]"
-                  type="checkbox"
+              <div class="capability-section">
+                <h3 class="capability-title">{{ t('providerSettings.capabilities.text') }}</h3>
+                <label
+                  v-for="model in modelsForCapability(provider, 'text')"
+                  :key="model.id"
+                  class="checkbox-label model-option"
                 >
-                <span class="model-name">{{ model.display_name }}</span>
-                <span class="model-id">({{ model.id }})</span>
-              </label>
+                  <input
+                    v-model="getFormState(provider.id).selectedTextModels[model.id]"
+                    type="checkbox"
+                  >
+                  <span class="model-name">{{ model.display_name }}</span>
+                  <span class="model-id">({{ model.id }})</span>
+                </label>
+              </div>
+              <div class="capability-section">
+                <h3 class="capability-title">{{ t('providerSettings.capabilities.image') }}</h3>
+                <label
+                  v-for="model in modelsForCapability(provider, 'image')"
+                  :key="model.id"
+                  class="checkbox-label model-option"
+                >
+                  <input
+                    v-model="getFormState(provider.id).selectedImageModels[model.id]"
+                    type="checkbox"
+                  >
+                  <span class="model-name">{{ model.display_name }}</span>
+                  <span class="model-id">({{ model.id }})</span>
+                </label>
+              </div>
+              <div class="capability-section">
+                <h3 class="capability-title">{{ t('providerSettings.capabilities.tts') }}</h3>
+                <label
+                  v-for="model in modelsForCapability(provider, 'tts')"
+                  :key="model.id"
+                  class="checkbox-label model-option"
+                >
+                  <input
+                    v-model="getFormState(provider.id).selectedTTSModels[model.id]"
+                    type="checkbox"
+                  >
+                  <span class="model-name">{{ model.display_name }}</span>
+                  <span class="model-id">({{ model.id }})</span>
+                </label>
+              </div>
             </div>
           </div>
 

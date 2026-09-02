@@ -3,8 +3,10 @@ export type Capability = 'text' | 'image' | 'tts'
 export interface ModelSettingView {
   id: string
   display_name: string
-  enabled: boolean
-  capabilities?: Capability[]
+  enabled_text: boolean
+  enabled_image: boolean
+  enabled_tts: boolean
+  capabilities: Capability[]
 }
 
 export interface VoiceSettingView {
@@ -33,6 +35,7 @@ export interface PutSettingInput {
   enabled: boolean
   enabled_text_model_ids: string[]
   enabled_image_model_ids: string[]
+  enabled_tts_model_ids: string[]
   enabled_voice_ids: string[]
   api_key?: string
 }
