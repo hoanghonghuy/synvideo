@@ -2,16 +2,17 @@
 
 Current milestone: `F1 — CREATIVE WORKFLOW`
 
-PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; review fixes stay on the original branch/PR. Parallel work follows `docs/engineering/PARALLEL_WORK_PROTOCOL.md` and normally uses at most 3 implementation worktrees.
+PM plans ahead. AI Developers may start only PM-authorized executable work. Live authorization/lifecycle is on the authoritative GitHub task issue; this board is the queue/order/status mirror. Remote claim ownership is determined separately by canonical task branch / active PR.
 
-## Status synchronization invariant
+Follow `docs/engineering/CONTROL_PLANE_PROTOCOL.md` before making workflow decisions. A stale local checkout or stale board row is never proof that fresher remote work does not exist.
 
-`docs/tasks/BOARD.md`, the task file under `docs/tasks/TASK-XXX.md`, and the authoritative GitHub issue must agree on claimability.
+## Control-plane invariant
 
-- A PM transition to `READY`, `CHANGES_REQUESTED`, `DONE`, or another execution-relevant state must update all applicable control-plane sources in the same housekeeping pass.
-- If an AI Developer observes conflicting states, it must **not guess** and must report the inconsistency instead of silently choosing an older source.
-- A new implementation branch may be claimed only when both the current `develop` board and task file say `READY`; the GitHub issue should mirror that state.
-- Existing review-fix branches continue their current PR even when the task is `CHANGES_REQUESTED`; they are not re-claimed as new work.
+- `BOARD.md` mirrors queue/order/status; `TASK-XXX.md` owns task scope/acceptance/branch contract; the GitHub task issue owns live execution authorization/lifecycle; canonical remote branch/PR owns claim state.
+- Metadata drift must be reconciled, but consumers use the authority hierarchy rather than treating all mirrors as equal vetoes.
+- Material scope/branch/acceptance/dependency/frozen-contract conflicts are contract drift and block implementation until PM/Team Lead resolves them.
+- Activate `READY` by freezing versioned task/contracts/order on remote `develop` first, then changing the GitHub issue to `READY` last.
+- After merge, update/close the issue and reconcile board/task mirrors; stale actionable review instructions must not remain.
 
 | ID | Task | Status | Spec / Notes |
 |---|---|---|---|
@@ -38,32 +39,28 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-021 | Scene Plan durable generation + API integration | DONE | PR #50 squash `9d2b5306...`. |
 | TASK-022 | Scene Plan creator workspace | DONE | Issue #40 completed; PR #51 accepted head `e0cb568...`, CI #269, TL review `5089868599`, squash `c8d8618...`. |
 | TASK-023 | Media Library + Scene Binding API integration | DONE | Issue #41 completed; PR #53 squash `7e3df69...`. |
-| TASK-024 | Media Library + scene assignment workspace | READY | Issue #42. Dependencies TASK-022/TASK-023 are DONE; claim from latest `origin/develop` as `feature/TASK-024-media-workspace`. |
+| TASK-024 | Media Library + scene assignment workspace | DONE | Issue #42 completed; PR #56 accepted head `25db940...`, TL re-review `5090827272`, exact-head CI #279, squash `f0aa549...`. |
 | TASK-025 | Provider-neutral visual generation foundation | DONE | Issue #43 completed; PR #49 squash `1c550f316...`. |
 | TASK-026 | Live OpenAI image generation adapter | DONE | Issue #44 completed; PR #52 squash `cf4317ad...`. |
-| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | CHANGES_REQUESTED | Issue #45 / PR #55. Head `1486daa...`; CI #270 green, TL blockers recorded in task/issue. Continue existing PR only. |
-| TASK-028 | Secure multi-capability provider runtime and settings | BACKLOG | Issue #54 / `docs/tasks/TASK-028.md`. Requires accepted TASK-027, frozen `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1`, and free shared settings/frontend hotspot. |
+| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | DONE | Issue #45 completed; PR #55 accepted head `e00413b...`, exact-head CI #281, squash `a98928f...`. |
+| TASK-028 | Secure multi-capability provider runtime and settings | IN_PROGRESS | Issue #54; canonical branch `feature/TASK-028-multicap-provider-runtime` already exists and is the live claim. No PR yet at reconciliation time. |
 
 ## Current implementation / review slots
 
-- **Dev A — TASK-027 `CHANGES_REQUESTED`**: continue only existing PR #55; fix the authoritative blockers, sync latest `develop`, rerun full verification and wait for fresh exact-head CI.
-- **Dev B — TASK-024 `READY`**: may claim now from latest `origin/develop` using `feature/TASK-024-media-workspace`.
-- **Dev C — intentionally unallocated**: do not manufacture a conflicting task merely to fill the slot.
+- **TASK-028 — claimed / IN_PROGRESS**: continue only the existing canonical branch/worktree. Do not create a replacement claim or duplicate task.
+- Additional implementation slots remain intentionally unallocated until PM identifies independent non-duplicate work with frozen contracts/write surfaces.
 
 ## Parallel safety
 
-- TASK-024 owns Media Library frontend route/navigation/locale surfaces.
-- TASK-027 owns only the minimum provider-core TTS extension plus isolated `providers/openaitts/**`.
-- Do not activate TASK-028 provider-runtime/settings evolution until TASK-027 is accepted and TASK-024 releases shared frontend settings/router surfaces.
+- TASK-028 owns the provider-runtime/settings evolution declared in `docs/tasks/TASK-028.md`.
 - Do not create micro-tasks merely to fill an implementation slot.
+- Before planning new work, search open/recent issues, TASK specs, active/recent PRs and canonical branches for duplicate/overlapping product outcomes.
 
-## Next activation path
+## Next planning path
 
-1. Continue TASK-027 fixes on PR #55.
-2. Start TASK-024 now from current `develop`.
-3. After TASK-027 is accepted and TASK-024 releases the frontend hotspot, freeze `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` and promote TASK-028 when safe.
-4. After TASK-028, plan durable per-scene generated-image acquisition/MediaAsset ingestion and durable narration/TTS orchestration as separate tasks.
-5. Follow with stock/captions/music, Scene Editor/composition snapshot, render/export, publishing/channel management and production hardening/E2E.
+1. Complete/review TASK-028 through its existing canonical branch/PR workflow.
+2. Then plan durable per-scene generated-image acquisition/MediaAsset ingestion and durable narration/TTS orchestration as separate non-overlapping tasks.
+3. Follow with stock/captions/music, Scene Editor/composition snapshot, render/export, publishing/channel management and production hardening/E2E.
 
 ## Architecture gates
 
@@ -80,10 +77,10 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 - Each implementation task uses a dedicated worktree; shared/control checkout remains on `develop`.
 - Maximum concurrent implementation worktrees normally equals 3.
 - Review fixes stay on the original branch/PR.
-- READY tasks are claimed by atomically creating the absent remote ref from latest `origin/develop`.
+- New authorized tasks are claimed by atomically creating the absent canonical remote ref from current `origin/develop`.
+- Existing canonical branch/PR means claimed even if an issue/mirror still says `READY`.
 - Truthful RED → GREEN → REFACTOR is mandatory.
-- Team Lead review + current-base green CI is the merge gate.
-- Merged worktrees are cleaned before another claim.
+- Team Lead exact-head review + required current-head/current-base green CI is the merge gate.
 - Do not self-merge or self-mark DONE.
 
 Allowed statuses: `BACKLOG`, `READY`, `IN_PROGRESS`, `REVIEW`, `CHANGES_REQUESTED`, `BLOCKED`, `BLOCKED_EXTERNAL`, `DONE`, `CANCELLED`.
