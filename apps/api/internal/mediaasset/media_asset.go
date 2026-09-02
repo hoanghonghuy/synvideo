@@ -44,6 +44,10 @@ var (
 	ErrStorageFailed     = errors.New("media asset storage failed")
 	ErrPersistenceFailed = errors.New("media asset persistence failed")
 	ErrObjectNotFound    = errors.New("media asset object not found")
+	ErrTooLarge          = errors.New("media asset exceeds upload limit")
+	ErrInUse             = errors.New("media asset is in use")
+	ErrUnsupportedType   = errors.New("media asset type is unsupported")
+	ErrRangeInvalid      = errors.New("media asset byte range is invalid")
 )
 
 type ValidationError struct{ Fields map[string]string }
@@ -51,19 +55,20 @@ type ValidationError struct{ Fields map[string]string }
 func (e ValidationError) Error() string { return "media asset validation failed" }
 
 type MediaAsset struct {
-	ID               uuid.UUID       `json:"id"`
-	OwnerID          uuid.UUID       `json:"-"`
-	ProjectID        uuid.UUID       `json:"project_id"`
-	Kind             Kind            `json:"kind"`
-	Origin           Origin          `json:"origin"`
-	ObjectKey        string          `json:"-"`
-	MimeType         string          `json:"mime_type"`
-	ByteSize         int64           `json:"byte_size"`
-	SHA256           string          `json:"sha256"`
-	OriginalFilename string          `json:"original_filename,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID                  uuid.UUID       `json:"id"`
+	OwnerID             uuid.UUID       `json:"-"`
+	ProjectID           uuid.UUID       `json:"project_id"`
+	Kind                Kind            `json:"kind"`
+	Origin              Origin          `json:"origin"`
+	ObjectKey           string          `json:"-"`
+	MimeType            string          `json:"mime_type"`
+	ByteSize            int64           `json:"byte_size"`
+	SHA256              string          `json:"sha256"`
+	OriginalFilename    string          `json:"original_filename,omitempty"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	DeletionRequestedAt *time.Time      `json:"-"`
 }
 
 type CreateInput struct {
@@ -73,6 +78,7 @@ type CreateInput struct {
 	OriginalFilename string
 	Metadata         json.RawMessage
 	Reader           io.Reader
+	MaxBytes         int64
 }
 
 func (input *CreateInput) NormalizeAndValidate() error {
@@ -233,5 +239,6 @@ type ObjectStorage interface {
 	Put(context.Context, PutObjectInput) (ObjectInfo, error)
 	Stat(context.Context, string) (ObjectInfo, error)
 	Open(context.Context, string) (io.ReadCloser, error)
+	OpenRange(context.Context, string, int64, int64) (io.ReadCloser, error)
 	Delete(context.Context, string) error
 }

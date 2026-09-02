@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
@@ -23,7 +25,8 @@ var _ mediaasset.Repository = (*MediaAssetRepository)(nil)
 
 const mediaAssetSelectFields = `
 	id, owner_id, project_id, kind, origin, object_key, mime_type,
-	byte_size, sha256, original_filename, metadata, created_at, updated_at
+	byte_size, sha256, original_filename, metadata, created_at, updated_at,
+	deletion_requested_at
 `
 
 func (r *MediaAssetRepository) Create(ctx context.Context, asset mediaasset.MediaAsset) (mediaasset.MediaAsset, error) {
@@ -55,7 +58,8 @@ func (r *MediaAssetRepository) Create(ctx context.Context, asset mediaasset.Medi
 func (r *MediaAssetRepository) Get(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
 	query := fmt.Sprintf(`
 		SELECT %s FROM media_assets
-		WHERE owner_id = $1 AND project_id = $2 AND id = $3;
+		WHERE owner_id = $1 AND project_id = $2 AND id = $3
+		  AND deletion_requested_at IS NULL;
 	`, mediaAssetSelectFields)
 	return scanMediaAsset(r.pool.QueryRow(ctx, query, ownerID, projectID, assetID))
 }
@@ -70,7 +74,7 @@ func (r *MediaAssetRepository) List(ctx context.Context, ownerID, projectID uuid
 	}
 	query := fmt.Sprintf(`
 		SELECT %s FROM media_assets
-		WHERE owner_id = $1 AND project_id = $2
+		WHERE owner_id = $1 AND project_id = $2 AND deletion_requested_at IS NULL
 		ORDER BY created_at DESC, id DESC
 		LIMIT $3;
 	`, mediaAssetSelectFields)
@@ -98,10 +102,90 @@ func (r *MediaAssetRepository) Delete(ctx context.Context, ownerID, projectID, a
 		DELETE FROM media_assets WHERE owner_id = $1 AND project_id = $2 AND id = $3;
 	`, ownerID, projectID, assetID)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "scene_media_bindings_asset_fk" {
+			return mediaasset.ErrInUse
+		}
 		return fmt.Errorf("delete media asset: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return mediaasset.ErrNotFound
+	}
+	return nil
+}
+
+func (r *MediaAssetRepository) HasReferences(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (bool, error) {
+	var referenced bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM scene_media_bindings
+			WHERE owner_id = $1 AND project_id = $2 AND asset_id = $3
+		)
+	`, ownerID, projectID, assetID).Scan(&referenced)
+	if err != nil {
+		return false, fmt.Errorf("check media asset references: %w", err)
+	}
+	return referenced, nil
+}
+
+func (r *MediaAssetRepository) BeginDeletion(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return mediaasset.MediaAsset{}, fmt.Errorf("begin media asset deletion: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	identity := fmt.Sprintf("media-asset:%s:%s:%s", ownerID, projectID, assetID)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, identity); err != nil {
+		return mediaasset.MediaAsset{}, fmt.Errorf("lock media asset deletion: %w", err)
+	}
+	row := tx.QueryRow(ctx, fmt.Sprintf(`
+		SELECT %s FROM media_assets
+		WHERE owner_id = $1 AND project_id = $2 AND id = $3
+		FOR UPDATE
+	`, mediaAssetSelectFields), ownerID, projectID, assetID)
+	asset, err := scanMediaAsset(row)
+	if err != nil {
+		return mediaasset.MediaAsset{}, err
+	}
+	var referenced bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM scene_media_bindings
+			WHERE owner_id = $1 AND project_id = $2 AND asset_id = $3
+		)
+	`, ownerID, projectID, assetID).Scan(&referenced); err != nil {
+		return mediaasset.MediaAsset{}, fmt.Errorf("check media asset references: %w", err)
+	}
+	if referenced {
+		return mediaasset.MediaAsset{}, mediaasset.ErrInUse
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE media_assets
+		SET deletion_requested_at = COALESCE(deletion_requested_at, now()), updated_at = now()
+		WHERE owner_id = $1 AND project_id = $2 AND id = $3
+	`, ownerID, projectID, assetID); err != nil {
+		return mediaasset.MediaAsset{}, fmt.Errorf("mark media asset deletion: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mediaasset.MediaAsset{}, fmt.Errorf("commit media asset deletion tombstone: %w", err)
+	}
+	markedAt := time.Now().UTC()
+	asset.DeletionRequestedAt = &markedAt
+	return asset, nil
+}
+
+func (r *MediaAssetRepository) FinalizeDeletion(ctx context.Context, ownerID, projectID, assetID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM media_assets
+		WHERE owner_id = $1 AND project_id = $2 AND id = $3 AND deletion_requested_at IS NOT NULL
+	`, ownerID, projectID, assetID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "scene_media_bindings_asset_fk" {
+			return mediaasset.ErrInUse
+		}
+		return fmt.Errorf("finalize media asset deletion: %w", err)
 	}
 	return nil
 }
@@ -116,6 +200,7 @@ func scanMediaAsset(row mediaAssetRow) (mediaasset.MediaAsset, error) {
 		&asset.ID, &asset.OwnerID, &asset.ProjectID, &kind, &origin,
 		&asset.ObjectKey, &asset.MimeType, &asset.ByteSize, &asset.SHA256,
 		&asset.OriginalFilename, &metadata, &asset.CreatedAt, &asset.UpdatedAt,
+		&asset.DeletionRequestedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return mediaasset.MediaAsset{}, mediaasset.ErrNotFound

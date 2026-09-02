@@ -46,6 +46,11 @@ type ScriptService interface {
 	Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error)
 }
 
+type MediaServices struct {
+	Assets   MediaAssetService
+	Bindings SceneMediaService
+}
+
 func New(
 	cfg config.Config,
 	logger *slog.Logger,
@@ -59,6 +64,7 @@ func New(
 	scriptGenerationService ScriptGenerationService,
 	scenePlanGenerationService ScenePlanGenerationService,
 	actorResolver actor.Resolver,
+	mediaServices ...MediaServices,
 ) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/healthz", healthHandler)
@@ -119,6 +125,27 @@ func New(
 		handler := scenePlanGenerationHandler{service: scenePlanGenerationService, actorResolver: actorResolver}
 		mux.HandleFunc("POST /api/v1/projects/{id}/scene-plan-generations", handler.create)
 		mux.HandleFunc("GET /api/v1/projects/{id}/scene-plan-generations/{job_id}", handler.get)
+	}
+	if len(mediaServices) > 0 {
+		services := mediaServices[0]
+		if services.Assets != nil && actorResolver != nil {
+			maxUploadSize := cfg.MediaStorage.MaxUploadBytes
+			if maxUploadSize <= 0 {
+				maxUploadSize = config.DefaultMaxUploadBytes
+			}
+			handler := mediaAssetHandler{service: services.Assets, actorResolver: actorResolver, maxUploadSize: maxUploadSize}
+			mux.HandleFunc("POST /api/v1/projects/{id}/media-assets", handler.upload)
+			mux.HandleFunc("GET /api/v1/projects/{id}/media-assets", handler.list)
+			mux.HandleFunc("GET /api/v1/projects/{id}/media-assets/{asset_id}", handler.get)
+			mux.HandleFunc("GET /api/v1/projects/{id}/media-assets/{asset_id}/content", handler.content)
+			mux.HandleFunc("DELETE /api/v1/projects/{id}/media-assets/{asset_id}", handler.delete)
+		}
+		if services.Assets != nil && services.Bindings != nil && actorResolver != nil {
+			handler := sceneMediaHandler{bindings: services.Bindings, assets: services.Assets, actorResolver: actorResolver}
+			mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans/{version}/media-bindings", handler.listCurrent)
+			mux.HandleFunc("PUT /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/primary-visual", handler.assignPrimaryVisual)
+			mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/primary-visual/history", handler.history)
+		}
 	}
 
 	return &http.Server{

@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -83,5 +84,42 @@ func TestConfigValidateRequiresDatabaseOutsideTest(t *testing.T) {
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected missing database URL to fail outside test")
+	}
+}
+
+func TestConfigValidateRejectsPartialMediaStorageConfiguration(t *testing.T) {
+	cfg := Config{
+		Addr:        ":8080",
+		Environment: EnvironmentDevelopment,
+		DatabaseURL: "postgres://example",
+		MediaStorage: MediaStorageConfig{
+			Endpoint: "http://localhost:8333",
+			Bucket:   "synvideo",
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected incomplete media storage configuration to fail validation")
+	}
+}
+
+func TestConfigValidateAcceptsCompleteMediaStorageConfiguration(t *testing.T) {
+	cfg := Config{
+		Addr:        ":8080",
+		Environment: EnvironmentDevelopment,
+		DatabaseURL: "postgres://example",
+		MediaStorage: MediaStorageConfig{
+			Endpoint:        "http://localhost:8333",
+			Region:          "local",
+			Bucket:          "synvideo",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+			Timeout:         30 * time.Second,
+			MaxUploadBytes:  1024,
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected complete media storage configuration to validate: %v", err)
 	}
 }

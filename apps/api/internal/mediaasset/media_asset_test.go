@@ -132,12 +132,13 @@ func (f fakeProjectRepository) Update(context.Context, uuid.UUID, uuid.UUID, pro
 }
 
 type fakeMetadataRepository struct {
-	created     mediaasset.MediaAsset
-	createErr   error
-	assets      []mediaasset.MediaAsset
-	getErr      error
-	deleteErr   error
-	deleteCalls int
+	created       mediaasset.MediaAsset
+	createErr     error
+	assets        []mediaasset.MediaAsset
+	getErr        error
+	deleteErr     error
+	hasReferences bool
+	deleteCalls   int
 }
 
 func (f *fakeMetadataRepository) Create(_ context.Context, asset mediaasset.MediaAsset) (mediaasset.MediaAsset, error) {
@@ -163,6 +164,9 @@ func (f *fakeMetadataRepository) Delete(context.Context, uuid.UUID, uuid.UUID, u
 	f.deleteCalls++
 	return f.deleteErr
 }
+func (f *fakeMetadataRepository) HasReferences(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (bool, error) {
+	return f.hasReferences, nil
+}
 
 type fakeObjectStorage struct {
 	putErr      error
@@ -171,6 +175,38 @@ type fakeObjectStorage struct {
 	openCalls   int
 	deleteCalls int
 	lastPut     mediaasset.PutObjectInput
+}
+
+type fakeDeletionRepository struct {
+	base          *fakeMetadataRepository
+	beginErr      error
+	finalizeErr   error
+	beginCalls    int
+	finalizeCalls int
+}
+
+func (f *fakeDeletionRepository) Create(ctx context.Context, asset mediaasset.MediaAsset) (mediaasset.MediaAsset, error) {
+	return f.base.Create(ctx, asset)
+}
+func (f *fakeDeletionRepository) Get(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
+	return f.base.Get(ctx, ownerID, projectID, assetID)
+}
+func (f *fakeDeletionRepository) List(ctx context.Context, ownerID, projectID uuid.UUID, options mediaasset.ListOptions) (mediaasset.ListResult, error) {
+	return f.base.List(ctx, ownerID, projectID, options)
+}
+func (f *fakeDeletionRepository) Delete(ctx context.Context, ownerID, projectID, assetID uuid.UUID) error {
+	return f.base.Delete(ctx, ownerID, projectID, assetID)
+}
+func (f *fakeDeletionRepository) BeginDeletion(_ context.Context, _, _, _ uuid.UUID) (mediaasset.MediaAsset, error) {
+	f.beginCalls++
+	if f.beginErr != nil {
+		return mediaasset.MediaAsset{}, f.beginErr
+	}
+	return f.base.created, nil
+}
+func (f *fakeDeletionRepository) FinalizeDeletion(_ context.Context, _, _, _ uuid.UUID) error {
+	f.finalizeCalls++
+	return f.finalizeErr
 }
 
 func (f *fakeObjectStorage) Put(_ context.Context, input mediaasset.PutObjectInput) (mediaasset.ObjectInfo, error) {
@@ -191,6 +227,10 @@ func (f *fakeObjectStorage) Stat(context.Context, string) (mediaasset.ObjectInfo
 func (f *fakeObjectStorage) Open(context.Context, string) (io.ReadCloser, error) {
 	f.openCalls++
 	return io.NopCloser(strings.NewReader("opened media")), nil
+}
+func (f *fakeObjectStorage) OpenRange(context.Context, string, int64, int64) (io.ReadCloser, error) {
+	f.openCalls++
+	return io.NopCloser(strings.NewReader("opened range")), nil
 }
 func (f *fakeObjectStorage) Delete(context.Context, string) error {
 	f.deleteCalls++
@@ -222,6 +262,26 @@ func TestServiceStoreCalculatesStreamingMetadataAndUsesScopedKey(t *testing.T) {
 	}
 	if string(input.Metadata) != string(metadata) {
 		t.Fatalf("input metadata mutated: %s", input.Metadata)
+	}
+}
+
+func TestServiceStoreRejectsOversizedReaderWithoutPersistingMetadata(t *testing.T) {
+	input := validCreateInput()
+	input.MaxBytes = int64(len("media bytes") - 1)
+	input.Reader = strings.NewReader("media bytes")
+	repository := &fakeMetadataRepository{}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	_, err := service.Store(context.Background(), project.Principal{OwnerID: ownerID}, projectID, input)
+	if !errors.Is(err, mediaasset.ErrTooLarge) {
+		t.Fatalf("expected oversized upload error, got %v", err)
+	}
+	if repository.created.ID != uuid.Nil {
+		t.Fatal("oversized upload persisted metadata")
+	}
+	if storage.putCalls != 1 || storage.deleteCalls != 1 {
+		t.Fatalf("expected bounded storage attempt and compensation, puts=%d deletes=%d", storage.putCalls, storage.deleteCalls)
 	}
 }
 
@@ -353,6 +413,51 @@ func TestServiceDeleteStopsBeforeMetadataDeletionOnStorageFailure(t *testing.T) 
 	}
 	if repository.deleteCalls != 0 {
 		t.Fatal("metadata was deleted after object deletion failure")
+	}
+}
+
+func TestServiceDeleteRejectsReferencedAssetBeforeRemovingObject(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeMetadataRepository{created: asset, hasReferences: true}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	err := service.Delete(context.Background(), project.Principal{OwnerID: ownerID}, projectID, asset.ID)
+	if !errors.Is(err, mediaasset.ErrInUse) {
+		t.Fatalf("expected in-use error, got %v", err)
+	}
+	if storage.deleteCalls != 0 || repository.deleteCalls != 0 {
+		t.Fatalf("referenced asset was mutated: storage=%d repository=%d", storage.deleteCalls, repository.deleteCalls)
+	}
+}
+
+func TestServiceDeleteUsesTombstoneRepositoryBeforeObjectDeletion(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeDeletionRepository{base: &fakeMetadataRepository{created: asset}, finalizeErr: errors.New("database commit failed")}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	err := service.Delete(context.Background(), project.Principal{OwnerID: ownerID}, projectID, asset.ID)
+	if !errors.Is(err, mediaasset.ErrPersistenceFailed) {
+		t.Fatalf("expected finalize persistence error, got %v", err)
+	}
+	if repository.beginCalls != 1 || repository.finalizeCalls != 1 || storage.deleteCalls != 1 {
+		t.Fatalf("unexpected tombstone sequence: begin=%d finalize=%d storage_delete=%d", repository.beginCalls, repository.finalizeCalls, storage.deleteCalls)
+	}
+}
+
+func TestServiceDeleteDoesNotTouchObjectWhenDeletionCannotCommitTombstone(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeDeletionRepository{base: &fakeMetadataRepository{created: asset}, beginErr: errors.New("database unavailable")}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	err := service.Delete(context.Background(), project.Principal{OwnerID: ownerID}, projectID, asset.ID)
+	if !errors.Is(err, mediaasset.ErrPersistenceFailed) {
+		t.Fatalf("expected tombstone persistence error, got %v", err)
+	}
+	if storage.deleteCalls != 0 {
+		t.Fatal("object was deleted before tombstone commit")
 	}
 }
 

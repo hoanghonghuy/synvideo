@@ -74,22 +74,22 @@ func TestStoragePropagatesContextCancellation(t *testing.T) {
 }
 
 func TestStorageLocalS3CompatibleRoundTrip(t *testing.T) {
-	endpoint := os.Getenv("SYNVIDEO_S3_ENDPOINT")
+	endpoint := storageEnv("SYNVIDEO_MEDIA_STORAGE_ENDPOINT", "SYNVIDEO_S3_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("SYNVIDEO_S3_ENDPOINT is not set; start local SeaweedFS/MinIO for this integration test")
+		t.Skip("SYNVIDEO_MEDIA_STORAGE_ENDPOINT is not set; start local SeaweedFS/MinIO for this integration test")
 	}
 	cfg := validConfig()
 	cfg.Endpoint = endpoint
-	if value := os.Getenv("SYNVIDEO_S3_REGION"); value != "" {
+	if value := storageEnv("SYNVIDEO_MEDIA_STORAGE_REGION", "SYNVIDEO_S3_REGION"); value != "" {
 		cfg.Region = value
 	}
-	if value := os.Getenv("SYNVIDEO_S3_BUCKET"); value != "" {
+	if value := storageEnv("SYNVIDEO_MEDIA_STORAGE_BUCKET", "SYNVIDEO_S3_BUCKET"); value != "" {
 		cfg.Bucket = value
 	}
-	if value := os.Getenv("SYNVIDEO_S3_ACCESS_KEY_ID"); value != "" {
+	if value := storageEnv("SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID", "SYNVIDEO_S3_ACCESS_KEY_ID"); value != "" {
 		cfg.AccessKeyID = value
 	}
-	if value := os.Getenv("SYNVIDEO_S3_SECRET_ACCESS_KEY"); value != "" {
+	if value := storageEnv("SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY", "SYNVIDEO_S3_SECRET_ACCESS_KEY"); value != "" {
 		cfg.SecretAccessKey = value
 	}
 	storage, err := s3storage.New(cfg)
@@ -120,10 +120,26 @@ func TestStorageLocalS3CompatibleRoundTrip(t *testing.T) {
 	if readErr != nil || closeErr != nil || string(got) != want {
 		t.Fatalf("read: bytes=%q read_err=%v close_err=%v", got, readErr, closeErr)
 	}
+	rangeReader, err := storage.OpenRange(ctx, key, 6, 13)
+	if err != nil {
+		t.Fatalf("open range: %v", err)
+	}
+	rangeBytes, rangeReadErr := io.ReadAll(rangeReader)
+	rangeCloseErr := rangeReader.Close()
+	if rangeReadErr != nil || rangeCloseErr != nil || string(rangeBytes) != "deterministic" {
+		t.Fatalf("range read: bytes=%q read_err=%v close_err=%v", rangeBytes, rangeReadErr, rangeCloseErr)
+	}
 	if err := storage.Delete(ctx, key); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := storage.Stat(ctx, key); !errors.Is(err, mediaasset.ErrObjectNotFound) {
 		t.Fatalf("expected not found after delete, got %v", err)
 	}
+}
+
+func storageEnv(primary, legacy string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	return os.Getenv(legacy)
 }

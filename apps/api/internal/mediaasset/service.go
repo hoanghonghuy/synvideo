@@ -48,15 +48,28 @@ func (s *Service) Store(ctx context.Context, principal project.Principal, projec
 	if err := ctx.Err(); err != nil {
 		return MediaAsset{}, err
 	}
+	if input.MaxBytes < 0 {
+		return MediaAsset{}, ErrInvalidInput
+	}
 
 	assetID := uuid.New()
 	objectKey := fmt.Sprintf("projects/%s/assets/%s", projectID, assetID)
 	digest := &countingHash{Hash: sha256.New()}
+	body := input.Reader
+	var bounded *maxBytesReader
+	if input.MaxBytes > 0 {
+		bounded = &maxBytesReader{reader: body, max: input.MaxBytes}
+		body = bounded
+	}
 	_, err := s.storage.Put(ctx, PutObjectInput{
 		Key:         objectKey,
-		Body:        io.TeeReader(input.Reader, digest),
+		Body:        io.TeeReader(body, digest),
 		ContentType: input.MimeType,
 	})
+	if bounded != nil && bounded.exceeded {
+		_ = s.compensateDelete(objectKey)
+		return MediaAsset{}, ErrTooLarge
+	}
 	if err != nil {
 		return MediaAsset{}, mapStorageError(err)
 	}
@@ -140,18 +153,62 @@ func (s *Service) Open(ctx context.Context, principal project.Principal, project
 	return reader, nil
 }
 
+func (s *Service) OpenRange(ctx context.Context, principal project.Principal, projectID, assetID uuid.UUID, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 || length < 1 {
+		return nil, ErrInvalidInput
+	}
+	asset, err := s.Get(ctx, principal, projectID, assetID)
+	if err != nil {
+		return nil, err
+	}
+	if offset >= asset.ByteSize || length > asset.ByteSize-offset {
+		return nil, ErrInvalidInput
+	}
+	reader, err := s.storage.OpenRange(ctx, asset.ObjectKey, offset, length)
+	if err != nil {
+		return nil, mapStorageError(err)
+	}
+	return reader, nil
+}
+
 func (s *Service) Delete(ctx context.Context, principal project.Principal, projectID, assetID uuid.UUID) error {
 	if principal.OwnerID == uuid.Nil {
 		return ErrUnauthenticated
 	}
+	if deleter, ok := s.repo.(DeletionRepository); ok {
+		return s.deleteWithTombstone(ctx, deleter, principal, projectID, assetID)
+	}
 	asset, err := s.repo.Get(ctx, principal.OwnerID, projectID, assetID)
+	if err != nil {
+		return mapRepositoryError(err)
+	}
+	if checker, ok := s.repo.(ReferenceChecker); ok {
+		referenced, checkErr := checker.HasReferences(ctx, principal.OwnerID, projectID, assetID)
+		if checkErr != nil {
+			return mapRepositoryError(checkErr)
+		}
+		if referenced {
+			return ErrInUse
+		}
+	}
+	if err := s.storage.Delete(ctx, asset.ObjectKey); err != nil && !errors.Is(err, ErrObjectNotFound) {
+		return mapStorageError(err)
+	}
+	if err := s.repo.Delete(ctx, principal.OwnerID, projectID, assetID); err != nil {
+		return mapRepositoryError(err)
+	}
+	return nil
+}
+
+func (s *Service) deleteWithTombstone(ctx context.Context, deleter DeletionRepository, principal project.Principal, projectID, assetID uuid.UUID) error {
+	asset, err := deleter.BeginDeletion(ctx, principal.OwnerID, projectID, assetID)
 	if err != nil {
 		return mapRepositoryError(err)
 	}
 	if err := s.storage.Delete(ctx, asset.ObjectKey); err != nil && !errors.Is(err, ErrObjectNotFound) {
 		return mapStorageError(err)
 	}
-	if err := s.repo.Delete(ctx, principal.OwnerID, projectID, assetID); err != nil {
+	if err := deleter.FinalizeDeletion(ctx, principal.OwnerID, projectID, assetID); err != nil {
 		return mapRepositoryError(err)
 	}
 	return nil
@@ -188,6 +245,9 @@ func mapRepositoryError(err error) error {
 	if errors.Is(err, ErrNotFound) || errors.Is(err, project.ErrNotFound) {
 		return ErrNotFound
 	}
+	if errors.Is(err, ErrInUse) {
+		return ErrInUse
+	}
 	return ErrPersistenceFailed
 }
 
@@ -203,5 +263,41 @@ func mapStorageError(err error) error {
 	if errors.Is(err, ErrObjectNotFound) {
 		return ErrObjectNotFound
 	}
+	if errors.Is(err, ErrTooLarge) {
+		return ErrTooLarge
+	}
 	return fmt.Errorf("%w", ErrStorageFailed)
+}
+
+type maxBytesReader struct {
+	reader   io.Reader
+	max      int64
+	read     int64
+	exceeded bool
+}
+
+func (r *maxBytesReader) Read(p []byte) (int, error) {
+	if r.read > r.max {
+		r.exceeded = true
+		return 0, ErrTooLarge
+	}
+	remaining := r.max - r.read
+	if remaining == 0 {
+		var probe [1]byte
+		n, err := r.reader.Read(probe[:])
+		if n > 0 {
+			return 0, ErrTooLarge
+		}
+		return 0, err
+	}
+	if int64(len(p)) > remaining+1 {
+		p = p[:remaining+1]
+	}
+	n, err := r.reader.Read(p)
+	r.read += int64(n)
+	if r.read > r.max {
+		r.exceeded = true
+		return n, ErrTooLarge
+	}
+	return n, err
 }
