@@ -37,6 +37,7 @@ function createMockProvidersList() {
           { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled: true },
           { id: 'gpt-4o', display_name: 'GPT-4o', enabled: false },
         ],
+        voices: [],
       },
       {
         id: 'openrouter',
@@ -48,6 +49,7 @@ function createMockProvidersList() {
         models: [
           { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: false },
         ],
+        voices: [],
       },
     ],
   }
@@ -127,6 +129,7 @@ describe('ProviderSettingsView', () => {
       models: [
         { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: true },
       ],
+      voices: [],
     }
     fetchMock.mockResolvedValueOnce(jsonResponse(updatedOpenrouter))
 
@@ -143,7 +146,7 @@ describe('ProviderSettingsView', () => {
     const body = JSON.parse(putOpts.body as string)
     expect(body.api_key).toBe('sk-openrouter-secret-key-12345')
     expect(body.enabled).toBe(true)
-    expect(body.enabled_model_ids).toEqual(['claude-3-5-sonnet'])
+    expect(body.enabled_text_model_ids).toEqual(['claude-3-5-sonnet'])
 
     // Assert secret key was immediately cleared from the input element and component memory
     expect(keyInput.element.value).toBe('')
