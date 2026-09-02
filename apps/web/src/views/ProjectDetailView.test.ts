@@ -83,6 +83,7 @@ describe('ProjectDetailView', () => {
         { path: '/projects/:id/creative-proposal', component: CreativeProposalView },
         { path: '/projects/:id/script', component: { template: '<div>Script workspace</div>' } },
         { path: '/projects/:id/scene-plan', component: { template: '<div>Scene Plan workspace</div>' } },
+        { path: '/projects/:id/media', component: { template: '<div>Media workspace</div>' } },
       ],
     })
     router.push(`/projects/${project.id}`)
@@ -100,6 +101,8 @@ describe('ProjectDetailView', () => {
     expect(proposalLink?.text()).toContain('Mở AI Proposal')
     expect(scriptLink?.text()).toContain('Mở Script')
     expect(sceneLink?.text()).toContain('Mở Scene Plan')
+    const mediaLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/media`)
+    expect(mediaLink?.text()).toContain('Thư viện Media')
 
     await briefLink?.trigger('click')
     await flushPromises()
@@ -134,6 +137,7 @@ async function mountDetailView() {
       { path: '/projects/:id/creative-proposal', component: { template: '<div />' } },
       { path: '/projects/:id/script', component: { template: '<div />' } },
       { path: '/projects/:id/scene-plan', component: { template: '<div />' } },
+      { path: '/projects/:id/media', component: { template: '<div />' } },
     ],
   })
   router.push('/projects/11111111-1111-4111-8111-111111111111')
