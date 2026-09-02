@@ -49,11 +49,14 @@ const failedVersion = ref<number | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 
 const providerOptions = ref<TextGenerationOptionProvider[]>([])
+const optionsLoading = ref(false)
+const optionsErrorCode = ref('')
 const selectedProviderId = ref('')
 const selectedModelId = ref('')
 const activeJob = ref<ScenePlanGenerationJob | null>(null)
 const generating = ref(false)
 const generationErrorCode = ref('')
+const pollErrorCode = ref('')
 let pollTimer: number | null = null
 
 // Split modal state
@@ -64,6 +67,23 @@ const splitError = ref('')
 const splitTargetScene = computed(() => {
   if (splitTargetIndex.value === null) return null
   return formScenes.value[splitTargetIndex.value] ?? null
+})
+
+const splitMaxCodePoints = computed(() => {
+  if (!splitTargetScene.value) return 1
+  return Math.max(1, Array.from(splitTargetScene.value.narration).length - 1)
+})
+
+const splitPart1Preview = computed(() => {
+  if (!splitTargetScene.value) return ''
+  const codePoints = Array.from(splitTargetScene.value.narration)
+  return codePoints.slice(0, splitPoint.value).join('')
+})
+
+const splitPart2Preview = computed(() => {
+  if (!splitTargetScene.value) return ''
+  const codePoints = Array.from(splitTargetScene.value.narration)
+  return codePoints.slice(splitPoint.value).join('')
 })
 
 const selectedProviderModels = computed(() => {
@@ -123,6 +143,8 @@ onUnmounted(() => {
 })
 
 async function loadGenerationOptions() {
+  optionsLoading.value = true
+  optionsErrorCode.value = ''
   try {
     const response = await getTextGenerationOptions()
     providerOptions.value = response.providers ?? []
@@ -133,8 +155,11 @@ async function loadGenerationOptions() {
         selectedModelId.value = provider.models[0]?.id ?? ''
       }
     }
-  } catch {
+  } catch (error) {
     providerOptions.value = []
+    optionsErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+  } finally {
+    optionsLoading.value = false
   }
 }
 
@@ -152,12 +177,30 @@ async function loadWorkspace() {
   plansLoaded.value = false
   try {
     project.value = await getProject(String(route.params.id))
-    summaries.value = await listScenePlans(project.value.id)
-    scripts.value = await listScripts(project.value.id)
+    const [fetchedPlans, fetchedScripts] = await Promise.all([
+      listScenePlans(project.value.id),
+      listScripts(project.value.id),
+    ])
+    summaries.value = fetchedPlans
+    scripts.value = fetchedScripts
     plansLoaded.value = true
-    const initial = summaries.value.find((item) => item.status === 'draft') ?? summaries.value[0]
+
+    // Check if an active succeeded job is awaiting version loading
+    const succeededVersion =
+      activeJob.value?.state === 'succeeded' && activeJob.value.scene_plan_version !== null
+        ? activeJob.value.scene_plan_version
+        : null
+
+    const initial =
+      (succeededVersion !== null
+        ? summaries.value.find((item) => item.version === succeededVersion)
+        : null) ??
+      summaries.value.find((item) => item.status === 'draft') ??
+      summaries.value[0]
+
     if (initial) {
-      await loadVersion(initial.version, true)
+      const loaded = await loadVersion(initial.version, true)
+      if (!loaded) return
     } else {
       selectedPlan.value = null
       selectedVersion.value = null
@@ -228,6 +271,37 @@ async function saveScenePlan() {
   }
 }
 
+async function saveAndSwitch() {
+  if (pendingVersion.value === null || !selectedPlan.value || selectedPlan.value.status !== 'draft') return
+  const targetVersion = pendingVersion.value
+  saving.value = true
+  mutationErrorCode.value = ''
+  loadErrorCode.value = ''
+  fieldErrors.value = {}
+  try {
+    const updated = await putScenePlan(projectID(), selectedPlan.value.version, {
+      revision: selectedPlan.value.revision,
+      scenes: formScenes.value.map((s) => ({ ...s })),
+    })
+    upsertSummary(updated)
+    pendingVersion.value = null
+    const loaded = await loadVersion(targetVersion, true)
+    if (
+      loaded &&
+      activeJob.value?.state === 'succeeded' &&
+      activeJob.value.scene_plan_version === targetVersion
+    ) {
+      removePersistedJob()
+      activeJob.value = null
+      generationErrorCode.value = ''
+    }
+  } catch (error) {
+    handleMutationError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function approveSelected() {
   if (!selectedPlan.value || selectedPlan.value.status !== 'draft' || dirty.value) return
   approving.value = true
@@ -271,9 +345,10 @@ function requestID(): string | null {
 }
 
 async function startGeneration() {
-  if (!canGenerate.value && !activeJob.value) return
+  if (!canGenerate.value) return
   generating.value = true
   generationErrorCode.value = ''
+  pollErrorCode.value = ''
   mutationErrorCode.value = ''
   try {
     const requestId = requestID()
@@ -302,6 +377,7 @@ function trackJob(jobID: string) {
     try {
       const job = await getScenePlanGeneration(projectID(), jobID)
       activeJob.value = job
+      pollErrorCode.value = ''
       generationErrorCode.value = ''
       if (job.state === 'succeeded') {
         await loadSucceededPlan()
@@ -314,7 +390,7 @@ function trackJob(jobID: string) {
       }
       schedulePoll(poll)
     } catch (error) {
-      generationErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+      pollErrorCode.value = error instanceof ApiError ? error.code : 'request_failed'
       schedulePoll(poll)
     }
   }
@@ -427,7 +503,8 @@ function openSplitModal(index: number) {
   const target = formScenes.value[index]
   if (!target) return
   splitTargetIndex.value = index
-  splitPoint.value = Math.max(1, Math.floor(target.narration.length / 2))
+  const codePoints = Array.from(target.narration)
+  splitPoint.value = Math.max(1, Math.floor(codePoints.length / 2))
   splitNewKey.value = generateUniqueKey(target.key)
   splitError.value = ''
 }
@@ -455,14 +532,29 @@ function confirmSplit() {
   const target = formScenes.value[index]
   if (!target) return
 
+  const codePoints = Array.from(target.narration)
   const point = Number(splitPoint.value)
-  if (isNaN(point) || point < 1 || point >= target.narration.length) {
+  if (isNaN(point) || point < 1 || point >= codePoints.length) {
     splitError.value = t('scenePlan.validation.invalid_format')
     return
   }
 
-  const part1 = target.narration.slice(0, point)
-  const part2 = target.narration.slice(point)
+  const trimmedKey = splitNewKey.value.trim()
+  const keyRegex = /^[a-z0-9_-]+$/
+  const keyRunes = Array.from(trimmedKey)
+  if (!trimmedKey || keyRunes.length < 1 || keyRunes.length > 64 || !keyRegex.test(trimmedKey)) {
+    splitError.value = t('scenePlan.validation.invalid_format')
+    return
+  }
+
+  const isDuplicate = formScenes.value.some((s, i) => i !== index && s.key === trimmedKey)
+  if (isDuplicate) {
+    splitError.value = t('scenePlan.validation.duplicate')
+    return
+  }
+
+  const part1 = codePoints.slice(0, point).join('')
+  const part2 = codePoints.slice(point).join('')
 
   const d1 = Math.max(1, Math.floor(target.expected_duration_seconds / 2))
   const d2 = Math.max(1, Math.ceil(target.expected_duration_seconds / 2))
@@ -474,7 +566,7 @@ function confirmSplit() {
   }
 
   const newScene2: Scene = {
-    key: splitNewKey.value.trim() || generateUniqueKey(target.key),
+    key: trimmedKey,
     script_section_key: target.script_section_key,
     narration: part2,
     visual_instruction: target.visual_instruction,
@@ -510,6 +602,14 @@ function mergeWithNext(index: number) {
   }
 
   formScenes.value.splice(index, 2, mergedScene)
+}
+
+function getFieldError(idx: number, field: string): string | undefined {
+  return (
+    fieldErrors.value[`scenes[${idx}].${field}`] ??
+    fieldErrors.value[`scenes.${idx}.${field}`] ??
+    fieldErrors.value[`scenes[${idx}]`]
+  )
 }
 
 function projectID() {
@@ -558,7 +658,7 @@ function errorMessage(code: string) {
     </div>
 
     <div
-      v-else-if="loadErrorCode && !hasScenePlan"
+      v-else-if="loadErrorCode && !selectedPlan"
       class="notice error"
       data-testid="scene-plan-list-error"
     >
@@ -592,7 +692,23 @@ function errorMessage(code: string) {
         aria-label="Generation"
       >
         <div
-          v-if="!hasProviders"
+          v-if="optionsErrorCode"
+          class="notice error"
+          data-testid="options-error-notice"
+        >
+          <p>{{ errorMessage(optionsErrorCode) }}</p>
+          <button
+            class="secondary-button"
+            type="button"
+            data-testid="retry-options-btn"
+            @click="loadGenerationOptions"
+          >
+            {{ t('scenePlan.actions.retryLoadOptions') }}
+          </button>
+        </div>
+
+        <div
+          v-else-if="!hasProviders"
           class="notice info"
           data-testid="no-scene-plan-providers-notice"
         >
@@ -671,7 +787,7 @@ function errorMessage(code: string) {
 
         <!-- Generation Status Banners -->
         <div
-          v-if="generationInProgress"
+          v-if="generationInProgress && !pollErrorCode"
           class="notice info"
           :data-testid="`job-state-${activeJob?.state}`"
         >
@@ -688,8 +804,26 @@ function errorMessage(code: string) {
           <p>{{ t('scenePlan.generation.stateSucceeded') }}</p>
         </div>
 
+        <!-- Transient Poll Error Banner (Never POSTs fresh generation) -->
         <div
-          v-if="generationErrorCode"
+          v-if="pollErrorCode"
+          class="notice error"
+          data-testid="job-error-banner"
+        >
+          <p>{{ errorMessage(pollErrorCode) }}</p>
+          <button
+            class="secondary-button"
+            type="button"
+            data-testid="retry-poll-btn"
+            @click="activeJob && trackJob(activeJob.id)"
+          >
+            {{ t('scenePlan.actions.retryPoll') }}
+          </button>
+        </div>
+
+        <!-- Terminal Error Banner -->
+        <div
+          v-else-if="generationErrorCode"
           class="notice error"
           data-testid="job-error-banner"
         >
@@ -748,6 +882,7 @@ function errorMessage(code: string) {
               <span>{{ t('scenePlan.states.version', { value: item.version }) }}</span>
               <small>{{ t(`scenePlan.status.${item.status}`) }}</small>
               <small>{{ t('scenePlan.states.sourceScriptVersion', { value: item.source_script_version }) }}</small>
+              <small>{{ t('scenePlan.states.sourceProposalVersion', { value: item.source_proposal_version }) }}</small>
               <small>{{ d(new Date(item.updated_at), 'long') }}</small>
             </button>
           </div>
@@ -755,7 +890,7 @@ function errorMessage(code: string) {
 
         <!-- Editor Area -->
         <div class="scene-plan-editor">
-          <!-- Dirty Switch Warning -->
+          <!-- Dirty Switch Warning (Save / Discard / Cancel) -->
           <div
             v-if="pendingVersion !== null"
             class="notice warning"
@@ -766,7 +901,17 @@ function errorMessage(code: string) {
               <button
                 class="primary-button"
                 type="button"
+                data-testid="confirm-save-switch"
+                :disabled="saving"
+                @click="saveAndSwitch"
+              >
+                {{ saving ? t('scenePlan.actions.saving') : t('scenePlan.actions.saveAndSwitch') }}
+              </button>
+              <button
+                class="secondary-button"
+                type="button"
                 data-testid="confirm-discard-switch"
+                :disabled="saving"
                 @click="discardAndSwitch"
               >
                 {{ t('scenePlan.actions.discardAndSwitch') }}
@@ -774,6 +919,8 @@ function errorMessage(code: string) {
               <button
                 class="secondary-button"
                 type="button"
+                data-testid="cancel-switch"
+                :disabled="saving"
                 @click="cancelSwitch"
               >
                 {{ t('scenePlan.actions.cancel') }}
@@ -867,6 +1014,7 @@ function errorMessage(code: string) {
             <p><strong>{{ t('scenePlan.states.version', { value: selectedPlan.version }) }}</strong> ({{ t(`scenePlan.status.${selectedPlan.status}`) }})</p>
             <p>{{ t('scenePlan.states.revision', { value: selectedPlan.revision }) }}</p>
             <p>{{ t('scenePlan.states.sourceScriptVersion', { value: selectedPlan.source_script_version }) }}</p>
+            <p>{{ t('scenePlan.states.sourceProposalVersion', { value: selectedPlan.source_proposal_version }) }}</p>
             <p>{{ t('scenePlan.states.updatedAt', { value: d(new Date(selectedPlan.updated_at), 'long') }) }}</p>
           </div>
 
@@ -912,6 +1060,13 @@ function errorMessage(code: string) {
                     :disabled="isReadOnly"
                     rows="3"
                   />
+                  <span
+                    v-if="getFieldError(idx, 'visual_instruction')"
+                    class="field-error"
+                    :data-testid="`error-visual-${idx}`"
+                  >
+                    {{ getFieldError(idx, 'visual_instruction') }}
+                  </span>
                 </label>
 
                 <div class="scene-fields-row">
@@ -940,6 +1095,13 @@ function errorMessage(code: string) {
                       max="3600"
                       :disabled="isReadOnly"
                     >
+                    <span
+                      v-if="getFieldError(idx, 'expected_duration_seconds')"
+                      class="field-error"
+                      :data-testid="`error-duration-${idx}`"
+                    >
+                      {{ getFieldError(idx, 'expected_duration_seconds') }}
+                    </span>
                   </label>
                 </div>
 
@@ -1048,7 +1210,7 @@ function errorMessage(code: string) {
       </div>
     </template>
 
-    <!-- Split Scene Modal -->
+    <!-- Split Scene Modal (Unicode Code-Point Safe) -->
     <div
       v-if="splitTargetScene"
       class="modal-backdrop"
@@ -1062,12 +1224,12 @@ function errorMessage(code: string) {
 
         <div class="split-controls">
           <label>
-            <span>{{ t('scenePlan.splitModal.splitPointLabel', { max: splitTargetScene.narration.length - 1 }) }}</span>
+            <span>{{ t('scenePlan.splitModal.splitPointLabel', { max: splitMaxCodePoints }) }}</span>
             <input
               v-model.number="splitPoint"
               type="number"
               min="1"
-              :max="splitTargetScene.narration.length - 1"
+              :max="splitMaxCodePoints"
               data-testid="split-index-input"
             >
           </label>
@@ -1085,17 +1247,18 @@ function errorMessage(code: string) {
         <div class="split-preview">
           <div class="preview-box">
             <strong>{{ t('scenePlan.splitModal.part1Preview') }}:</strong>
-            <p>{{ splitTargetScene.narration.slice(0, splitPoint) }}</p>
+            <p data-testid="split-preview-part1">{{ splitPart1Preview }}</p>
           </div>
           <div class="preview-box">
             <strong>{{ t('scenePlan.splitModal.part2Preview') }}:</strong>
-            <p>{{ splitTargetScene.narration.slice(splitPoint) }}</p>
+            <p data-testid="split-preview-part2">{{ splitPart2Preview }}</p>
           </div>
         </div>
 
         <div
           v-if="splitError"
           class="notice error"
+          data-testid="split-error-notice"
         >
           <p>{{ splitError }}</p>
         </div>
@@ -1112,6 +1275,7 @@ function errorMessage(code: string) {
           <button
             class="secondary-button"
             type="button"
+            data-testid="cancel-split-btn"
             @click="closeSplitModal"
           >
             {{ t('scenePlan.actions.cancel') }}

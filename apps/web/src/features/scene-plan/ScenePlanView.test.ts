@@ -140,6 +140,46 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="retry-scene-plan-list"]').exists()).toBe(true)
   })
 
+  it('1c. renders a retryable error when scripts fetch fails even after non-empty plan list', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scripts`, { error: { code: 'request_failed' } }, 503)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-list-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retry-scene-plan-list"]').exists()).toBe(true)
+  })
+
+  it('1d. renders a retryable error when initial draft version fetch fails', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, { error: { code: 'request_failed' } }, 500)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="scene-plan-list-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retry-scene-plan-list"]').exists()).toBe(true)
+  })
+
+  it('1e. renders a retryable options error when generation options fetch fails', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route('GET', '/api/v1/ai/text-generation-options', { error: { code: 'options_failed' } }, 500)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="options-error-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retry-options-btn"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="no-scene-plan-providers-notice"]').exists()).toBe(false)
+  })
+
   it('2. opens active draft automatically on initial load when present', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedPlan, draftPlan])
@@ -154,6 +194,7 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="version-1"]').classes()).toContain('active')
     expect(wrapper.text()).toContain('Phiên bản 1')
     expect(wrapper.text()).toContain('Bản sửa 2')
+    expect(wrapper.text()).toContain('Nguồn Proposal phiên bản 1')
   })
 
   it('3. guards against losing dirty edits on version switch and allows discard', async () => {
@@ -185,6 +226,33 @@ describe('ScenePlanView', () => {
     expect(wrapper.text()).toContain('Phiên bản 2')
   })
 
+  it('3b. saves dirty edits and completes requested version switch when save-and-switch is chosen', async () => {
+    const updatedPlan = { ...draftPlan, revision: 3, scenes: [{ ...draftPlan.scenes[0]!, visual_instruction: 'Visual lưu trước khi chuyển' }, draftPlan.scenes[1]!] }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedPlan, draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/2`, approvedPlan)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route('PUT', `/api/v1/projects/${projectId}/scene-plans/1`, updatedPlan)
+    route('GET', '/api/v1/ai/text-generation-options', providers)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('[name="scene_visual_0"]').setValue('Visual lưu trước khi chuyển')
+    await wrapper.find('[data-testid="version-2"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="confirm-save-switch"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="confirm-save-switch"]').trigger('click')
+    await flushPromises()
+
+    const putCall = fetchMock.mock.calls.find(([url, init]) => url.endsWith('/scene-plans/1') && init?.method === 'PUT')
+    expect(putCall).toBeDefined()
+    expect(wrapper.find('[data-testid="version-2"]').classes()).toContain('active')
+    expect(wrapper.text()).toContain('Phiên bản 2')
+  })
+
   it('4. keeps approved and superseded versions read-only', async () => {
     const supersededPlan = { ...approvedPlan, version: 3, status: 'superseded' as const, approved_at: null }
     route('GET', `/api/v1/projects/${projectId}`, project)
@@ -207,7 +275,6 @@ describe('ScenePlanView', () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
-    // Highest approved script version is 3, while draftPlan has source_script_version = 2
     route('GET', `/api/v1/projects/${projectId}/scripts`, [{ ...approvedScript, version: 3 }])
     route('GET', '/api/v1/ai/text-generation-options', providers)
 
@@ -223,14 +290,14 @@ describe('ScenePlanView', () => {
       revision: 3,
       scenes: [
         {
-          ...draftPlan.scenes[0],
+          ...draftPlan.scenes[0]!,
           visual_instruction: 'Visual mới cập nhật',
           planned_source_type: 'generated_image',
           expected_duration_seconds: 20,
           caption_intent: 'Caption mới',
           transition_notes: 'Zoom in',
         },
-        draftPlan.scenes[1],
+        draftPlan.scenes[1]!,
       ],
     }
 
@@ -278,7 +345,7 @@ describe('ScenePlanView', () => {
           : {
               ...draftPlan,
               revision: 4,
-              scenes: [{ ...draftPlan.scenes[0], visual_instruction: 'Bản từ máy chủ' }, draftPlan.scenes[1]],
+              scenes: [{ ...draftPlan.scenes[0]!, visual_instruction: 'Bản từ máy chủ' }, draftPlan.scenes[1]!],
             },
       )
     })
@@ -307,7 +374,48 @@ describe('ScenePlanView', () => {
     expect((wrapper.find('[name="scene_visual_0"]').element as HTMLTextAreaElement).value).toBe('Bản từ máy chủ')
   })
 
-  it('8. splits a scene into two preserving exact narration and section key', async () => {
+  it('8. splits a scene into two preserving exact Unicode narration and section key', async () => {
+    const emojiPlan = {
+      ...draftPlan,
+      scenes: [
+        {
+          ...draftPlan.scenes[0]!,
+          narration: '🎬 Khởi đầu video với emoji đặc biệt và lời dẫn 🌟',
+        },
+        draftPlan.scenes[1]!,
+      ],
+    }
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [emojiPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, emojiPlan)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const originalNarration = emojiPlan.scenes[0]!.narration
+    await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
+    expect(wrapper.find('[data-testid="split-modal"]').exists()).toBe(true)
+
+    // Split index at code point 10
+    const splitIndex = 10
+    await wrapper.find('[data-testid="split-index-input"]').setValue(String(splitIndex))
+    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
+    await flushPromises()
+
+    const scenes = wrapper.findAll('.scene-card')
+    expect(scenes.length).toBe(3)
+
+    const scene0Narration = (wrapper.find('[data-testid="scene-narration-0"]').element as HTMLElement).textContent ?? ''
+    const scene1Narration = (wrapper.find('[data-testid="scene-narration-1"]').element as HTMLElement).textContent ?? ''
+
+    expect(scene0Narration + scene1Narration).toBe(originalNarration)
+    expect(wrapper.find('[data-testid="scene-section-0"]').text()).toContain('sec_intro')
+    expect(wrapper.find('[data-testid="scene-section-1"]').text()).toContain('sec_intro')
+    expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(true)
+  })
+
+  it('8b. validates split scene key against slug format, duplicate, and length constraints', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
@@ -316,33 +424,28 @@ describe('ScenePlanView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    const originalNarration = draftPlan.scenes[0]!.narration
-    // Open split dialog for scene 0
     await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
-    expect(wrapper.find('[data-testid="split-modal"]').exists()).toBe(true)
 
-    // Split index at character 20
-    const splitIndex = 20
-    await wrapper.find('[data-testid="split-index-input"]').setValue(String(splitIndex))
+    // Invalid slug with uppercase / spaces
+    await wrapper.find('[data-testid="split-new-key-input"]').setValue('INVALID KEY!')
     await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-testid="split-error-notice"]').exists()).toBe(true)
+    expect(wrapper.findAll('.scene-card').length).toBe(2)
 
-    // Expect scenes count increased to 3
-    const scenes = wrapper.findAll('.scene-card')
-    expect(scenes.length).toBe(3)
+    // Duplicate key with scene 1
+    await wrapper.find('[data-testid="split-new-key-input"]').setValue('scene-body-1')
+    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="split-error-notice"]').text()).toContain('Không được trùng khóa.')
+    expect(wrapper.findAll('.scene-card').length).toBe(2)
 
-    // Scene 0 and Scene 1 must share the same script_section_key
-    const scene0Narration = wrapper.find('[data-testid="scene-narration-0"]').text()
-    const scene1Narration = wrapper.find('[data-testid="scene-narration-1"]').text()
-
-    expect(scene0Narration + scene1Narration).toBe(originalNarration)
-    expect(wrapper.find('[data-testid="scene-section-0"]').text()).toContain('sec_intro')
-    expect(wrapper.find('[data-testid="scene-section-1"]').text()).toContain('sec_intro')
-    expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(true)
+    // Key exceeding 64 runes
+    await wrapper.find('[data-testid="split-new-key-input"]').setValue('a'.repeat(65))
+    await wrapper.find('[data-testid="confirm-split-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="split-error-notice"]').exists()).toBe(true)
+    expect(wrapper.findAll('.scene-card').length).toBe(2)
   })
 
   it('9. merges adjacent scenes only when they belong to the same section and preserves concatenation', async () => {
-    // Setup plan with 2 scenes in section 1 and 1 scene in section 2
     const multiScenePlan = {
       ...draftPlan,
       scenes: [
@@ -381,13 +484,9 @@ describe('ScenePlanView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    // Scene 0 (sec_intro) and Scene 1 (sec_intro) can be merged: merge button should exist on scene 0
     expect(wrapper.find('[data-testid="merge-scene-0"]').exists()).toBe(true)
-
-    // Scene 1 (sec_intro) and Scene 2 (sec_body) cannot be merged: merge button must not exist or be disabled
     expect(wrapper.find('[data-testid="merge-scene-1"]').exists()).toBe(false)
 
-    // Trigger merge on scene 0
     await wrapper.find('[data-testid="merge-scene-0"]').trigger('click')
     await flushPromises()
 
@@ -407,7 +506,6 @@ describe('ScenePlanView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    // Confirm that narration is not an editable input/textarea
     expect(wrapper.find('textarea[name="narration_0"]').exists()).toBe(false)
     expect(wrapper.find('input[name="narration_0"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="scene-narration-0"]').exists()).toBe(true)
@@ -499,7 +597,6 @@ describe('ScenePlanView', () => {
       await flushPromises()
 
       expect(wrapper.find('[data-testid="job-state-running"]').exists()).toBe(true)
-      // The displayed plan must still be visible and loaded
       expect(wrapper.find('[data-testid="scene-narration-0"]').exists()).toBe(true)
       expect(wrapper.text()).toContain('Phiên bản 1')
     } finally {
@@ -534,7 +631,7 @@ describe('ScenePlanView', () => {
     }
   })
 
-  it('16. retries same job on transient poll error without POSTing replacement', async () => {
+  it('16. retries same job on transient poll error without POSTing replacement when retry button is clicked', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       window.sessionStorage.setItem(`scene_plan_job_${projectId}`, jobId)
@@ -556,8 +653,11 @@ describe('ScenePlanView', () => {
       await flushPromises()
 
       expect(wrapper.find('[data-testid="job-error-banner"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="retry-poll-btn"]').exists()).toBe(true)
 
-      // Next poll recovers
+      // Click visible retry poll button
+      await wrapper.find('[data-testid="retry-poll-btn"]').trigger('click')
+      await flushPromises()
       await vi.advanceTimersByTimeAsync(1000)
       await flushPromises()
 
@@ -632,7 +732,6 @@ describe('ScenePlanView', () => {
 
       expect(wrapper.find('[data-testid="retry-load-generated-btn"]').exists()).toBe(true)
 
-      // Clicking retry loads the version, does not call POST
       await wrapper.find('[data-testid="retry-load-generated-btn"]').trigger('click')
       await flushPromises()
 
@@ -705,6 +804,38 @@ describe('ScenePlanView', () => {
 
     expect(wrapper.text()).toContain('Đã duyệt')
     expect((wrapper.find('[name="scene_visual_0"]').element as HTMLTextAreaElement).disabled).toBe(true)
+  })
+
+  it('21. presents server field errors next to corresponding controls', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route(
+      'PUT',
+      `/api/v1/projects/${projectId}/scene-plans/1`,
+      {
+        error: {
+          code: 'validation_failed',
+          message: 'Validation failed',
+          fields: {
+            'scenes[0].visual_instruction': 'Chỉ dẫn hình ảnh không hợp lệ.',
+            'scenes[0].expected_duration_seconds': 'Thời lượng quá lớn.',
+          },
+        },
+      },
+      400,
+    )
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('[name="scene_visual_0"]').setValue('Visual cần sửa')
+    await wrapper.find('form.scene-plan-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="error-visual-0"]').text()).toBe('Chỉ dẫn hình ảnh không hợp lệ.')
+    expect(wrapper.find('[data-testid="error-duration-0"]').text()).toBe('Thời lượng quá lớn.')
   })
 })
 
