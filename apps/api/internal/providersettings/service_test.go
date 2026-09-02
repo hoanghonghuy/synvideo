@@ -148,7 +148,7 @@ func TestService_ListSettings(t *testing.T) {
 			t.Fatalf("expected unconfigured provider, got %+v", p)
 		}
 		for _, m := range p.Models {
-			if m.Enabled {
+			if m.EnabledText {
 				t.Fatalf("expected unconfigured model disabled, got %+v", m)
 			}
 		}
@@ -215,7 +215,7 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 		if !view.Configured || !view.Enabled || !view.HasAPIKey || view.Revision != 1 {
 			t.Fatalf("unexpected view after create: %+v", view)
 		}
-		if len(view.Models) != 2 || !view.Models[0].Enabled || view.Models[1].Enabled {
+		if len(view.Models) != 2 || !view.Models[0].EnabledText || view.Models[1].EnabledText {
 			t.Fatalf("unexpected models view: %+v", view.Models)
 		}
 	})
@@ -234,7 +234,7 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 		if view.Revision != 2 || !view.HasAPIKey {
 			t.Fatalf("expected revision 2 with has_api_key true, got %+v", view)
 		}
-		if !view.Models[0].Enabled || !view.Models[1].Enabled {
+		if !view.Models[0].EnabledText || !view.Models[1].EnabledText {
 			t.Fatalf("expected both models enabled after update: %+v", view.Models)
 		}
 	})

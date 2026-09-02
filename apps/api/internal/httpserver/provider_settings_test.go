@@ -67,7 +67,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 							HasAPIKey:   true,
 							Revision:    2,
 							Models: []providersettings.ModelSettingView{
-								{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", Enabled: true},
+								{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", EnabledText: true, EnabledImage: false, EnabledTTS: false, Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 							},
 						},
 					},
@@ -112,7 +112,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 					HasAPIKey:   true,
 					Revision:    1,
 					Models: []providersettings.ModelSettingView{
-						{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", Enabled: true},
+						{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", EnabledText: true, EnabledImage: false, EnabledTTS: false, Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 					},
 				}, nil
 			},
