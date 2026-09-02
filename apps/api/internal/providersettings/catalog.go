@@ -65,13 +65,13 @@ func NewCatalogFromJSON(raw []byte) (*Catalog, error) {
 
 // LegacyProviderDefinition is the TASK-017 schema without capability field.
 type LegacyProviderDefinition struct {
-	ProviderID       providers.ProviderID  `json:"provider_id"`
-	DisplayName      string                `json:"display_name"`
-	BaseURL          string                `json:"base_url"`
+	ProviderID       providers.ProviderID    `json:"provider_id"`
+	DisplayName      string                  `json:"display_name"`
+	BaseURL          string                  `json:"base_url"`
 	Models           []LegacyModelDefinition `json:"models"`
-	Voices           []VoiceDefinition     `json:"voices,omitempty"`
-	Timeout          time.Duration         `json:"timeout,omitempty"`
-	MaxResponseBytes int64                 `json:"max_response_bytes,omitempty"`
+	Voices           []VoiceDefinition       `json:"voices,omitempty"`
+	Timeout          time.Duration           `json:"timeout,omitempty"`
+	MaxResponseBytes int64                   `json:"max_response_bytes,omitempty"`
 }
 
 // LegacyModelDefinition is the TASK-017 schema without capability field.
