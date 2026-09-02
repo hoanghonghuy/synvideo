@@ -55,6 +55,10 @@ func (r *SceneMediaBindingRepository) AssignPrimaryVisual(ctx context.Context, o
 	if err := checkApprovedPlanAndScene(ctx, tx, ownerID, projectID, scenePlanVersion, sceneKey); err != nil {
 		return scenemedia.Binding{}, err
 	}
+	assetLockIdentity := fmt.Sprintf("media-asset:%s:%s:%s", ownerID, projectID, assetID)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, assetLockIdentity); err != nil {
+		return scenemedia.Binding{}, persistenceError("lock media asset for scene binding", err)
+	}
 	if err := checkVisualAsset(ctx, tx, ownerID, projectID, assetID); err != nil {
 		return scenemedia.Binding{}, err
 	}
@@ -220,6 +224,7 @@ func checkVisualAsset(ctx context.Context, db queryRower, ownerID, projectID, as
 	if err := db.QueryRow(ctx, `
 		SELECT kind FROM media_assets
 		WHERE owner_id = $1 AND project_id = $2 AND id = $3
+		  AND deletion_requested_at IS NULL
 	`, ownerID, projectID, assetID).Scan(&kind); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return scenemedia.ErrMediaAssetNotFound

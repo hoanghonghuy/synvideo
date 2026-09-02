@@ -175,6 +175,9 @@ func (s *Service) Delete(ctx context.Context, principal project.Principal, proje
 	if principal.OwnerID == uuid.Nil {
 		return ErrUnauthenticated
 	}
+	if deleter, ok := s.repo.(DeletionRepository); ok {
+		return s.deleteWithTombstone(ctx, deleter, principal, projectID, assetID)
+	}
 	asset, err := s.repo.Get(ctx, principal.OwnerID, projectID, assetID)
 	if err != nil {
 		return mapRepositoryError(err)
@@ -192,6 +195,20 @@ func (s *Service) Delete(ctx context.Context, principal project.Principal, proje
 		return mapStorageError(err)
 	}
 	if err := s.repo.Delete(ctx, principal.OwnerID, projectID, assetID); err != nil {
+		return mapRepositoryError(err)
+	}
+	return nil
+}
+
+func (s *Service) deleteWithTombstone(ctx context.Context, deleter DeletionRepository, principal project.Principal, projectID, assetID uuid.UUID) error {
+	asset, err := deleter.BeginDeletion(ctx, principal.OwnerID, projectID, assetID)
+	if err != nil {
+		return mapRepositoryError(err)
+	}
+	if err := s.storage.Delete(ctx, asset.ObjectKey); err != nil && !errors.Is(err, ErrObjectNotFound) {
+		return mapStorageError(err)
+	}
+	if err := deleter.FinalizeDeletion(ctx, principal.OwnerID, projectID, assetID); err != nil {
 		return mapRepositoryError(err)
 	}
 	return nil

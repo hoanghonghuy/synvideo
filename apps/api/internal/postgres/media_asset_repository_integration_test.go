@@ -89,6 +89,46 @@ func TestMediaAssetRepositoryIntegrationScopeOrderingAndConstraints(t *testing.T
 	}
 }
 
+func TestMediaAssetRepositoryIntegrationDeletionTombstoneIsPrivateAndRetryable(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepository := NewProjectRepository(pool)
+	assetRepository := NewMediaAssetRepository(pool)
+	projectItem, err := projectRepository.Create(context.Background(), mediaAssetOwnerID, validIntegrationCreateInput("Deletion tombstone"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	asset, err := assetRepository.Create(context.Background(), integrationAsset(projectItem.ID, mediaAssetOwnerID, 21))
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+
+	marked, err := assetRepository.BeginDeletion(context.Background(), mediaAssetOwnerID, projectItem.ID, asset.ID)
+	if err != nil {
+		t.Fatalf("begin deletion: %v", err)
+	}
+	if marked.DeletionRequestedAt == nil {
+		t.Fatal("expected deletion tombstone timestamp")
+	}
+	if _, err := assetRepository.Get(context.Background(), mediaAssetOwnerID, projectItem.ID, asset.ID); !errors.Is(err, mediaasset.ErrNotFound) {
+		t.Fatalf("pending deletion was publicly readable: %v", err)
+	}
+	listed, err := assetRepository.List(context.Background(), mediaAssetOwnerID, projectItem.ID, mediaasset.ListOptions{Limit: 10})
+	if err != nil || len(listed.Assets) != 0 {
+		t.Fatalf("pending deletion was publicly listed: assets=%+v err=%v", listed.Assets, err)
+	}
+
+	retried, err := assetRepository.BeginDeletion(context.Background(), mediaAssetOwnerID, projectItem.ID, asset.ID)
+	if err != nil || retried.ObjectKey != asset.ObjectKey {
+		t.Fatalf("retry did not retain private object identity: asset=%+v err=%v", retried, err)
+	}
+	if err := assetRepository.FinalizeDeletion(context.Background(), mediaAssetOwnerID, projectItem.ID, asset.ID); err != nil {
+		t.Fatalf("finalize deletion: %v", err)
+	}
+	if err := assetRepository.FinalizeDeletion(context.Background(), mediaAssetOwnerID, projectItem.ID, asset.ID); err != nil {
+		t.Fatalf("expected idempotent finalize, got %v", err)
+	}
+}
+
 func integrationAsset(projectID, ownerID uuid.UUID, suffix int) mediaasset.MediaAsset {
 	assetID := uuid.New()
 	return mediaasset.MediaAsset{

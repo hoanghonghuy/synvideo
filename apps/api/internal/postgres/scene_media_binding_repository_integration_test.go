@@ -92,6 +92,14 @@ func TestSceneMediaBindingRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create foreign asset: %v", err)
 	}
+	pending := integrationAsset(projectA.ID, ownerA, 14)
+	pending, err = assetRepository.Create(context.Background(), pending)
+	if err != nil {
+		t.Fatalf("create pending asset: %v", err)
+	}
+	if _, err := assetRepository.BeginDeletion(context.Background(), ownerA, projectA.ID, pending.ID); err != nil {
+		t.Fatalf("mark pending asset deletion: %v", err)
+	}
 
 	principal := project.Principal{OwnerID: ownerA}
 	first, err := service.AssignPrimaryVisual(context.Background(), principal, projectA.ID, plan.Version, "intro", image.ID)
@@ -140,6 +148,46 @@ func TestSceneMediaBindingRepositoryIntegration(t *testing.T) {
 	}
 	if _, err := service.AssignPrimaryVisual(context.Background(), principal, projectA.ID, plan.Version, "intro", foreign.ID); !errors.Is(err, scenemedia.ErrMediaAssetNotFound) {
 		t.Fatalf("cross-owner/project assignment error=%v, want not found", err)
+	}
+	if _, err := service.AssignPrimaryVisual(context.Background(), principal, projectA.ID, plan.Version, "intro", pending.ID); !errors.Is(err, scenemedia.ErrMediaAssetNotFound) {
+		t.Fatalf("pending-deletion asset assignment error=%v, want not found", err)
+	}
+
+	// Deletion and binding must serialize on the same asset identity. Exactly
+	// one operation may win: a binding committed first makes deletion in-use;
+	// a tombstone committed first makes the binding invisible/not found.
+	raceAsset, err := assetRepository.Create(context.Background(), integrationAsset(projectA.ID, ownerA, 15))
+	if err != nil {
+		t.Fatalf("create deletion race asset: %v", err)
+	}
+	deletionErrCh := make(chan error, 1)
+	assignmentErrCh := make(chan error, 1)
+	var deletionRaceWG sync.WaitGroup
+	deletionRaceWG.Add(2)
+	go func() {
+		defer deletionRaceWG.Done()
+		_, err := assetRepository.BeginDeletion(context.Background(), ownerA, projectA.ID, raceAsset.ID)
+		deletionErrCh <- err
+	}()
+	go func() {
+		defer deletionRaceWG.Done()
+		_, err := bindingRepository.AssignPrimaryVisual(context.Background(), ownerA, projectA.ID, plan.Version, "outro", raceAsset.ID)
+		assignmentErrCh <- err
+	}()
+	deletionRaceWG.Wait()
+	deletionErr := <-deletionErrCh
+	assignmentErr := <-assignmentErrCh
+	if deletionErr == nil && assignmentErr == nil {
+		t.Fatal("deletion and binding both succeeded; asset could become dangling")
+	}
+	if deletionErr == nil && !errors.Is(assignmentErr, scenemedia.ErrMediaAssetNotFound) {
+		t.Fatalf("assignment after tombstone error=%v, want not found", assignmentErr)
+	}
+	if errors.Is(deletionErr, mediaasset.ErrInUse) && assignmentErr != nil {
+		t.Fatalf("binding committed before deletion but returned error: %v", assignmentErr)
+	}
+	if deletionErr != nil && !errors.Is(deletionErr, mediaasset.ErrInUse) {
+		t.Fatalf("unexpected deletion race error=%v", deletionErr)
 	}
 	if _, err := bindingRepository.AssignPrimaryVisual(context.Background(), ownerA, projectA.ID, plan.Version, "missing", image.ID); !errors.Is(err, scenemedia.ErrSceneKeyNotFound) {
 		t.Fatalf("unknown scene error=%v, want scene key not found", err)

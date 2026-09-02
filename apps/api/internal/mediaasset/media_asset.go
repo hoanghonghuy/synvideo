@@ -55,19 +55,20 @@ type ValidationError struct{ Fields map[string]string }
 func (e ValidationError) Error() string { return "media asset validation failed" }
 
 type MediaAsset struct {
-	ID               uuid.UUID       `json:"id"`
-	OwnerID          uuid.UUID       `json:"-"`
-	ProjectID        uuid.UUID       `json:"project_id"`
-	Kind             Kind            `json:"kind"`
-	Origin           Origin          `json:"origin"`
-	ObjectKey        string          `json:"-"`
-	MimeType         string          `json:"mime_type"`
-	ByteSize         int64           `json:"byte_size"`
-	SHA256           string          `json:"sha256"`
-	OriginalFilename string          `json:"original_filename,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID                  uuid.UUID       `json:"id"`
+	OwnerID             uuid.UUID       `json:"-"`
+	ProjectID           uuid.UUID       `json:"project_id"`
+	Kind                Kind            `json:"kind"`
+	Origin              Origin          `json:"origin"`
+	ObjectKey           string          `json:"-"`
+	MimeType            string          `json:"mime_type"`
+	ByteSize            int64           `json:"byte_size"`
+	SHA256              string          `json:"sha256"`
+	OriginalFilename    string          `json:"original_filename,omitempty"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	DeletionRequestedAt *time.Time      `json:"-"`
 }
 
 type CreateInput struct {

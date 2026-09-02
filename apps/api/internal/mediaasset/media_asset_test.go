@@ -177,6 +177,38 @@ type fakeObjectStorage struct {
 	lastPut     mediaasset.PutObjectInput
 }
 
+type fakeDeletionRepository struct {
+	base          *fakeMetadataRepository
+	beginErr      error
+	finalizeErr   error
+	beginCalls    int
+	finalizeCalls int
+}
+
+func (f *fakeDeletionRepository) Create(ctx context.Context, asset mediaasset.MediaAsset) (mediaasset.MediaAsset, error) {
+	return f.base.Create(ctx, asset)
+}
+func (f *fakeDeletionRepository) Get(ctx context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
+	return f.base.Get(ctx, ownerID, projectID, assetID)
+}
+func (f *fakeDeletionRepository) List(ctx context.Context, ownerID, projectID uuid.UUID, options mediaasset.ListOptions) (mediaasset.ListResult, error) {
+	return f.base.List(ctx, ownerID, projectID, options)
+}
+func (f *fakeDeletionRepository) Delete(ctx context.Context, ownerID, projectID, assetID uuid.UUID) error {
+	return f.base.Delete(ctx, ownerID, projectID, assetID)
+}
+func (f *fakeDeletionRepository) BeginDeletion(_ context.Context, _, _, _ uuid.UUID) (mediaasset.MediaAsset, error) {
+	f.beginCalls++
+	if f.beginErr != nil {
+		return mediaasset.MediaAsset{}, f.beginErr
+	}
+	return f.base.created, nil
+}
+func (f *fakeDeletionRepository) FinalizeDeletion(_ context.Context, _, _, _ uuid.UUID) error {
+	f.finalizeCalls++
+	return f.finalizeErr
+}
+
 func (f *fakeObjectStorage) Put(_ context.Context, input mediaasset.PutObjectInput) (mediaasset.ObjectInfo, error) {
 	f.putCalls++
 	f.lastPut = input
@@ -396,6 +428,36 @@ func TestServiceDeleteRejectsReferencedAssetBeforeRemovingObject(t *testing.T) {
 	}
 	if storage.deleteCalls != 0 || repository.deleteCalls != 0 {
 		t.Fatalf("referenced asset was mutated: storage=%d repository=%d", storage.deleteCalls, repository.deleteCalls)
+	}
+}
+
+func TestServiceDeleteUsesTombstoneRepositoryBeforeObjectDeletion(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeDeletionRepository{base: &fakeMetadataRepository{created: asset}, finalizeErr: errors.New("database commit failed")}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	err := service.Delete(context.Background(), project.Principal{OwnerID: ownerID}, projectID, asset.ID)
+	if !errors.Is(err, mediaasset.ErrPersistenceFailed) {
+		t.Fatalf("expected finalize persistence error, got %v", err)
+	}
+	if repository.beginCalls != 1 || repository.finalizeCalls != 1 || storage.deleteCalls != 1 {
+		t.Fatalf("unexpected tombstone sequence: begin=%d finalize=%d storage_delete=%d", repository.beginCalls, repository.finalizeCalls, storage.deleteCalls)
+	}
+}
+
+func TestServiceDeleteDoesNotTouchObjectWhenDeletionCannotCommitTombstone(t *testing.T) {
+	asset := validAssetForValidation()
+	repository := &fakeDeletionRepository{base: &fakeMetadataRepository{created: asset}, beginErr: errors.New("database unavailable")}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	err := service.Delete(context.Background(), project.Principal{OwnerID: ownerID}, projectID, asset.ID)
+	if !errors.Is(err, mediaasset.ErrPersistenceFailed) {
+		t.Fatalf("expected tombstone persistence error, got %v", err)
+	}
+	if storage.deleteCalls != 0 {
+		t.Fatal("object was deleted before tombstone commit")
 	}
 }
 
