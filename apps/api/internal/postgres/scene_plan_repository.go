@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -146,14 +147,19 @@ func (r *ScenePlanRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID
 	}
 	defer tx.Rollback(ctx)
 
-	var contentLocale string
+	var projectLocale string
 	if err := tx.QueryRow(ctx, `
 		SELECT locale FROM projects WHERE owner_id = $1 AND id = $2 FOR UPDATE
-	`, ownerID.String(), projectID.String()).Scan(&contentLocale); err != nil {
+	`, ownerID.String(), projectID.String()).Scan(&projectLocale); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return sceneplan.Plan{}, sceneplan.ErrNotFound
 		}
 		return sceneplan.Plan{}, fmt.Errorf("lock project for create scene plan draft: %w", err)
+	}
+
+	contentLocale := projectLocale
+	if strings.TrimSpace(input.ContentLocale) != "" {
+		contentLocale = strings.TrimSpace(input.ContentLocale)
 	}
 
 	source, err := loadApprovedScript(ctx, tx, projectID, input.SourceScriptVersion)
@@ -162,6 +168,22 @@ func (r *ScenePlanRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID
 	}
 	if err := sceneplan.ValidateContentAgainstScript(&input.Content, source); err != nil {
 		return sceneplan.Plan{}, err
+	}
+
+	if input.SourceGenerationJobID != nil {
+		existingRow := tx.QueryRow(ctx, fmt.Sprintf(`
+			SELECT %s
+			FROM scene_plans sp
+			WHERE sp.project_id = $1 AND sp.source_generation_job_id = $2
+		`, scenePlanSelectFields), projectID.String(), input.SourceGenerationJobID.String())
+		existing, err := scanScenePlan(existingRow)
+		if err == nil {
+			_ = tx.Commit(ctx)
+			existing.SourceGenerationJobID = input.SourceGenerationJobID
+			return existing, nil
+		} else if !errors.Is(err, sceneplan.ErrNotFound) {
+			return sceneplan.Plan{}, fmt.Errorf("check existing generation scene plan: %w", err)
+		}
 	}
 
 	var maxVersion int
@@ -183,18 +205,27 @@ func (r *ScenePlanRepository) CreateDraft(ctx context.Context, ownerID uuid.UUID
 	if err != nil {
 		return sceneplan.Plan{}, fmt.Errorf("marshal scene plan scenes: %w", err)
 	}
+
+	var sourceJobID *string
+	if input.SourceGenerationJobID != nil {
+		str := input.SourceGenerationJobID.String()
+		sourceJobID = &str
+	}
+
 	row := tx.QueryRow(ctx, fmt.Sprintf(`
 		INSERT INTO scene_plans (
 			project_id, version, revision, status, source_script_version,
-			source_proposal_version, content_locale, scenes, created_at, updated_at
-		) VALUES ($1, $2, 1, 'draft', $3, $4, $5, $6, now(), now())
+			source_proposal_version, content_locale, scenes, source_generation_job_id, created_at, updated_at
+		) VALUES ($1, $2, 1, 'draft', $3, $4, $5, $6, $7, now(), now())
 		RETURNING %s
-	`, scenePlanReturningFields), projectID.String(), nextVersion, source.Version, source.SourceProposalVersion, contentLocale, scenesJSON)
+	`, scenePlanReturningFields), projectID.String(), nextVersion, source.Version, source.SourceProposalVersion, contentLocale, scenesJSON, sourceJobID)
 
 	created, err := scanScenePlan(row)
 	if err != nil {
 		return sceneplan.Plan{}, fmt.Errorf("insert scene plan draft: %w", err)
 	}
+	created.SourceGenerationJobID = input.SourceGenerationJobID
+
 	if err := tx.Commit(ctx); err != nil {
 		return sceneplan.Plan{}, fmt.Errorf("commit create scene plan draft: %w", err)
 	}

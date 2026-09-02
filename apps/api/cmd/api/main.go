@@ -22,6 +22,8 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplan"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplangenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scriptgenerationjob"
 )
@@ -43,8 +45,10 @@ func main() {
 	var creativeBriefService *creativebrief.Service
 	var creativeProposalService *creativeproposal.Service
 	var scriptService *script.Service
+	var scenePlanService *sceneplan.Service
 	var proposalGenerationService *proposalgenerationjob.Service
 	var scriptGenerationService *scriptgenerationjob.Service
+	var scenePlanGenerationService *sceneplangenerationjob.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -60,6 +64,7 @@ func main() {
 		briefRepo := postgres.NewCreativeBriefRepository(pool)
 		proposalRepo := postgres.NewCreativeProposalRepository(pool)
 		scriptRepo := postgres.NewScriptRepository(pool)
+		scenePlanRepo := postgres.NewScenePlanRepository(pool)
 		jobsRepo := postgres.NewJobRepository(pool)
 		settingsRepo := postgres.NewTextProviderSettingRepository(pool)
 
@@ -108,9 +113,11 @@ func main() {
 		creativeBriefService = creativebrief.NewService(briefRepo)
 		creativeProposalService = creativeproposal.NewService(proposalRepo)
 		scriptService = script.NewService(scriptRepo)
+		scenePlanService = sceneplan.NewService(scenePlanRepo)
 
 		proposalJobHandler := proposalgenerationjob.NewHandlerWithResolver(providerSettingsService, proposalRepo)
 		scriptJobHandler := scriptgenerationjob.NewHandlerWithResolver(providerSettingsService, scriptRepo)
+		scenePlanJobHandler := sceneplangenerationjob.NewHandlerWithResolver(providerSettingsService, scenePlanRepo)
 
 		jobsRegistry := jobs.NewRegistry()
 		if err := jobsRegistry.Register(proposalgenerationjob.JobKind, proposalJobHandler); err != nil {
@@ -119,6 +126,10 @@ func main() {
 		}
 		if err := jobsRegistry.Register(scriptgenerationjob.JobKind, scriptJobHandler); err != nil {
 			logger.Error("register script generation job handler failed", "error", err)
+			os.Exit(1)
+		}
+		if err := jobsRegistry.Register(sceneplangenerationjob.JobKind, scenePlanJobHandler); err != nil {
+			logger.Error("register scene plan generation job handler failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -135,9 +146,10 @@ func main() {
 
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
 		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, providerSettingsService, scriptGenerationService, actor.NewLocalResolver(cfg))
+		scenePlanGenerationService = sceneplangenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, scriptRepo, proposalRepo)
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
 	} else {
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, proposalGenerationService, nil, scriptGenerationService, actor.NewLocalResolver(cfg))
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
 	}
 	errCh := make(chan error, 1)
 

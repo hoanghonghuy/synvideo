@@ -53,9 +53,11 @@ func New(
 	creativeBriefService CreativeBriefService,
 	creativeProposalService CreativeProposalService,
 	scriptService ScriptService,
+	scenePlanService ScenePlanService,
 	proposalGenerationService ProposalGenerationService,
 	textProviderSettingsService TextProviderSettingsService,
 	scriptGenerationService ScriptGenerationService,
+	scenePlanGenerationService ScenePlanGenerationService,
 	actorResolver actor.Resolver,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -87,6 +89,13 @@ func New(
 		mux.HandleFunc("PUT /api/v1/projects/{id}/scripts/{version}", handler.put)
 		mux.HandleFunc("POST /api/v1/projects/{id}/scripts/{version}/approve", handler.approve)
 	}
+	if scenePlanService != nil && actorResolver != nil {
+		handler := scenePlanHandler{service: scenePlanService, actorResolver: actorResolver}
+		mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans", handler.list)
+		mux.HandleFunc("GET /api/v1/projects/{id}/scene-plans/{version}", handler.get)
+		mux.HandleFunc("PUT /api/v1/projects/{id}/scene-plans/{version}", handler.put)
+		mux.HandleFunc("POST /api/v1/projects/{id}/scene-plans/{version}/approve", handler.approve)
+	}
 	if proposalGenerationService != nil {
 		handler := creativeProposalGenerationHandler{service: proposalGenerationService, actorResolver: actorResolver}
 		mux.HandleFunc("GET /api/v1/ai/text-generation-options", handler.getTextGenerationOptions)
@@ -105,6 +114,11 @@ func New(
 		handler := scriptGenerationHandler{service: scriptGenerationService, actorResolver: actorResolver}
 		mux.HandleFunc("POST /api/v1/projects/{id}/script-generations", handler.create)
 		mux.HandleFunc("GET /api/v1/projects/{id}/script-generations/{job_id}", handler.get)
+	}
+	if scenePlanGenerationService != nil && actorResolver != nil {
+		handler := scenePlanGenerationHandler{service: scenePlanGenerationService, actorResolver: actorResolver}
+		mux.HandleFunc("POST /api/v1/projects/{id}/scene-plan-generations", handler.create)
+		mux.HandleFunc("GET /api/v1/projects/{id}/scene-plan-generations/{job_id}", handler.get)
 	}
 
 	return &http.Server{
