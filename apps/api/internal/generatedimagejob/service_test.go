@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -89,4 +90,7 @@ func (f *fakeJobsRepo) GetByIDForProject(_ context.Context, ownerID, projectID, 
 	return *f.job, nil
 }
 func (f *fakeJobsRepo) ClaimNext(context.Context, jobs.ClaimOptions) (jobs.Job, error) { return jobs.Job{}, jobs.ErrNoJobAvailable }
-func (f *fakeJobsRepo) RenewLease(context.Context, uuid.UUID, uuid.UUID, interface{}) (jobs.Job, error) { panic("unused") }
+func (f *fakeJobsRepo) RenewLease(context.Context, uuid.UUID, uuid.UUID, time.Duration) (jobs.Job, error) { panic("unused") }
+func (f *fakeJobsRepo) MarkSuccess(context.Context, uuid.UUID, uuid.UUID, json.RawMessage) (jobs.Job, error) { panic("unused") }
+func (f *fakeJobsRepo) MarkRetryableFailure(context.Context, uuid.UUID, uuid.UUID, string, time.Time) (jobs.Job, error) { panic("unused") }
+func (f *fakeJobsRepo) MarkTerminalFailure(context.Context, uuid.UUID, uuid.UUID, string) (jobs.Job, error) { panic("unused") }
