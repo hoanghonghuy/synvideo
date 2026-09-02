@@ -26,50 +26,48 @@ PM plans ahead. AI Developers may start only tasks explicitly marked `READY`; re
 | TASK-018 | Script durable generation integration | DONE | PR #48 accepted; squash `6bc3c86b...`. |
 | TASK-019 | Script creator workspace | DONE | PR #47 accepted; squash `da01e58c...`. |
 | TASK-020 | Scene media binding foundation | DONE | PR #46 accepted; squash `b80b8e7b...`. |
-| TASK-021 | Scene Plan durable generation + API integration | CHANGES_REQUESTED | Issue #39 / PR #50. Head `3acbd7d...`, CI #236, TL review `5080837369`. Previous blockers fixed; align Proposal snapshot bounds exactly with accepted Proposal domain before provider resolution. |
-| TASK-022 | Scene Plan creator workspace | BACKLOG | Issue #40. `SCENE_PLAN_WORKSPACE_V1` frozen. Activate after TASK-021 API is accepted/stable. |
-| TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. `MEDIA_LIBRARY_API_V1` frozen. Do not run concurrently with TASK-021 because both own shared backend composition/httpserver. |
+| TASK-021 | Scene Plan durable generation + API integration | DONE | Issue #39 completed. PR #50 accepted head `3a78f24a...`, CI #242, TL review `5084672798`, squash `9d2b5306...`. |
+| TASK-022 | Scene Plan creator workspace | READY | Issue #40. `SCENE_PLAN_WORKSPACE_V1` frozen. TASK-021 API accepted; remote branch absent at promotion. |
+| TASK-023 | Media Library + Scene Binding API integration | BACKLOG | Issue #41. `MEDIA_LIBRARY_API_V1` frozen. Activate after TASK-022 or when shared backend composition is deliberately scheduled without frontend collision concerns. |
 | TASK-024 | Media Library + scene assignment workspace | BACKLOG | Issue #42. `MEDIA_LIBRARY_WORKSPACE_V1` frozen. Activate after TASK-023 API. |
 | TASK-025 | Provider-neutral visual generation foundation | DONE | Issue #43 completed. PR #49 accepted head `e090ed3e...`, CI #230, TL review `5080539748`, squash `1c550f316...`. |
-| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. TASK-025 prerequisite is now satisfied; revalidate current Images API before READY and schedule only on an isolated provider-adapter slot. |
-| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. TASK-025 prerequisite is now satisfied; never silently truncate narration. |
+| TASK-026 | Live OpenAI image generation adapter | BACKLOG | Issue #44. TASK-025 prerequisite is satisfied; revalidate current Images API before READY and schedule only on an isolated provider-adapter slot. |
+| TASK-027 | Provider-neutral TTS + OpenAI speech adapter foundation | BACKLOG | Issue #45. TASK-025 prerequisite is satisfied; never silently truncate narration. |
 
-## Current implementation / review slots
+## Current implementation slots
 
-- **Dev A — TASK-021 `CHANGES_REQUESTED`**: continue only PR #50 / existing worktree. Backend Scene Plan generation/API owns the shared runtime/httpserver hotspot until accepted.
-- **Dev B — free**: do not start TASK-022 until TASK-021 API is accepted; do not start TASK-023 because it conflicts with TASK-021 backend composition.
-- **Dev C — released after TASK-025 DONE**: TASK-026/027 are candidate follow-ons but remain BACKLOG until deliberate activation/revalidation.
+- **Dev A — released after TASK-021 DONE**: clean TASK-021 worktree before another claim.
+- **Dev B — TASK-022 `READY`**: may atomically claim `feature/TASK-022-scene-plan-workspace` from latest `origin/develop`. Owns frontend Scene Plan workspace/router/locale surfaces only.
+- **Dev C — free**: TASK-026/027 are candidate provider follow-ons but remain BACKLOG until deliberate current-API revalidation; do not start TASK-023 concurrently if PM assigns a conflicting shared backend slot.
 
-## Current review gate — TASK-021 / PR #50
+## Current activation gate — TASK-022
 
-Previous blockers are resolved. Do not merge until Proposal snapshot validation matches the accepted Creative Proposal domain **before credential/provider resolution**:
-1. `visual_direction` max 5000 runes;
-2. `voice_direction`, `music_direction`, `caption_direction` max 3000 runes each;
-3. `warnings` / `research_gaps` max 20 items each;
-4. every warning/gap item is trimmed/non-empty and max 1000 runes;
-5. invalid Proposal snapshot terminalizes as `GENERATION_INVALID_PAYLOAD` and a regression proves resolver/provider is not called;
-6. fresh exact-head CI/race/full verify remains green and all already-correct source snapshot/idempotency/job-kind/locale/single-executor behavior is preserved.
+TASK-022 is READY because:
+1. TASK-019 frontend workspace is accepted and router/locale/navigation hotspot is released;
+2. TASK-021 Scene Plan backend/API is accepted via squash `9d2b5306...`;
+3. the frozen `SCENE_PLAN_WORKSPACE_V1` contract can now be verified against the accepted API shape;
+4. remote branch `feature/TASK-022-scene-plan-workspace` was absent at promotion;
+5. implementation remains frontend-only and must not modify `apps/api/**`.
 
 ## Parallel safety
 
-- TASK-021 and TASK-023 both need shared backend `main.go` / `httpserver` composition; only one runs at a time.
 - TASK-022 and TASK-024 both use frontend router/locale/project-workspace integration; sequence them.
-- TASK-025 provider-neutral visual core is accepted; TASK-026 and TASK-027 may be activated later on deliberately isolated surfaces after current-provider API revalidation.
+- TASK-023 owns shared backend `main.go` / `httpserver` composition when activated; keep it isolated from any other backend integration task with the same hotspot.
+- TASK-025 provider-neutral visual core is accepted; TASK-026 and TASK-027 may be activated later on deliberately isolated provider surfaces after current-provider API revalidation.
 - Do not create micro-tasks merely to fill an implementation slot.
 
 ## Next activation path
 
-1. Fix/accept TASK-021 Scene Plan durable generation/API.
-2. After TASK-021 acceptance, activate TASK-022 Scene Plan creator workspace.
-3. Then TASK-023 Media Library + Scene Binding API, followed by TASK-024 workspace.
-4. With TASK-025 accepted, revalidate and schedule TASK-026 OpenAI Image adapter and TASK-027 TTS foundation on independent provider surfaces as implementation slots permit.
-5. Follow with secure multi-capability runtime/settings, durable per-scene visual/audio acquisition jobs, generated-output ingestion into Media Asset + Scene binding, captions/music, Scene Editor, render/export, publishing/channel management and production hardening/E2E.
+1. Implement/review TASK-022 Scene Plan creator workspace.
+2. Activate TASK-023 Media Library + Scene Binding API, followed by TASK-024 workspace.
+3. With TASK-025 accepted, revalidate and schedule TASK-026 OpenAI Image adapter and TASK-027 TTS foundation on independent provider surfaces as implementation slots permit.
+4. Follow with secure multi-capability runtime/settings, durable per-scene visual/audio acquisition jobs, generated-output ingestion into Media Asset + Scene binding, captions/music, Scene Editor, render/export, publishing/channel management and production hardening/E2E.
 
 ## Product checkpoint
 
-Stage 5 Script is creator-usable end to end. Provider-neutral visual image/video capability ports are also accepted. Scene Plan already has generation engine + persistence foundation; TASK-021 is converting it into the durable creator-facing backend Stage 7 capability.
+Stage 5 Script is creator-usable end to end. Stage 7 Scene Plan backend is now also complete end to end on the server side: generation engine, persistence, durable owner-scoped BYOK job integration and resource/generation APIs are accepted. TASK-022 is the remaining creator-facing workspace layer for Stage 7.
 
-Accepted foundations also include Media Asset S3-compatible storage and approved Scene Plan → primary visual Media Asset binding with replacement history. The current critical path remains Scene Plan durable generation/workspace, then Media Library/assignment and visual/audio acquisition.
+Accepted foundations also include provider-neutral visual image/video capability ports, Media Asset S3-compatible storage and approved Scene Plan → primary visual Media Asset binding with replacement history. The next critical path is Scene Plan workspace, then Media Library/assignment and visual/audio acquisition.
 
 ## Architecture gates
 
