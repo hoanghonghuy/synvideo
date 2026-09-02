@@ -7,10 +7,11 @@ import (
 )
 
 type modelEntry struct {
-	metadata       ModelMetadata
-	textGenerator  TextGenerator
-	imageGenerator ImageGenerator
-	videoGenerator VideoGenerator
+	metadata          ModelMetadata
+	textGenerator     TextGenerator
+	imageGenerator    ImageGenerator
+	videoGenerator    VideoGenerator
+	speechSynthesizer SpeechSynthesizer
 }
 
 type providerEntry struct {
@@ -52,10 +53,11 @@ func (r *Registry) Register(registration Registration) error {
 			return NewDuplicateRegistrationError(registration.Provider.ID)
 		}
 		entry.models[model.Metadata.ID] = modelEntry{
-			metadata:       model.Metadata,
-			textGenerator:  model.TextGenerator,
-			imageGenerator: model.ImageGenerator,
-			videoGenerator: model.VideoGenerator,
+			metadata:          model.Metadata,
+			textGenerator:     model.TextGenerator,
+			imageGenerator:    model.ImageGenerator,
+			videoGenerator:    model.VideoGenerator,
+			speechSynthesizer: model.SpeechSynthesizer,
 		}
 	}
 
@@ -121,6 +123,20 @@ func (r *Registry) ResolveTextGenerator(providerID ProviderID, modelID ModelID) 
 	}
 
 	return model.textGenerator, cloneModelMetadata(model.metadata), nil
+}
+
+func (r *Registry) ResolveSpeechSynthesizer(providerID ProviderID, modelID ModelID) (SpeechSynthesizer, ModelMetadata, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	model, metadata, err := r.resolveModel(providerID, modelID)
+	if err != nil {
+		return nil, metadata, err
+	}
+	if model.speechSynthesizer == nil || !metadata.Supports(CapabilityTTS) {
+		return nil, metadata, NewUnsupportedCapabilityError(providerID, modelID, CapabilityTTS)
+	}
+	return model.speechSynthesizer, metadata, nil
 }
 
 func (r *Registry) ListProviders() []ProviderMetadata {
@@ -196,11 +212,17 @@ func validateRegistration(registration Registration) error {
 		if model.Metadata.Supports(CapabilityVideoGeneration) && model.VideoGenerator == nil {
 			return fmt.Errorf("video generation capability requires a video generator binding")
 		}
+		if model.Metadata.Supports(CapabilityTTS) && model.SpeechSynthesizer == nil {
+			return fmt.Errorf("TTS capability requires a speech synthesizer binding")
+		}
 		if model.ImageGenerator != nil && !model.Metadata.Supports(CapabilityImageGeneration) {
 			return fmt.Errorf("image generator binding requires image generation capability")
 		}
 		if model.VideoGenerator != nil && !model.Metadata.Supports(CapabilityVideoGeneration) {
 			return fmt.Errorf("video generator binding requires video generation capability")
+		}
+		if model.SpeechSynthesizer != nil && !model.Metadata.Supports(CapabilityTTS) {
+			return fmt.Errorf("speech synthesizer binding requires TTS capability")
 		}
 	}
 
