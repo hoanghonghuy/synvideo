@@ -1,11 +1,13 @@
 # TASK-028 — Secure multi-capability provider runtime and settings
 
-Status: READY
+Status: IN_PROGRESS
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
 Branch: `feature/TASK-028-multicap-provider-runtime`
 Depends on: TASK-017, TASK-024, TASK-025, TASK-026 and TASK-027 — all complete.
+Issue: #54
+Claim state: canonical remote branch exists; continue that branch/worktree only.
 
 ## Goal
 Evolve the accepted text-only BYOK owner runtime into one secure capability-aware provider configuration/runtime so the same owner credential and safe deployment catalog can expose text, image and TTS models/voices without duplicating secret storage or creating vendor-specific domain paths.
@@ -15,6 +17,7 @@ TASK-026 and TASK-027 provide live adapters, but production creator flows cannot
 
 ## Read first
 - `AGENTS.md`
+- `docs/engineering/CONTROL_PLANE_PROTOCOL.md`
 - `docs/engineering/TDD_PROTOCOL.md`
 - `docs/engineering/PARALLEL_WORK_PROTOCOL.md`
 - `docs/contracts/BYOK_TEXT_PROVIDER_RUNTIME_V1.md`
@@ -104,5 +107,7 @@ The contract preserves TASK-017 security/backward compatibility while adding own
 - secret sentinel checks across DB/API/error/loggable metadata;
 - fresh PR CI.
 
-## Activation
-READY for AI Developer implementation on `feature/TASK-028-multicap-provider-runtime`. Implementation must go through PR into `develop` and must not self-mark DONE or self-merge.
+## Claim / execution state
+This task was activated only after its dependencies/contracts were satisfied. The canonical remote branch `feature/TASK-028-multicap-provider-runtime` now exists and is the live claim. It must **not** be claimed again or replaced merely because a local checkout/BOARD mirror is stale or because no PR exists yet.
+
+Continue only the existing canonical branch/worktree. Before further implementation or delivery, re-check the live issue and current remote contract under `CONTROL_PLANE_PROTOCOL.md`. Do not self-mark DONE or self-merge.
