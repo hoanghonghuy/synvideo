@@ -2,6 +2,8 @@
 
 `docs/engineering/CONTROL_PLANE_PROTOCOL.md` defines remote authority, freshness, transition ordering, duplicate prevention and drift handling for every role.
 
+`docs/engineering/EXECUTION_SUBSTRATES.md` defines when local Git worktree isolation is required versus when a scheduled/cloud/API-isolated Developer can operate using only its canonical remote task branch.
+
 ## Roles
 ### PM
 Owns product intent, scope, priorities, user flows, acceptance criteria, roadmap, task readiness and control-plane documentation.
@@ -14,6 +16,8 @@ PM owns live task authorization and lifecycle through the authoritative GitHub t
 Owns implementation for one PM-authorized task at a time. Never implements directly on `main` or `develop`.
 
 A developer resolves live issue/PR/remote-branch state before local state. `READY` authorizes execution but does not prove availability: a canonical remote branch or active PR means the task is claimed.
+
+Execution isolation depends on substrate. Shared local filesystems require a dedicated worktree per task; scheduled/cloud/API-isolated Developers do not create worktrees solely for convention and instead use the canonical remote branch plus the platform's isolated execution environment.
 
 ### Team Lead
 Reviews implementation against the exact current remote PR head, current task/product contract, architecture constraints, regressions, security, tests and real user behavior. Team Lead does not silently rewrite product decisions during review and does not reuse stale-head approval/CI as evidence for a newer head.
@@ -35,18 +39,18 @@ The repository helper `scripts/admin/protect-branches.sh` applies the intended b
 ## Developer loop
 When idle:
 1. inspect live GitHub task issues, active PRs and canonical task branches;
-2. fetch/refresh latest `origin/develop` and remote refs;
-3. read current BOARD/task spec from that refreshed baseline;
+2. refresh/inspect current `develop` and relevant remote refs through the execution substrate available to the agent;
+3. read current BOARD/task spec from that refreshed remote baseline;
 4. select only PM-authorized executable work whose dependencies/order permit it;
 5. confirm it has no canonical remote claim branch/active PR/ownership ambiguity;
-6. atomically create the absent canonical remote branch at the selected `origin/develop` SHA;
-7. create/attach a dedicated worktree for that branch;
+6. atomically create the absent canonical remote branch at the selected current `develop` SHA;
+7. initialize execution isolation appropriate to the substrate: dedicated worktree for a shared local filesystem, or the platform's isolated/ephemeral/API workspace for a scheduled/cloud agent;
 8. implement/test using TDD and the current task contract;
 9. re-check live task state before delivery, then open/update the PR to `develop`;
-10. address Team Lead findings on the same branch/worktree/PR;
+10. address Team Lead findings on the same canonical branch/PR and, when local, the same task worktree;
 11. after merge, return to refreshed remote state instead of assuming local mirrors are current.
 
-Do not continuously pull/merge `develop` while implementing an unrelated task. Sync only when upstream changes are required or at an appropriate integration point.
+Local/shared-filesystem Developers should not continuously pull/merge `develop` while implementing an unrelated task. Sync only when upstream changes are required or at an appropriate integration point. Scheduled/cloud/API-isolated Developers likewise re-resolve current remote contracts before meaningful continuation rather than relying on a stale execution snapshot.
 
 ## Status and ownership
 Typical PM lifecycle:
