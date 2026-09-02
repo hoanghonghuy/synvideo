@@ -1,4 +1,15 @@
+export type Capability = 'text' | 'image' | 'tts'
+
 export interface ModelSettingView {
+  id: string
+  display_name: string
+  enabled_text: boolean
+  enabled_image: boolean
+  enabled_tts: boolean
+  capabilities: Capability[]
+}
+
+export interface VoiceSettingView {
   id: string
   display_name: string
   enabled: boolean
@@ -12,6 +23,7 @@ export interface ProviderSettingView {
   has_api_key: boolean
   revision: number
   models: ModelSettingView[]
+  voices: VoiceSettingView[]
 }
 
 export interface ProviderSettingsListResponse {
@@ -21,7 +33,10 @@ export interface ProviderSettingsListResponse {
 export interface PutSettingInput {
   revision?: number
   enabled: boolean
-  enabled_model_ids: string[]
+  enabled_text_model_ids: string[]
+  enabled_image_model_ids: string[]
+  enabled_tts_model_ids: string[]
+  enabled_voice_ids: string[]
   api_key?: string
 }
 

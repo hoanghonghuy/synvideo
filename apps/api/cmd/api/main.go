@@ -31,6 +31,40 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scriptgenerationjob"
 )
 
+func loadProviderCatalog(cfg config.Config) (*providersettings.Catalog, error) {
+	if cfg.ProviderDefinitions != "" {
+		return providersettings.NewCatalogFromJSON([]byte(cfg.ProviderDefinitions))
+	}
+	if cfg.TextProviderDefinitions != "" {
+		return providersettings.NewCatalogFromLegacyJSON([]byte(cfg.TextProviderDefinitions))
+	}
+	return providersettings.NewCatalog([]providersettings.ProviderDefinition{
+		{
+			ProviderID:  "openai",
+			DisplayName: "OpenAI",
+			BaseURL:     "https://api.openai.com/v1",
+			Models: []providersettings.ModelDefinition{
+				{ModelID: "gpt-5-mini", DisplayName: "GPT-5 mini", ExternalModelID: "gpt-5-mini", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
+				{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
+				{ModelID: "dall-e-3", DisplayName: "DALL-E 3", ExternalModelID: "dall-e-3", Capabilities: []providersettings.Capability{providersettings.CapabilityImage}},
+				{ModelID: "gpt-4o-mini-tts", DisplayName: "GPT-4o mini TTS", ExternalModelID: "gpt-4o-mini-tts", Capabilities: []providersettings.Capability{providersettings.CapabilityTTS}},
+			},
+			Voices: []providersettings.VoiceDefinition{
+				{VoiceID: "alloy", DisplayName: "Alloy", ExternalVoice: "alloy"},
+				{VoiceID: "verse", DisplayName: "Verse", ExternalVoice: "verse"},
+			},
+		},
+		{
+			ProviderID:  "openrouter",
+			DisplayName: "OpenRouter",
+			BaseURL:     "https://openrouter.ai/api/v1",
+			Models: []providersettings.ModelDefinition{
+				{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
+			},
+		},
+	})
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
@@ -71,7 +105,7 @@ func main() {
 		scriptRepo := postgres.NewScriptRepository(pool)
 		scenePlanRepo := postgres.NewScenePlanRepository(pool)
 		jobsRepo := postgres.NewJobRepository(pool)
-		settingsRepo := postgres.NewTextProviderSettingRepository(pool)
+		settingsRepo := postgres.NewProviderSettingRepository(pool)
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
 
@@ -84,34 +118,10 @@ func main() {
 			}
 		}
 
-		var catalog *providersettings.Catalog
-		if cfg.TextProviderDefinitions != "" {
-			var catErr error
-			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(cfg.TextProviderDefinitions))
-			if catErr != nil {
-				logger.Error("text provider definitions parsing failed", "error", catErr)
-				os.Exit(1)
-			}
-		} else {
-			catalog, _ = providersettings.NewCatalog([]providersettings.ProviderDefinition{
-				{
-					ProviderID:  "openai",
-					DisplayName: "OpenAI",
-					BaseURL:     "https://api.openai.com/v1",
-					Models: []providersettings.ModelDefinition{
-						{ModelID: "gpt-5-mini", DisplayName: "GPT-5 mini", ExternalModelID: "gpt-5-mini"},
-						{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o"},
-					},
-				},
-				{
-					ProviderID:  "openrouter",
-					DisplayName: "OpenRouter",
-					BaseURL:     "https://openrouter.ai/api/v1",
-					Models: []providersettings.ModelDefinition{
-						{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet"},
-					},
-				},
-			})
+		catalog, catErr := loadProviderCatalog(cfg)
+		if catErr != nil {
+			logger.Error("provider definitions parsing failed", "error", catErr)
+			os.Exit(1)
 		}
 
 		providerSettingsService := providersettings.NewService(catalog, settingsRepo, cipher, http.DefaultClient)

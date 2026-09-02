@@ -17,12 +17,14 @@ func TestCatalog_ValidJSON(t *testing.T) {
 				{
 					"model_id": "gpt-5-mini",
 					"display_name": "GPT-5 mini",
-					"external_model_id": "gpt-5-mini-2025-08-01"
+					"external_model_id": "gpt-5-mini-2025-08-01",
+					"capabilities": ["text"]
 				},
 				{
 					"model_id": "gpt-4o",
 					"display_name": "GPT-4o",
-					"external_model_id": "gpt-4o"
+					"external_model_id": "gpt-4o",
+					"capabilities": ["text"]
 				}
 			]
 		},
@@ -34,7 +36,8 @@ func TestCatalog_ValidJSON(t *testing.T) {
 				{
 					"model_id": "claude-3-5-sonnet",
 					"display_name": "Claude 3.5 Sonnet",
-					"external_model_id": "anthropic/claude-3.5-sonnet"
+					"external_model_id": "anthropic/claude-3.5-sonnet",
+					"capabilities": ["text"]
 				}
 			]
 		}
@@ -195,7 +198,7 @@ func TestCatalog_ValidationErrors(t *testing.T) {
 				DisplayName: "OpenAI",
 				BaseURL:     "https://api.openai.com/v1",
 				Timeout:     -5,
-				Models:      []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1"}},
+				Models:      []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1", Capabilities: []providersettings.Capability{providersettings.CapabilityText}}},
 			},
 		})
 		if err == nil {
@@ -210,7 +213,7 @@ func TestCatalog_ValidationErrors(t *testing.T) {
 				DisplayName:      "OpenAI",
 				BaseURL:          "https://api.openai.com/v1",
 				MaxResponseBytes: -100,
-				Models:           []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1"}},
+				Models:           []providersettings.ModelDefinition{{ModelID: "m1", DisplayName: "M1", ExternalModelID: "m1", Capabilities: []providersettings.Capability{providersettings.CapabilityText}}},
 			},
 		})
 		if err == nil {

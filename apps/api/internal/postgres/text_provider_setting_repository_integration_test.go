@@ -28,13 +28,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 
 	t.Run("create initial setting with revision 1", func(t *testing.T) {
 		setting := providersettings.Setting{
-			OwnerID:          ownerA,
-			ProviderID:       providerA,
-			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini", "gpt-4o"},
-			APIKeyCiphertext: fakeCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             ownerA,
+			ProviderID:          providerA,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini", "gpt-4o"},
+			APIKeyCiphertext:    fakeCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}
 
 		created, err := repo.Save(ctx, setting, nil)
@@ -44,13 +44,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 		if created.Revision != 1 {
 			t.Fatalf("expected revision 1, got %d", created.Revision)
 		}
-		if !created.Enabled || len(created.EnabledModelIDs) != 2 {
+		if !created.Enabled || len(created.EnabledTextModelIDs) != 2 {
 			t.Fatalf("unexpected created setting fields: %+v", created)
 		}
 
 		// Plaintext sentinel is absent from stored ciphertext in DB
 		var dbCiphertext []byte
-		err = pool.QueryRow(ctx, `SELECT api_key_ciphertext FROM text_provider_settings WHERE owner_id = $1 AND provider_id = $2`, ownerA, string(providerA)).Scan(&dbCiphertext)
+		err = pool.QueryRow(ctx, `SELECT api_key_ciphertext FROM provider_settings WHERE owner_id = $1 AND provider_id = $2`, ownerA, string(providerA)).Scan(&dbCiphertext)
 		if err != nil {
 			t.Fatalf("query db ciphertext: %v", err)
 		}
@@ -61,13 +61,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 
 	t.Run("duplicate initial insert returns ErrStaleRevision", func(t *testing.T) {
 		setting := providersettings.Setting{
-			OwnerID:          ownerA,
-			ProviderID:       providerA,
-			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
-			APIKeyCiphertext: fakeCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             ownerA,
+			ProviderID:          providerA,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+			APIKeyCiphertext:    fakeCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}
 		_, err := repo.Save(ctx, setting, nil)
 		if !errors.Is(err, providersettings.ErrStaleRevision) {
@@ -93,13 +93,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 
 		// Add providerB for ownerA
 		_, err = repo.Save(ctx, providersettings.Setting{
-			OwnerID:          ownerA,
-			ProviderID:       providerB,
-			Enabled:          false,
-			EnabledModelIDs:  []providers.ModelID{"claude-3-5-sonnet"},
-			APIKeyCiphertext: fakeCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             ownerA,
+			ProviderID:          providerB,
+			Enabled:             false,
+			EnabledTextModelIDs: []providers.ModelID{"claude-3-5-sonnet"},
+			APIKeyCiphertext:    fakeCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}, nil)
 		if err != nil {
 			t.Fatalf("save providerB: %v", err)
@@ -126,13 +126,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 		expectedRev := 1
 		newCiphertext := []byte{0xca, 0xfe, 0xba, 0xbe}
 		updated, err := repo.Save(ctx, providersettings.Setting{
-			OwnerID:          ownerA,
-			ProviderID:       providerA,
-			Enabled:          false,
-			EnabledModelIDs:  []providers.ModelID{"gpt-4o"},
-			APIKeyCiphertext: newCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             ownerA,
+			ProviderID:          providerA,
+			Enabled:             false,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-4o"},
+			APIKeyCiphertext:    newCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}, &expectedRev)
 		if err != nil {
 			t.Fatalf("update with rev 1: %v", err)
@@ -146,13 +146,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 
 		// Stale update with old revision 1 returns ErrStaleRevision
 		_, err = repo.Save(ctx, providersettings.Setting{
-			OwnerID:          ownerA,
-			ProviderID:       providerA,
-			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-4o"},
-			APIKeyCiphertext: newCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             ownerA,
+			ProviderID:          providerA,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-4o"},
+			APIKeyCiphertext:    newCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}, &expectedRev)
 		if !errors.Is(err, providersettings.ErrStaleRevision) {
 			t.Fatalf("expected ErrStaleRevision on stale update, got %v", err)
@@ -190,13 +190,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 		concurrentProvider := providers.ProviderID("openai")
 
 		initial, err := repo.Save(ctx, providersettings.Setting{
-			OwnerID:          concurrentOwner,
-			ProviderID:       concurrentProvider,
-			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
-			APIKeyCiphertext: fakeCiphertext,
-			APIKeyNonce:      fakeNonce,
-			KeyVersion:       "v1",
+			OwnerID:             concurrentOwner,
+			ProviderID:          concurrentProvider,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+			APIKeyCiphertext:    fakeCiphertext,
+			APIKeyNonce:         fakeNonce,
+			KeyVersion:          "v1",
 		}, nil)
 		if err != nil {
 			t.Fatalf("create initial setting for concurrency test: %v", err)
@@ -217,13 +217,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			go func(idx int) {
 				expectedRev := baseRev
 				res, sErr := repo.Save(ctx, providersettings.Setting{
-					OwnerID:          concurrentOwner,
-					ProviderID:       concurrentProvider,
-					Enabled:          idx%2 == 0,
-					EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
-					APIKeyCiphertext: []byte{byte(idx)},
-					APIKeyNonce:      fakeNonce,
-					KeyVersion:       "v1",
+					OwnerID:             concurrentOwner,
+					ProviderID:          concurrentProvider,
+					Enabled:             idx%2 == 0,
+					EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+					APIKeyCiphertext:    []byte{byte(idx)},
+					APIKeyNonce:         fakeNonce,
+					KeyVersion:          "v1",
 				}, &expectedRev)
 				results <- result{setting: res, err: sErr}
 			}(i)

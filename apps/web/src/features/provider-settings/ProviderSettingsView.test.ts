@@ -34,9 +34,10 @@ function createMockProvidersList() {
         has_api_key: true,
         revision: 2,
         models: [
-          { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled: true },
-          { id: 'gpt-4o', display_name: 'GPT-4o', enabled: false },
+          { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled_text: true, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
+          { id: 'gpt-4o', display_name: 'GPT-4o', enabled_text: false, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
         ],
+        voices: [],
       },
       {
         id: 'openrouter',
@@ -46,8 +47,9 @@ function createMockProvidersList() {
         has_api_key: false,
         revision: 0,
         models: [
-          { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: false },
+          { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled_text: false, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
         ],
+        voices: [],
       },
     ],
   }
@@ -125,8 +127,9 @@ describe('ProviderSettingsView', () => {
       has_api_key: true,
       revision: 1,
       models: [
-        { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: true },
+        { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled_text: true, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
       ],
+      voices: [],
     }
     fetchMock.mockResolvedValueOnce(jsonResponse(updatedOpenrouter))
 
@@ -143,7 +146,7 @@ describe('ProviderSettingsView', () => {
     const body = JSON.parse(putOpts.body as string)
     expect(body.api_key).toBe('sk-openrouter-secret-key-12345')
     expect(body.enabled).toBe(true)
-    expect(body.enabled_model_ids).toEqual(['claude-3-5-sonnet'])
+    expect(body.enabled_text_model_ids).toEqual(['claude-3-5-sonnet'])
 
     // Assert secret key was immediately cleared from the input element and component memory
     expect(keyInput.element.value).toBe('')
@@ -179,7 +182,7 @@ describe('ProviderSettingsView', () => {
         has_api_key: true,
         revision: 1,
         models: [
-          { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled: true },
+          { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet', enabled_text: true, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
         ],
       }),
     )
@@ -213,8 +216,8 @@ describe('ProviderSettingsView', () => {
       has_api_key: true,
       revision: 3,
       models: [
-        { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled: true },
-        { id: 'gpt-4o', display_name: 'GPT-4o', enabled: false },
+        { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled_text: true, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
+        { id: 'gpt-4o', display_name: 'GPT-4o', enabled_text: false, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
       ],
     }
     fetchMock.mockResolvedValueOnce(jsonResponse(updatedOpenAI))
@@ -260,7 +263,7 @@ describe('ProviderSettingsView', () => {
           has_api_key: false,
           revision: 0,
           models: [
-            { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled: false },
+            { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled_text: false, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
           ],
         },
       ],

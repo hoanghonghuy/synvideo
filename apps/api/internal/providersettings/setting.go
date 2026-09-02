@@ -30,16 +30,19 @@ const (
 
 // Setting represents an owner's persisted settings and encrypted credential for a provider.
 type Setting struct {
-	OwnerID          uuid.UUID
-	ProviderID       providers.ProviderID
-	Revision         int
-	Enabled          bool
-	EnabledModelIDs  []providers.ModelID
-	APIKeyCiphertext []byte
-	APIKeyNonce      []byte
-	KeyVersion       string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	OwnerID              uuid.UUID
+	ProviderID           providers.ProviderID
+	Revision             int
+	Enabled              bool
+	EnabledTextModelIDs  []providers.ModelID
+	EnabledImageModelIDs []providers.ModelID
+	EnabledTTSModelIDs   []providers.ModelID
+	EnabledVoiceIDs      []providers.VoiceID
+	APIKeyCiphertext     []byte
+	APIKeyNonce          []byte
+	KeyVersion           string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ProviderSettingView is the safe, non-secret view of a provider's settings.
@@ -51,11 +54,22 @@ type ProviderSettingView struct {
 	HasAPIKey   bool                 `json:"has_api_key"`
 	Revision    int                  `json:"revision"`
 	Models      []ModelSettingView   `json:"models"`
+	Voices      []VoiceSettingView   `json:"voices"`
 }
 
 // ModelSettingView is the safe view of a model under a provider.
 type ModelSettingView struct {
-	ID          providers.ModelID `json:"id"`
+	ID           providers.ModelID `json:"id"`
+	DisplayName  string            `json:"display_name"`
+	Capabilities []Capability      `json:"capabilities"`
+	EnabledText  bool              `json:"enabled_text"`
+	EnabledImage bool              `json:"enabled_image"`
+	EnabledTTS   bool              `json:"enabled_tts"`
+}
+
+// VoiceSettingView is the safe view of a voice under a provider.
+type VoiceSettingView struct {
+	ID          providers.VoiceID `json:"id"`
 	DisplayName string            `json:"display_name"`
 	Enabled     bool              `json:"enabled"`
 }
@@ -83,10 +97,57 @@ type TextGenerationOptionsResponse struct {
 	Providers []TextGenerationOptionProvider `json:"providers"`
 }
 
+// ImageGenerationOptionModel is a model option for image generation.
+type ImageGenerationOptionModel struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// ImageGenerationOptionProvider is a provider option with available image models.
+type ImageGenerationOptionProvider struct {
+	ID          providers.ProviderID         `json:"id"`
+	DisplayName string                       `json:"display_name"`
+	Models      []ImageGenerationOptionModel `json:"models"`
+}
+
+// ImageGenerationOptionsResponse is the response for GET /api/v1/ai/image-generation-options.
+type ImageGenerationOptionsResponse struct {
+	Providers []ImageGenerationOptionProvider `json:"providers"`
+}
+
+// TTSOptionVoice is a voice option for TTS.
+type TTSOptionVoice struct {
+	ID          providers.VoiceID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// TTSOptionModel is a model option for TTS.
+type TTSOptionModel struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// TTSOptionProvider is a provider option with available voices.
+type TTSOptionProvider struct {
+	ID          providers.ProviderID `json:"id"`
+	DisplayName string               `json:"display_name"`
+	Models      []TTSOptionModel     `json:"models"`
+	Voices      []TTSOptionVoice     `json:"voices"`
+}
+
+// TTSOptionsResponse is the response for GET /api/v1/ai/tts-options.
+type TTSOptionsResponse struct {
+	Providers []TTSOptionProvider `json:"providers"`
+}
+
 // PutSettingInput is the request body for PUT /api/v1/ai/provider-settings/{provider_id}.
 type PutSettingInput struct {
-	Revision        *int                `json:"revision,omitempty"`
-	Enabled         bool                `json:"enabled"`
-	EnabledModelIDs []providers.ModelID `json:"enabled_model_ids"`
-	APIKey          *string             `json:"api_key,omitempty"`
+	Revision             *int                `json:"revision,omitempty"`
+	Enabled              bool                `json:"enabled"`
+	EnabledModelIDs      []providers.ModelID `json:"enabled_model_ids"`      // Legacy TASK-017 field, maps to text
+	EnabledTextModelIDs  []providers.ModelID `json:"enabled_text_model_ids"` // New multi-capability field
+	EnabledImageModelIDs []providers.ModelID `json:"enabled_image_model_ids"`
+	EnabledTTSModelIDs   []providers.ModelID `json:"enabled_tts_model_ids"`
+	EnabledVoiceIDs      []providers.VoiceID `json:"enabled_voice_ids"`
+	APIKey               *string             `json:"api_key,omitempty"`
 }

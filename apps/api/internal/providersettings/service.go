@@ -12,6 +12,8 @@ import (
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/openaicompat"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/openaiimage"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/openaitts"
 )
 
 // Service provides owner-scoped provider settings management and runtime resolution.
@@ -54,17 +56,42 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 	for _, p := range catalogProviders {
 		st, configured := settingsByProvider[p.ProviderID]
 
-		enabledModelsMap := make(map[providers.ModelID]bool, len(st.EnabledModelIDs))
-		for _, mID := range st.EnabledModelIDs {
-			enabledModelsMap[mID] = true
+		enabledTextMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
+		for _, mID := range st.EnabledTextModelIDs {
+			enabledTextMap[mID] = true
+		}
+		enabledImageMap := make(map[providers.ModelID]bool, len(st.EnabledImageModelIDs))
+		for _, mID := range st.EnabledImageModelIDs {
+			enabledImageMap[mID] = true
+		}
+		enabledTTSMap := make(map[providers.ModelID]bool, len(st.EnabledTTSModelIDs))
+		for _, mID := range st.EnabledTTSModelIDs {
+			enabledTTSMap[mID] = true
+		}
+
+		enabledVoicesMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
+		for _, vID := range st.EnabledVoiceIDs {
+			enabledVoicesMap[vID] = true
 		}
 
 		modelViews := make([]ModelSettingView, len(p.Models))
 		for i, m := range p.Models {
 			modelViews[i] = ModelSettingView{
-				ID:          m.ModelID,
-				DisplayName: m.DisplayName,
-				Enabled:     configured && st.Enabled && enabledModelsMap[m.ModelID],
+				ID:           m.ModelID,
+				DisplayName:  m.DisplayName,
+				Capabilities: m.Capabilities,
+				EnabledText:  configured && st.Enabled && enabledTextMap[m.ModelID],
+				EnabledImage: configured && st.Enabled && enabledImageMap[m.ModelID],
+				EnabledTTS:   configured && st.Enabled && enabledTTSMap[m.ModelID],
+			}
+		}
+
+		voiceViews := make([]VoiceSettingView, len(p.Voices))
+		for i, v := range p.Voices {
+			voiceViews[i] = VoiceSettingView{
+				ID:          v.VoiceID,
+				DisplayName: v.DisplayName,
+				Enabled:     configured && st.Enabled && enabledVoicesMap[v.VoiceID],
 			}
 		}
 
@@ -76,6 +103,7 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 			HasAPIKey:   configured && len(st.APIKeyCiphertext) > 0,
 			Revision:    st.Revision,
 			Models:      modelViews,
+			Voices:      voiceViews,
 		})
 	}
 
@@ -96,17 +124,53 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return ProviderSettingView{}, ErrProviderNotFound
 	}
 
-	// Validate model IDs
-	if len(input.EnabledModelIDs) > 0 {
-		for _, mID := range input.EnabledModelIDs {
+	// Backward compatibility: merge legacy enabled_model_ids into enabled_text_model_ids
+	// if explicit text list is empty (TASK-017 clients)
+	if len(input.EnabledModelIDs) > 0 && len(input.EnabledTextModelIDs) == 0 {
+		input.EnabledTextModelIDs = input.EnabledModelIDs
+	}
+
+	// Validate model IDs and voice IDs
+	if len(input.EnabledTextModelIDs) > 0 {
+		for _, mID := range input.EnabledTextModelIDs {
 			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
 				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityText) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support text capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
+	if len(input.EnabledImageModelIDs) > 0 {
+		for _, mID := range input.EnabledImageModelIDs {
+			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityImage) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support image capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
+	if len(input.EnabledTTSModelIDs) > 0 {
+		for _, mID := range input.EnabledTTSModelIDs {
+			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityTTS) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support tts capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
+	if len(input.EnabledVoiceIDs) > 0 {
+		for _, vID := range input.EnabledVoiceIDs {
+			if _, ok := s.catalog.GetVoice(providerID, vID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: voice %q under provider %q", ErrModelNotFound, vID, providerID)
 			}
 		}
 	}
 
-	if input.Enabled && len(input.EnabledModelIDs) == 0 {
-		return ProviderSettingView{}, fmt.Errorf("%w: at least one model must be enabled when provider is enabled", ErrInvalidSettingInput)
+	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledTTSModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
+		return ProviderSettingView{}, fmt.Errorf("%w: at least one model or voice must be enabled when provider is enabled", ErrInvalidSettingInput)
 	}
 
 	existing, err := s.repo.GetByOwnerAndProvider(ctx, ownerID, providerID)
@@ -133,13 +197,16 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		}
 
 		setting := Setting{
-			OwnerID:          ownerID,
-			ProviderID:       providerID,
-			Enabled:          input.Enabled,
-			EnabledModelIDs:  input.EnabledModelIDs,
-			APIKeyCiphertext: ciphertext,
-			APIKeyNonce:      nonce,
-			KeyVersion:       s.cipher.KeyVersion(),
+			OwnerID:              ownerID,
+			ProviderID:           providerID,
+			Enabled:              input.Enabled,
+			EnabledTextModelIDs:  input.EnabledTextModelIDs,
+			EnabledImageModelIDs: input.EnabledImageModelIDs,
+			EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
+			EnabledVoiceIDs:      input.EnabledVoiceIDs,
+			APIKeyCiphertext:     ciphertext,
+			APIKeyNonce:          nonce,
+			KeyVersion:           s.cipher.KeyVersion(),
 		}
 
 		saved, err := s.repo.Save(ctx, setting, nil)
@@ -175,13 +242,16 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 	}
 
 	setting := Setting{
-		OwnerID:          ownerID,
-		ProviderID:       providerID,
-		Enabled:          input.Enabled,
-		EnabledModelIDs:  input.EnabledModelIDs,
-		APIKeyCiphertext: ciphertext,
-		APIKeyNonce:      nonce,
-		KeyVersion:       keyVersion,
+		OwnerID:              ownerID,
+		ProviderID:           providerID,
+		Enabled:              input.Enabled,
+		EnabledTextModelIDs:  input.EnabledTextModelIDs,
+		EnabledImageModelIDs: input.EnabledImageModelIDs,
+		EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
+		EnabledVoiceIDs:      input.EnabledVoiceIDs,
+		APIKeyCiphertext:     ciphertext,
+		APIKeyNonce:          nonce,
+		KeyVersion:           keyVersion,
 	}
 
 	saved, err := s.repo.Save(ctx, setting, input.Revision)
@@ -227,8 +297,8 @@ func (s *Service) GetOwnerTextGenerationOptions(ctx context.Context, ownerID uui
 			continue
 		}
 
-		enabledMap := make(map[providers.ModelID]bool, len(st.EnabledModelIDs))
-		for _, mID := range st.EnabledModelIDs {
+		enabledMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
+		for _, mID := range st.EnabledTextModelIDs {
 			enabledMap[mID] = true
 		}
 
@@ -286,7 +356,7 @@ func (s *Service) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, p
 	}
 
 	isModelEnabled := false
-	for _, mID := range setting.EnabledModelIDs {
+	for _, mID := range setting.EnabledTextModelIDs {
 		if mID == modelID {
 			isModelEnabled = true
 			break
@@ -326,18 +396,343 @@ func (s *Service) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, p
 	return adapter, nil
 }
 
+// GetOwnerImageGenerationOptions returns only the current owner's configured and enabled image models.
+func (s *Service) GetOwnerImageGenerationOptions(ctx context.Context, ownerID uuid.UUID) (ImageGenerationOptionsResponse, error) {
+	if s.catalog == nil {
+		return ImageGenerationOptionsResponse{Providers: []ImageGenerationOptionProvider{}}, nil
+	}
+
+	settings, err := s.repo.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return ImageGenerationOptionsResponse{}, fmt.Errorf("list settings for image options: %w", err)
+	}
+
+	settingsByProvider := make(map[providers.ProviderID]Setting, len(settings))
+	for _, st := range settings {
+		if st.Enabled && len(st.APIKeyCiphertext) > 0 {
+			settingsByProvider[st.ProviderID] = st
+		}
+	}
+
+	var resultProviders []ImageGenerationOptionProvider
+	for _, p := range s.catalog.Providers() {
+		st, ok := settingsByProvider[p.ProviderID]
+		if !ok {
+			continue
+		}
+
+		enabledMap := make(map[providers.ModelID]bool, len(st.EnabledImageModelIDs))
+		for _, mID := range st.EnabledImageModelIDs {
+			enabledMap[mID] = true
+		}
+
+		var optionModels []ImageGenerationOptionModel
+		for _, m := range s.catalog.ModelsForCapability(p.ProviderID, CapabilityImage) {
+			if enabledMap[m.ModelID] {
+				optionModels = append(optionModels, ImageGenerationOptionModel{
+					ID:          m.ModelID,
+					DisplayName: m.DisplayName,
+				})
+			}
+		}
+
+		if len(optionModels) > 0 {
+			resultProviders = append(resultProviders, ImageGenerationOptionProvider{
+				ID:          p.ProviderID,
+				DisplayName: p.DisplayName,
+				Models:      optionModels,
+			})
+		}
+	}
+
+	sort.Slice(resultProviders, func(i, j int) bool {
+		return resultProviders[i].ID < resultProviders[j].ID
+	})
+
+	return ImageGenerationOptionsResponse{Providers: resultProviders}, nil
+}
+
+// GetOwnerTTSOptions returns only the current owner's configured and enabled TTS models and voices.
+func (s *Service) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (TTSOptionsResponse, error) {
+	if s.catalog == nil {
+		return TTSOptionsResponse{Providers: []TTSOptionProvider{}}, nil
+	}
+
+	settings, err := s.repo.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return TTSOptionsResponse{}, fmt.Errorf("list settings for tts options: %w", err)
+	}
+
+	settingsByProvider := make(map[providers.ProviderID]Setting, len(settings))
+	for _, st := range settings {
+		if st.Enabled && len(st.APIKeyCiphertext) > 0 {
+			settingsByProvider[st.ProviderID] = st
+		}
+	}
+
+	var resultProviders []TTSOptionProvider
+	for _, p := range s.catalog.Providers() {
+		st, ok := settingsByProvider[p.ProviderID]
+		if !ok {
+			continue
+		}
+
+		enabledVoiceMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
+		for _, vID := range st.EnabledVoiceIDs {
+			enabledVoiceMap[vID] = true
+		}
+
+		enabledTTSModelMap := make(map[providers.ModelID]bool, len(st.EnabledTTSModelIDs))
+		for _, mID := range st.EnabledTTSModelIDs {
+			enabledTTSModelMap[mID] = true
+		}
+
+		var optionVoices []TTSOptionVoice
+		for _, v := range p.Voices {
+			if enabledVoiceMap[v.VoiceID] {
+				optionVoices = append(optionVoices, TTSOptionVoice{
+					ID:          v.VoiceID,
+					DisplayName: v.DisplayName,
+				})
+			}
+		}
+
+		var optionModels []TTSOptionModel
+		for _, m := range p.Models {
+			if s.catalog.ModelSupportsCapability(p.ProviderID, m.ModelID, CapabilityTTS) && enabledTTSModelMap[m.ModelID] {
+				optionModels = append(optionModels, TTSOptionModel{
+					ID:          m.ModelID,
+					DisplayName: m.DisplayName,
+				})
+			}
+		}
+
+		if len(optionVoices) > 0 || len(optionModels) > 0 {
+			resultProviders = append(resultProviders, TTSOptionProvider{
+				ID:          p.ProviderID,
+				DisplayName: p.DisplayName,
+				Models:      optionModels,
+				Voices:      optionVoices,
+			})
+		}
+	}
+
+	sort.Slice(resultProviders, func(i, j int) bool {
+		return resultProviders[i].ID < resultProviders[j].ID
+	})
+
+	return TTSOptionsResponse{Providers: resultProviders}, nil
+}
+
+// ResolveImageGenerator resolves a provider-neutral ImageGenerator configured with the owner's credential.
+func (s *Service) ResolveImageGenerator(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.ImageGenerator, error) {
+	if s.cipher == nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if s.catalog == nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	provDef, ok := s.catalog.GetProvider(providerID)
+	if !ok {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	modelDef, ok := s.catalog.GetModel(providerID, modelID)
+	if !ok {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if !s.catalog.ModelSupportsCapability(providerID, modelID, CapabilityImage) {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	setting, err := s.repo.GetByOwnerAndProvider(ctx, ownerID, providerID)
+	if err != nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if !setting.Enabled || len(setting.APIKeyCiphertext) == 0 {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	isModelEnabled := false
+	for _, mID := range setting.EnabledImageModelIDs {
+		if mID == modelID {
+			isModelEnabled = true
+			break
+		}
+	}
+	if !isModelEnabled {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	apiKey, err := s.cipher.Decrypt(ownerID, providerID, setting.KeyVersion, setting.APIKeyCiphertext, setting.APIKeyNonce)
+	if err != nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	gen, err := openaiimage.NewImageGenerator(openaiimage.Config{
+		ProviderID:  provDef.ProviderID,
+		DisplayName: provDef.DisplayName,
+		BaseURL:     provDef.BaseURL,
+		CredentialSource: openaiimage.SecretSourceFunc(func(ctx context.Context) (string, error) {
+			return apiKey, nil
+		}),
+		Models: []openaiimage.ModelConfig{
+			{
+				ID:              modelDef.ModelID,
+				DisplayName:     modelDef.DisplayName,
+				ExternalModelID: modelDef.ExternalModelID,
+			},
+		},
+		Timeout:          provDef.Timeout,
+		MaxResponseBytes: provDef.MaxResponseBytes,
+		HTTPClient:       s.httpClient,
+	}, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", providers.ErrProviderUnavailable, err)
+	}
+	return gen, nil
+}
+
+// ResolveSpeechSynthesizer resolves a provider-neutral SpeechSynthesizer configured with the owner's credential.
+func (s *Service) ResolveSpeechSynthesizer(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, modelID providers.ModelID) (providers.SpeechSynthesizer, error) {
+	if s.cipher == nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if s.catalog == nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	provDef, ok := s.catalog.GetProvider(providerID)
+	if !ok {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	modelDef, ok := s.catalog.GetModel(providerID, modelID)
+	if !ok {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if !s.catalog.ModelSupportsCapability(providerID, modelID, CapabilityTTS) {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	setting, err := s.repo.GetByOwnerAndProvider(ctx, ownerID, providerID)
+	if err != nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+	if !setting.Enabled || len(setting.APIKeyCiphertext) == 0 {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	if len(setting.EnabledTTSModelIDs) == 0 {
+		return nil, providers.ErrProviderUnavailable
+	}
+	ttsModelEnabled := false
+	for _, mID := range setting.EnabledTTSModelIDs {
+		if mID == modelID {
+			ttsModelEnabled = true
+			break
+		}
+	}
+	if !ttsModelEnabled {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	if len(setting.EnabledVoiceIDs) == 0 {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	apiKey, err := s.cipher.Decrypt(ownerID, providerID, setting.KeyVersion, setting.APIKeyCiphertext, setting.APIKeyNonce)
+	if err != nil {
+		return nil, providers.ErrProviderUnavailable
+	}
+
+	// Filter voices to only those enabled by owner
+	enabledVoiceMap := make(map[providers.VoiceID]bool, len(setting.EnabledVoiceIDs))
+	for _, vID := range setting.EnabledVoiceIDs {
+		enabledVoiceMap[vID] = true
+	}
+	filteredVoices := make([]VoiceDefinition, 0, len(provDef.Voices))
+	for _, v := range provDef.Voices {
+		if enabledVoiceMap[v.VoiceID] {
+			filteredVoices = append(filteredVoices, v)
+		}
+	}
+
+	synth, err := openaitts.NewSpeechSynthesizer(openaitts.Config{
+		ProviderID:  provDef.ProviderID,
+		DisplayName: provDef.DisplayName,
+		BaseURL:     provDef.BaseURL,
+		CredentialSource: openaitts.SecretSourceFunc(func(ctx context.Context) (string, error) {
+			return apiKey, nil
+		}),
+		Models: []openaitts.ModelConfig{
+			{
+				ID:              modelDef.ModelID,
+				DisplayName:     modelDef.DisplayName,
+				ExternalModelID: modelDef.ExternalModelID,
+			},
+		},
+		Voices:           buildOpenAITTSVoices(filteredVoices),
+		Timeout:          provDef.Timeout,
+		MaxResponseBytes: provDef.MaxResponseBytes,
+		HTTPClient:       s.httpClient,
+	}, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", providers.ErrProviderUnavailable, err)
+	}
+	return synth, nil
+}
+
+func buildOpenAITTSVoices(defs []VoiceDefinition) []openaitts.VoiceConfig {
+	out := make([]openaitts.VoiceConfig, 0, len(defs))
+	for _, v := range defs {
+		out = append(out, openaitts.VoiceConfig{
+			ID:            v.VoiceID,
+			DisplayName:   v.DisplayName,
+			ExternalVoice: v.ExternalVoice,
+		})
+	}
+	return out
+}
+
 func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView {
-	enabledMap := make(map[providers.ModelID]bool, len(s.EnabledModelIDs))
-	for _, mID := range s.EnabledModelIDs {
-		enabledMap[mID] = true
+	enabledTextMap := make(map[providers.ModelID]bool, len(s.EnabledTextModelIDs))
+	for _, mID := range s.EnabledTextModelIDs {
+		enabledTextMap[mID] = true
+	}
+	enabledImageMap := make(map[providers.ModelID]bool, len(s.EnabledImageModelIDs))
+	for _, mID := range s.EnabledImageModelIDs {
+		enabledImageMap[mID] = true
+	}
+	enabledTTSMap := make(map[providers.ModelID]bool, len(s.EnabledTTSModelIDs))
+	for _, mID := range s.EnabledTTSModelIDs {
+		enabledTTSMap[mID] = true
 	}
 
 	modelViews := make([]ModelSettingView, len(p.Models))
 	for i, m := range p.Models {
 		modelViews[i] = ModelSettingView{
-			ID:          m.ModelID,
-			DisplayName: m.DisplayName,
-			Enabled:     s.Enabled && enabledMap[m.ModelID],
+			ID:           m.ModelID,
+			DisplayName:  m.DisplayName,
+			Capabilities: m.Capabilities,
+			EnabledText:  s.Enabled && enabledTextMap[m.ModelID],
+			EnabledImage: s.Enabled && enabledImageMap[m.ModelID],
+			EnabledTTS:   s.Enabled && enabledTTSMap[m.ModelID],
+		}
+	}
+
+	enabledVoiceMap := make(map[providers.VoiceID]bool, len(s.EnabledVoiceIDs))
+	for _, vID := range s.EnabledVoiceIDs {
+		enabledVoiceMap[vID] = true
+	}
+
+	voiceViews := make([]VoiceSettingView, len(p.Voices))
+	for i, v := range p.Voices {
+		voiceViews[i] = VoiceSettingView{
+			ID:          v.VoiceID,
+			DisplayName: v.DisplayName,
+			Enabled:     s.Enabled && enabledVoiceMap[v.VoiceID],
 		}
 	}
 
@@ -349,6 +744,7 @@ func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView 
 		HasAPIKey:   len(s.APIKeyCiphertext) > 0,
 		Revision:    s.Revision,
 		Models:      modelViews,
+		Voices:      voiceViews,
 	}
 }
 

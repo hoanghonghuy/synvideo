@@ -42,6 +42,14 @@ func (f *fakeProviderSettingsService) DeleteSetting(ctx context.Context, ownerID
 	return nil
 }
 
+func (f *fakeProviderSettingsService) GetOwnerImageGenerationOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.ImageGenerationOptionsResponse, error) {
+	return providersettings.ImageGenerationOptionsResponse{}, nil
+}
+
+func (f *fakeProviderSettingsService) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (providersettings.TTSOptionsResponse, error) {
+	return providersettings.TTSOptionsResponse{}, nil
+}
+
 func TestProviderSettingsHTTP(t *testing.T) {
 	ownerID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	resolver := fixedResolver{ownerID: ownerID}
@@ -59,7 +67,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 							HasAPIKey:   true,
 							Revision:    2,
 							Models: []providersettings.ModelSettingView{
-								{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", Enabled: true},
+								{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", EnabledText: true, EnabledImage: false, EnabledTTS: false, Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 							},
 						},
 					},
@@ -104,7 +112,7 @@ func TestProviderSettingsHTTP(t *testing.T) {
 					HasAPIKey:   true,
 					Revision:    1,
 					Models: []providersettings.ModelSettingView{
-						{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", Enabled: true},
+						{ID: "gpt-5-mini", DisplayName: "GPT-5 mini", EnabledText: true, EnabledImage: false, EnabledTTS: false, Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 					},
 				}, nil
 			},
@@ -119,9 +127,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 		)
 
 		body, _ := json.Marshal(providersettings.PutSettingInput{
-			Enabled:         true,
-			EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          &key,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+			APIKey:              &key,
 		})
 
 		rec := httptest.NewRecorder()
@@ -156,9 +164,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		rev := 1
 		body, _ := json.Marshal(providersettings.PutSettingInput{
-			Revision:        &rev,
-			Enabled:         true,
-			EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
+			Revision:            &rev,
+			Enabled:             true,
+			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
 		})
 
 		rec := httptest.NewRecorder()

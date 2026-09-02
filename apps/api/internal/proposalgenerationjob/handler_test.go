@@ -417,6 +417,7 @@ func TestHandler_EndToEndOwnerCredentialResolutionAndIsolation(t *testing.T) {
 					ModelID:         "gpt-5-mini",
 					DisplayName:     "GPT-5 mini",
 					ExternalModelID: "gpt-5-mini",
+					Capabilities:    []providersettings.Capability{providersettings.CapabilityText},
 				},
 			},
 		},
@@ -437,18 +438,18 @@ func TestHandler_EndToEndOwnerCredentialResolutionAndIsolation(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = svc.PutSetting(ctx, ownerA, "openai", providersettings.PutSettingInput{
-		Enabled:         true,
-		EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &keyA,
+		Enabled:             true,
+		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+		APIKey:              &keyA,
 	})
 	if err != nil {
 		t.Fatalf("put owner A setting: %v", err)
 	}
 
 	_, err = svc.PutSetting(ctx, ownerB, "openai", providersettings.PutSettingInput{
-		Enabled:         true,
-		EnabledModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &keyB,
+		Enabled:             true,
+		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
+		APIKey:              &keyB,
 	})
 	if err != nil {
 		t.Fatalf("put owner B setting: %v", err)
