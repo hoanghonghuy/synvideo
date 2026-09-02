@@ -1,148 +1,85 @@
 # Parallel Developer Work Protocol
 
-SynVideo may run multiple AI Developers in parallel, but parallelism is controlled by dependency, write-surface **and filesystem isolation** rather than by keeping every agent busy.
+SynVideo may run multiple AI Developers in parallel, but parallelism is controlled by dependency, write-surface, **filesystem isolation** and **fresh remote ownership state** rather than by keeping every agent busy.
+
+`docs/engineering/CONTROL_PLANE_PROTOCOL.md` is authoritative for remote freshness, claimability, transition ordering, drift handling and abandoned-claim recovery.
 
 ## Non-negotiable filesystem isolation
-
 **One implementation task = one dedicated Git worktree.**
 
-A task branch is a Git ref; it does not isolate files. Multiple agents coding inside the same working tree share the same checked-out branch, index and uncommitted files. One agent running `git switch`, `reset`, `rebase`, checkout/restore operations or editing the same path can therefore corrupt or overwrite another agent's work even when their intended task branches are different.
+The primary/control checkout stays on `develop` and is used only for fetch/status/PM-control operations while concurrent agents are active. Do not run multiple implementation tasks in the same working tree. Never `git switch`, reset, clean, remove or reuse another task's worktree.
 
-Rules:
-- The primary/control checkout should remain on `develop` and is used only for fetch/status/PM-control operations when concurrent agents are active.
-- Do **not** run implementation work for multiple agents in that shared control checkout.
-- Every claimed task must have a dedicated worktree bound to its canonical task branch before implementation starts.
-- All edits, tests, commits, rebases and review fixes for that task happen inside that task's worktree.
-- Never `git switch` the shared control checkout merely to move between concurrent tasks.
-- Before using a path, inspect `git worktree list --porcelain`; never enter, delete, reset or reuse another task's worktree.
-- A branch already checked out in another worktree belongs to that worktree. Reuse that existing task worktree for review fixes rather than trying to attach the branch somewhere else.
+A branch already checked out in another worktree belongs to that worktree. Review fixes reuse the existing task branch/worktree/PR.
 
-Recommended sibling layout (the exact parent path may vary):
+## Remote-first ownership
+Before deciding whether a task is available:
+1. inspect the live authoritative GitHub task issue;
+2. inspect canonical remote task branch existence;
+3. inspect active PRs for that task/branch;
+4. refresh `origin/develop` and remote refs;
+5. inspect local worktrees/branches only for machine-local execution ambiguity.
 
-```text
-<workspace>/
-├── synvideo/                 # control checkout, stays on develop
-└── synvideo-worktrees/
-    ├── TASK-008/             # feature/TASK-008-...
-    ├── TASK-010/             # feature/TASK-010-...
-    └── TASK-011/             # feature/TASK-011-...
-```
-
-If a task branch already legitimately exists for the current agent/task (for example an active PR needing fixes), fetch first and create or locate the dedicated worktree for that existing branch; do not create a replacement branch/PR.
+A stale local ref or stale BOARD/task mirror is not proof that remote work is absent. `READY` authorizes execution but does not mean unclaimed. A canonical remote branch or active PR means claimed/owned.
 
 ## Waves
-PM groups independent work into a small execution wave, normally up to 3 concurrent implementation tasks.
-
-A task may enter the same wave only when:
-- its prerequisite contracts are already accepted/frozen;
-- its primary write paths do not materially overlap another task in the wave;
-- shared integration files are explicitly identified;
-- merge order and integration gates are known.
-
-If those properties are not true, the tasks are sequential even if developers are available.
+PM normally plans up to 3 independent implementation tasks. A task may share a wave only when prerequisite contracts are accepted/frozen, primary write paths do not materially overlap, shared hotspots are explicit, and merge/integration order is known.
 
 ## Path ownership
 Every parallel task must declare:
-- **Primary write paths** — files/directories that task owns.
-- **Allowed shared integration files** — small known hotspots it may need to edit.
-- **Reserved / do-not-touch paths** — areas owned by another task in the wave.
+- primary write paths;
+- allowed shared integration files;
+- reserved/do-not-touch paths.
 
-If implementation unexpectedly requires a material change outside its declared write surface, stop and report the dependency instead of silently expanding the PR.
+If implementation unexpectedly needs a material change outside its declared write surface, stop and report the dependency instead of silently expanding scope.
 
 ## Contract-first parallelism
-When frontend and backend implement the same feature concurrently, PM freezes the API/domain contract on `develop` before both tasks start.
-
-Both developers implement against that contract independently. The consumer task may use deterministic mocks in tests, but final acceptance requires an integration/smoke check against the real merged provider implementation when specified.
-
-Contract changes during the wave require PM/Team Lead coordination; one developer must not silently redefine the shared contract in its branch.
+When frontend/backend or provider/consumer work in parallel, PM freezes the shared API/domain/event contract on `develop` before authorizing both tasks. A claimed task must not be silently re-scoped; material contract changes follow `CONTROL_PLANE_PROTOCOL.md` and must be surfaced to the active branch/PR owner.
 
 ## Atomic branch-as-lock task claiming
-
-Multiple agents may receive the generic `tiếp tục` command at the same time. The canonical remote task branch is the cross-process/cross-machine task claim, but the claim operation must be an **atomic create-if-absent remote ref creation**.
-
-Why: if two agents start from the same `origin/develop` SHA, two ordinary pushes of the same branch name can both appear successful/up-to-date. Even an update guard may be bypassed by a no-op same-SHA push. That is not an exclusive lock.
+The canonical remote task branch is the cross-process/cross-machine claim only when created via atomic create-if-absent semantics.
 
 ### New-task claim workflow
+1. Complete the remote-first ownership preflight above.
+2. Consider only tasks whose authoritative issue currently authorizes execution, whose current `origin/develop` task spec is executable, whose dependencies are satisfied and whose PM ordering permits selection.
+3. Confirm the canonical remote task branch does not exist and no active PR represents the task.
+4. Inspect `git worktree list --porcelain`; unresolved local ownership ambiguity blocks claiming on this machine.
+5. Record the selected current `origin/develop` SHA as `BASE_SHA` and the canonical branch as `BRANCH`.
+6. Atomically create `refs/heads/$BRANCH` at `BASE_SHA` via GitHub create-ref/create-branch fail-if-exists semantics. **Plain same-SHA `git push` is not a concurrency lock.**
+7. If create-ref says the branch already exists, this agent lost the race. Do not overwrite/delete/take over the winner. Re-fetch live remote state and choose the next eligible task.
+8. After successful remote claim, fetch the branch and create/attach the dedicated worktree tracking it.
+9. Verify branch/upstream/worktree cleanliness and begin TDD implementation only there.
 
-1. From the shared/control checkout on `develop`, fetch latest `origin/develop`, remote branches and worktree state.
-2. Consider only `READY` tasks whose canonical remote branch does not already exist and has no active PR.
-3. Confirm no local branch/worktree already represents that task. If local ownership is ambiguous, stop/report rather than deleting it.
-4. Record `BASE_SHA=$(git rev-parse origin/develop)` and the canonical `BRANCH`.
-5. **Atomically create the remote branch at `BASE_SHA` using GitHub's create-ref operation, which fails if that ref already exists.** Do this before creating the implementation worktree.
+Equivalent authenticated CLI create-ref:
 
-   With authenticated GitHub CLI, the equivalent is:
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+BASE_SHA=$(git rev-parse origin/develop)
+gh api --method POST "repos/$REPO/git/refs" \
+  -f ref="refs/heads/$BRANCH" \
+  -f sha="$BASE_SHA"
+```
 
-   ```bash
-   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-   BASE_SHA=$(git rev-parse origin/develop)
+If the remote claim succeeds but local worktree setup fails, the task remains claimed; fix/report setup rather than deleting the remote branch.
 
-   gh api --method POST "repos/$REPO/git/refs" \
-     -f ref="refs/heads/$BRANCH" \
-     -f sha="$BASE_SHA"
-   ```
+## Existing branch / PR
+When a canonical branch or PR already exists, do not claim a replacement. Resolve the exact current remote PR/branch head and live task issue first, then locate/create the dedicated worktree for that existing branch. Inspect uncommitted state before editing. Keep fixes on the same branch/PR.
 
-   A GitHub connector/API `create ref/branch` operation with the same fail-if-exists semantics is also valid.
-
-   **Do not use plain `git push` as the concurrency claim.** The claim is successful only when this agent actually created the previously absent remote ref.
-6. If create-ref reports that the ref already exists, this agent lost the race. Do not work on, overwrite or delete that branch. Re-fetch state and select another eligible READY task.
-7. After a successful remote claim, fetch that branch and create the dedicated task worktree/local branch tracking it. For example:
-
-   ```bash
-   WORKTREE_ROOT="$(dirname "$(git rev-parse --show-toplevel)")/synvideo-worktrees"
-   WORKTREE="$WORKTREE_ROOT/TASK-xxx"
-
-   git fetch origin "$BRANCH"
-   git worktree add -b "$BRANCH" "$WORKTREE" "origin/$BRANCH"
-   ```
-
-8. Verify from the task worktree that:
-   - current branch is exactly the canonical task branch;
-   - `HEAD` starts from the claimed `BASE_SHA` unless PM-approved upstream synchronization happened afterward;
-   - worktree is clean;
-   - upstream is `origin/$BRANCH`.
-9. Only then begin TDD/implementation inside that dedicated worktree.
-
-If remote claim succeeds but local worktree setup fails, the task remains claimed by this agent. Fix/report the local setup; do not silently release/delete the remote claim unless PM/Team Lead explicitly decides to release it.
-
-An abandoned remote claim is released only by PM/Team Lead decision.
+## Abandoned claims
+A generic coding agent never releases, deletes or takes over an existing canonical remote claim. PM/Team Lead recovery follows `CONTROL_PLANE_PROTOCOL.md`: verify no active PR/agent ownership, understand/preserve unmerged commits, then explicitly reassign the existing branch or release an empty/stale claim.
 
 ## Shared branch rules
 - Never share one implementation branch between independent tasks.
 - Never share one implementation working tree between independent tasks.
 - Never commit implementation directly to `develop` or `main`.
-- Review fixes remain on the original task branch **and its dedicated worktree**.
-- Do not merge another task branch into yours to obtain unrelated work.
-- Rebase/sync with `develop` when necessary for final integration after upstream dependencies merge; run that operation inside the task worktree and use `--force-with-lease` if an intentional rebase requires rewriting the remote task branch.
-- Never run destructive cleanup (`reset --hard`, `clean`, worktree removal) against a path/ref that may belong to another active agent.
-
-## Existing-branch / review-fix workflow
-
-When an active PR already exists:
-- identify the canonical branch from the PR/task;
-- inspect `git worktree list --porcelain`;
-- if that branch is already attached to a worktree, continue there;
-- if it is not attached, fetch the branch and create a dedicated worktree for it;
-- inspect the worktree for uncommitted changes before editing;
-- keep all review fixes on the same branch/PR.
-
-Do not switch a shared control checkout to the PR branch just because review work is required.
+- Review fixes stay on the original task branch/worktree/PR.
+- Do not merge unrelated task branches into yours.
+- Rebase/sync with `develop` only when required for integration; do it inside the task worktree and use `--force-with-lease` when intentional history rewrite is necessary.
+- Never run destructive cleanup against another active task path/ref.
 
 ## Merge strategy
-Team Lead reviews each PR independently against its task contract and TDD evidence.
+Team Lead reviews each PR independently against its current task contract and exact current remote head. Independent accepted PRs may merge as soon as gates pass. When one PR provides runtime/contract needed by another, merge provider first, then rebase and rerun dependent integration verification.
 
-For a wave:
-- merge PRs with no dependency on other wave PRs as soon as accepted;
-- when one PR provides a contract/runtime needed by another, merge the provider first, then rebase and run the consumer's integration verification;
-- do not resolve conflicts by dropping another task's behavior merely to get a green merge.
-
-After merge, local worktree cleanup may happen only when the task is confirmed merged/finished and no agent process or uncommitted work still depends on that worktree. Remote branch deletion remains a repository-policy/PM decision.
+After merge, clean local worktrees only when the task is confirmed merged/finished and no active process/uncommitted work depends on them. Completion/control-plane housekeeping follows `CONTROL_PLANE_PROTOCOL.md`.
 
 ## PM responsibilities
-PM owns:
-- dependency graph and wave composition;
-- READY/BLOCKED status;
-- frozen shared contracts;
-- path ownership boundaries;
-- integration/merge order.
-
-AI Developers own only the task they claimed and its dedicated worktree. Team Lead owns acceptance, not implementation throughput.
+PM owns dependency graph, wave composition, live authorization (`READY`/blocked/cancelled), frozen contracts, path boundaries, merge order, duplicate-task prevention, claimed-task re-scope decisions and abandoned-claim recovery. AI Developers own only their claimed task/worktree. Team Lead owns acceptance, not implementation throughput.
