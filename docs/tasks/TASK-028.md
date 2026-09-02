@@ -1,11 +1,11 @@
 # TASK-028 — Secure multi-capability provider runtime and settings
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
-Branch when activated: `feature/TASK-028-multicap-provider-runtime`
-Depends on: TASK-017, TASK-025, TASK-026 and TASK-027 accepted; schedule after TASK-024 releases the shared frontend settings/router hotspot.
+Branch: `feature/TASK-028-multicap-provider-runtime`
+Depends on: TASK-017, TASK-024, TASK-025, TASK-026 and TASK-027 — all complete.
 
 ## Goal
 Evolve the accepted text-only BYOK owner runtime into one secure capability-aware provider configuration/runtime so the same owner credential and safe deployment catalog can expose text, image and TTS models/voices without duplicating secret storage or creating vendor-specific domain paths.
@@ -21,10 +21,13 @@ TASK-026 and TASK-027 provide live adapters, but production creator flows cannot
 - `docs/contracts/VISUAL_GENERATION_PROVIDER_V1.md`
 - `docs/contracts/OPENAI_IMAGE_PROVIDER_V1.md`
 - `docs/contracts/TTS_PROVIDER_V1.md`
+- `docs/contracts/MULTI_CAPABILITY_PROVIDER_RUNTIME_V1.md`
 - accepted TASK-017 implementation and migrations.
 
-## Integration contract
-A dedicated `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` contract must be frozen by PM/TL before this task may become READY. The contract must preserve all TASK-017 security properties and accepted text-generation APIs while adding capability-aware image/TTS options and runtime resolution.
+## Frozen integration contract
+`docs/contracts/MULTI_CAPABILITY_PROVIDER_RUNTIME_V1.md`
+
+The contract preserves TASK-017 security/backward compatibility while adding owner-scoped text/image/TTS settings, safe option surfaces and runtime resolution. Implementation must not weaken the frozen guarantees.
 
 ## Parallel safety
 ### Primary write paths
@@ -38,7 +41,6 @@ A dedicated `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` contract must be frozen by PM
 - localized settings route/components as required.
 
 ### Reserved / do not touch
-- Scene Plan editor and Media workspace while TASK-022/TASK-024 own them;
 - durable generation jobs, Media Asset ingestion/binding, captions/render/publish;
 - vendor adapters except minimal construction through their public configuration/factory boundary.
 
@@ -76,11 +78,11 @@ A dedicated `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` contract must be frozen by PM
 5. owner runtime resolves correct adapter with owner-specific secret and rejects disabled selections;
 6. safe option payloads contain no secret/external-ID sentinel;
 7. existing text generation E2E remains green;
-8. settings UI preserves/rotates secret and edits capability selections without client persistence;
+8. settings UI preserves/rotates/deletes secret and edits capability selections without client persistence;
 9. race/full backend + frontend verification.
 
 ## Acceptance criteria
-- [ ] PM/TL freezes `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` before READY.
+- [x] PM/TL froze `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` before READY.
 - [ ] Existing TASK-017 text configuration/data continues to work after migration.
 - [ ] One encrypted owner/provider credential can safely serve multiple enabled capabilities where supported.
 - [ ] Text/image/TTS runtime resolution is owner-scoped and provider-neutral.
@@ -102,7 +104,5 @@ A dedicated `MULTI_CAPABILITY_PROVIDER_RUNTIME_V1` contract must be frozen by PM
 - secret sentinel checks across DB/API/error/loggable metadata;
 - fresh PR CI.
 
-## Activation gate
-Do not claim while BACKLOG. Promote only after TASK-027 is accepted, TASK-024 has released the shared frontend hotspot, and the dedicated contract is frozen.
-
-Do not self-mark READY/DONE or self-merge.
+## Activation
+READY for AI Developer implementation on `feature/TASK-028-multicap-provider-runtime`. Implementation must go through PR into `develop` and must not self-mark DONE or self-merge.
