@@ -85,6 +85,42 @@ type TextGenerationOptionsResponse struct {
 	Providers []TextGenerationOptionProvider `json:"providers"`
 }
 
+// ImageGenerationOptionModel is a model option for image generation.
+type ImageGenerationOptionModel struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// ImageGenerationOptionProvider is a provider option with available image models.
+type ImageGenerationOptionProvider struct {
+	ID          providers.ProviderID         `json:"id"`
+	DisplayName string                       `json:"display_name"`
+	Models      []ImageGenerationOptionModel `json:"models"`
+}
+
+// ImageGenerationOptionsResponse is the response for GET /api/v1/ai/image-generation-options.
+type ImageGenerationOptionsResponse struct {
+	Providers []ImageGenerationOptionProvider `json:"providers"`
+}
+
+// TTSOptionVoice is a voice option for TTS.
+type TTSOptionVoice struct {
+	ID          providers.VoiceID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
+// TTSOptionProvider is a provider option with available voices.
+type TTSOptionProvider struct {
+	ID          providers.ProviderID `json:"id"`
+	DisplayName string               `json:"display_name"`
+	Voices      []TTSOptionVoice     `json:"voices"`
+}
+
+// TTSOptionsResponse is the response for GET /api/v1/ai/tts-options.
+type TTSOptionsResponse struct {
+	Providers []TTSOptionProvider `json:"providers"`
+}
+
 // PutSettingInput is the request body for PUT /api/v1/ai/provider-settings/{provider_id}.
 type PutSettingInput struct {
 	Revision             *int                `json:"revision,omitempty"`
