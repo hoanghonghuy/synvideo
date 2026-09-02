@@ -63,6 +63,55 @@ func NewCatalogFromJSON(raw []byte) (*Catalog, error) {
 	return NewCatalog(defs)
 }
 
+// LegacyProviderDefinition is the TASK-017 schema without capability field.
+type LegacyProviderDefinition struct {
+	ProviderID       providers.ProviderID  `json:"provider_id"`
+	DisplayName      string                `json:"display_name"`
+	BaseURL          string                `json:"base_url"`
+	Models           []LegacyModelDefinition `json:"models"`
+	Voices           []VoiceDefinition     `json:"voices,omitempty"`
+	Timeout          time.Duration         `json:"timeout,omitempty"`
+	MaxResponseBytes int64                 `json:"max_response_bytes,omitempty"`
+}
+
+// LegacyModelDefinition is the TASK-017 schema without capability field.
+// Defaults to CapabilityText for backward compatibility.
+type LegacyModelDefinition struct {
+	ModelID         providers.ModelID `json:"model_id"`
+	DisplayName     string            `json:"display_name"`
+	ExternalModelID string            `json:"external_model_id"`
+}
+
+// NewCatalogFromLegacyJSON parses TASK-017 schema and defaults capabilities to [text].
+func NewCatalogFromLegacyJSON(raw []byte) (*Catalog, error) {
+	var legacy []LegacyProviderDefinition
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return nil, fmt.Errorf("invalid legacy provider definitions json: %w", err)
+	}
+	defs := make([]ProviderDefinition, len(legacy))
+	for i, lp := range legacy {
+		models := make([]ModelDefinition, len(lp.Models))
+		for j, lm := range lp.Models {
+			models[j] = ModelDefinition{
+				ModelID:         lm.ModelID,
+				DisplayName:     lm.DisplayName,
+				ExternalModelID: lm.ExternalModelID,
+				Capabilities:    []Capability{CapabilityText},
+			}
+		}
+		defs[i] = ProviderDefinition{
+			ProviderID:       lp.ProviderID,
+			DisplayName:      lp.DisplayName,
+			BaseURL:          lp.BaseURL,
+			Models:           models,
+			Voices:           lp.Voices,
+			Timeout:          lp.Timeout,
+			MaxResponseBytes: lp.MaxResponseBytes,
+		}
+	}
+	return NewCatalog(defs)
+}
+
 // NewCatalog validates and builds a Catalog from ProviderDefinitions.
 func NewCatalog(defs []ProviderDefinition) (*Catalog, error) {
 	if len(defs) == 0 {

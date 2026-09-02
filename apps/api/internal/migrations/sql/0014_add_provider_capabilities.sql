@@ -25,6 +25,7 @@ ALTER INDEX text_provider_settings_owner_id_idx RENAME TO provider_settings_owne
 ALTER TABLE provider_settings
 	ADD COLUMN enabled_text_model_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
 	ADD COLUMN enabled_image_model_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+	ADD COLUMN enabled_tts_model_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
 	ADD COLUMN enabled_voice_ids jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 -- Copy existing text model selections to the new text column

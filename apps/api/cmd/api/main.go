@@ -91,10 +91,15 @@ func main() {
 		}
 		if defs != "" {
 			var catErr error
+			// Try new multi-capability format first
 			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(defs))
 			if catErr != nil {
-				logger.Error("provider definitions parsing failed", "error", catErr)
-				os.Exit(1)
+				// Fallback to legacy TASK-017 format (no capabilities field)
+				catalog, catErr = providersettings.NewCatalogFromLegacyJSON([]byte(defs))
+				if catErr != nil {
+					logger.Error("provider definitions parsing failed", "error", catErr)
+					os.Exit(1)
+				}
 			}
 		} else {
 			catalog, _ = providersettings.NewCatalog([]providersettings.ProviderDefinition{

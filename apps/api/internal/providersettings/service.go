@@ -56,9 +56,17 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 	for _, p := range catalogProviders {
 		st, configured := settingsByProvider[p.ProviderID]
 
-		enabledModelsMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
+		enabledTextMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
 		for _, mID := range st.EnabledTextModelIDs {
-			enabledModelsMap[mID] = true
+			enabledTextMap[mID] = true
+		}
+		enabledImageMap := make(map[providers.ModelID]bool, len(st.EnabledImageModelIDs))
+		for _, mID := range st.EnabledImageModelIDs {
+			enabledImageMap[mID] = true
+		}
+		enabledTTSMap := make(map[providers.ModelID]bool, len(st.EnabledTTSModelIDs))
+		for _, mID := range st.EnabledTTSModelIDs {
+			enabledTTSMap[mID] = true
 		}
 
 		enabledVoicesMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
@@ -69,9 +77,12 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 		modelViews := make([]ModelSettingView, len(p.Models))
 		for i, m := range p.Models {
 			modelViews[i] = ModelSettingView{
-				ID:          m.ModelID,
-				DisplayName: m.DisplayName,
-				Enabled:     configured && st.Enabled && enabledModelsMap[m.ModelID],
+				ID:           m.ModelID,
+				DisplayName:  m.DisplayName,
+				Capabilities: m.Capabilities,
+				EnabledText:  configured && st.Enabled && enabledTextMap[m.ModelID],
+				EnabledImage: configured && st.Enabled && enabledImageMap[m.ModelID],
+				EnabledTTS:   configured && st.Enabled && enabledTTSMap[m.ModelID],
 			}
 		}
 
@@ -113,6 +124,12 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return ProviderSettingView{}, ErrProviderNotFound
 	}
 
+	// Backward compatibility: merge legacy enabled_model_ids into enabled_text_model_ids
+	// if explicit text list is empty (TASK-017 clients)
+	if len(input.EnabledModelIDs) > 0 && len(input.EnabledTextModelIDs) == 0 {
+		input.EnabledTextModelIDs = input.EnabledModelIDs
+	}
+
 	// Validate model IDs and voice IDs
 	if len(input.EnabledTextModelIDs) > 0 {
 		for _, mID := range input.EnabledTextModelIDs {
@@ -134,6 +151,16 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 			}
 		}
 	}
+	if len(input.EnabledTTSModelIDs) > 0 {
+		for _, mID := range input.EnabledTTSModelIDs {
+			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityTTS) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support tts capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
 	if len(input.EnabledVoiceIDs) > 0 {
 		for _, vID := range input.EnabledVoiceIDs {
 			if _, ok := s.catalog.GetVoice(providerID, vID); !ok {
@@ -142,7 +169,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		}
 	}
 
-	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
+	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledTTSModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
 		return ProviderSettingView{}, fmt.Errorf("%w: at least one model or voice must be enabled when provider is enabled", ErrInvalidSettingInput)
 	}
 
@@ -175,6 +202,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 			Enabled:              input.Enabled,
 			EnabledTextModelIDs:  input.EnabledTextModelIDs,
 			EnabledImageModelIDs: input.EnabledImageModelIDs,
+			EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
 			EnabledVoiceIDs:      input.EnabledVoiceIDs,
 			APIKeyCiphertext:     ciphertext,
 			APIKeyNonce:          nonce,
@@ -219,6 +247,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		Enabled:              input.Enabled,
 		EnabledTextModelIDs:  input.EnabledTextModelIDs,
 		EnabledImageModelIDs: input.EnabledImageModelIDs,
+		EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
 		EnabledVoiceIDs:      input.EnabledVoiceIDs,
 		APIKeyCiphertext:     ciphertext,
 		APIKeyNonce:          nonce,
@@ -423,7 +452,7 @@ func (s *Service) GetOwnerImageGenerationOptions(ctx context.Context, ownerID uu
 	return ImageGenerationOptionsResponse{Providers: resultProviders}, nil
 }
 
-// GetOwnerTTSOptions returns only the current owner's configured and enabled voices.
+// GetOwnerTTSOptions returns only the current owner's configured and enabled TTS models and voices.
 func (s *Service) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (TTSOptionsResponse, error) {
 	if s.catalog == nil {
 		return TTSOptionsResponse{Providers: []TTSOptionProvider{}}, nil
@@ -448,14 +477,19 @@ func (s *Service) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (TT
 			continue
 		}
 
-		enabledMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
+		enabledVoiceMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
 		for _, vID := range st.EnabledVoiceIDs {
-			enabledMap[vID] = true
+			enabledVoiceMap[vID] = true
+		}
+
+		enabledTTSModelMap := make(map[providers.ModelID]bool, len(st.EnabledTTSModelIDs))
+		for _, mID := range st.EnabledTTSModelIDs {
+			enabledTTSModelMap[mID] = true
 		}
 
 		var optionVoices []TTSOptionVoice
 		for _, v := range p.Voices {
-			if enabledMap[v.VoiceID] {
+			if enabledVoiceMap[v.VoiceID] {
 				optionVoices = append(optionVoices, TTSOptionVoice{
 					ID:          v.VoiceID,
 					DisplayName: v.DisplayName,
@@ -463,10 +497,21 @@ func (s *Service) GetOwnerTTSOptions(ctx context.Context, ownerID uuid.UUID) (TT
 			}
 		}
 
-		if len(optionVoices) > 0 {
+		var optionModels []TTSOptionModel
+		for _, m := range p.Models {
+			if s.catalog.ModelSupportsCapability(p.ProviderID, m.ModelID, CapabilityTTS) && enabledTTSModelMap[m.ModelID] {
+				optionModels = append(optionModels, TTSOptionModel{
+					ID:          m.ModelID,
+					DisplayName: m.DisplayName,
+				})
+			}
+		}
+
+		if len(optionVoices) > 0 || len(optionModels) > 0 {
 			resultProviders = append(resultProviders, TTSOptionProvider{
 				ID:          p.ProviderID,
 				DisplayName: p.DisplayName,
+				Models:      optionModels,
 				Voices:      optionVoices,
 			})
 		}
@@ -579,6 +624,20 @@ func (s *Service) ResolveSpeechSynthesizer(ctx context.Context, ownerID uuid.UUI
 		return nil, providers.ErrProviderUnavailable
 	}
 
+	if len(setting.EnabledTTSModelIDs) == 0 {
+		return nil, providers.ErrProviderUnavailable
+	}
+	ttsModelEnabled := false
+	for _, mID := range setting.EnabledTTSModelIDs {
+		if mID == modelID {
+			ttsModelEnabled = true
+			break
+		}
+	}
+	if !ttsModelEnabled {
+		return nil, providers.ErrProviderUnavailable
+	}
+
 	if len(setting.EnabledVoiceIDs) == 0 {
 		return nil, providers.ErrProviderUnavailable
 	}
@@ -586,6 +645,18 @@ func (s *Service) ResolveSpeechSynthesizer(ctx context.Context, ownerID uuid.UUI
 	apiKey, err := s.cipher.Decrypt(ownerID, providerID, setting.KeyVersion, setting.APIKeyCiphertext, setting.APIKeyNonce)
 	if err != nil {
 		return nil, providers.ErrProviderUnavailable
+	}
+
+	// Filter voices to only those enabled by owner
+	enabledVoiceMap := make(map[providers.VoiceID]bool, len(setting.EnabledVoiceIDs))
+	for _, vID := range setting.EnabledVoiceIDs {
+		enabledVoiceMap[vID] = true
+	}
+	filteredVoices := make([]VoiceDefinition, 0, len(provDef.Voices))
+	for _, v := range provDef.Voices {
+		if enabledVoiceMap[v.VoiceID] {
+			filteredVoices = append(filteredVoices, v)
+		}
 	}
 
 	synth, err := openaitts.NewSpeechSynthesizer(openaitts.Config{
@@ -602,7 +673,7 @@ func (s *Service) ResolveSpeechSynthesizer(ctx context.Context, ownerID uuid.UUI
 				ExternalModelID: modelDef.ExternalModelID,
 			},
 		},
-		Voices:           buildOpenAITTSVoices(provDef.Voices),
+		Voices:           buildOpenAITTSVoices(filteredVoices),
 		Timeout:          provDef.Timeout,
 		MaxResponseBytes: provDef.MaxResponseBytes,
 		HTTPClient:       s.httpClient,
@@ -626,17 +697,28 @@ func buildOpenAITTSVoices(defs []VoiceDefinition) []openaitts.VoiceConfig {
 }
 
 func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView {
-	enabledMap := make(map[providers.ModelID]bool, len(s.EnabledTextModelIDs))
+	enabledTextMap := make(map[providers.ModelID]bool, len(s.EnabledTextModelIDs))
 	for _, mID := range s.EnabledTextModelIDs {
-		enabledMap[mID] = true
+		enabledTextMap[mID] = true
+	}
+	enabledImageMap := make(map[providers.ModelID]bool, len(s.EnabledImageModelIDs))
+	for _, mID := range s.EnabledImageModelIDs {
+		enabledImageMap[mID] = true
+	}
+	enabledTTSMap := make(map[providers.ModelID]bool, len(s.EnabledTTSModelIDs))
+	for _, mID := range s.EnabledTTSModelIDs {
+		enabledTTSMap[mID] = true
 	}
 
 	modelViews := make([]ModelSettingView, len(p.Models))
 	for i, m := range p.Models {
 		modelViews[i] = ModelSettingView{
-			ID:          m.ModelID,
-			DisplayName: m.DisplayName,
-			Enabled:     s.Enabled && enabledMap[m.ModelID],
+			ID:           m.ModelID,
+			DisplayName:  m.DisplayName,
+			Capabilities: m.Capabilities,
+			EnabledText:  s.Enabled && enabledTextMap[m.ModelID],
+			EnabledImage: s.Enabled && enabledImageMap[m.ModelID],
+			EnabledTTS:   s.Enabled && enabledTTSMap[m.ModelID],
 		}
 	}
 

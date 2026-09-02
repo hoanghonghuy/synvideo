@@ -36,6 +36,7 @@ type Setting struct {
 	Enabled              bool
 	EnabledTextModelIDs  []providers.ModelID
 	EnabledImageModelIDs []providers.ModelID
+	EnabledTTSModelIDs   []providers.ModelID
 	EnabledVoiceIDs      []providers.VoiceID
 	APIKeyCiphertext     []byte
 	APIKeyNonce          []byte
@@ -58,9 +59,12 @@ type ProviderSettingView struct {
 
 // ModelSettingView is the safe view of a model under a provider.
 type ModelSettingView struct {
-	ID          providers.ModelID `json:"id"`
-	DisplayName string            `json:"display_name"`
-	Enabled     bool              `json:"enabled"`
+	ID           providers.ModelID `json:"id"`
+	DisplayName  string            `json:"display_name"`
+	Capabilities []Capability      `json:"capabilities"`
+	EnabledText  bool              `json:"enabled_text"`
+	EnabledImage bool              `json:"enabled_image"`
+	EnabledTTS   bool              `json:"enabled_tts"`
 }
 
 // VoiceSettingView is the safe view of a voice under a provider.
@@ -117,10 +121,17 @@ type TTSOptionVoice struct {
 	DisplayName string            `json:"display_name"`
 }
 
+// TTSOptionModel is a model option for TTS.
+type TTSOptionModel struct {
+	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+}
+
 // TTSOptionProvider is a provider option with available voices.
 type TTSOptionProvider struct {
 	ID          providers.ProviderID `json:"id"`
 	DisplayName string               `json:"display_name"`
+	Models      []TTSOptionModel     `json:"models"`
 	Voices      []TTSOptionVoice     `json:"voices"`
 }
 
@@ -133,8 +144,10 @@ type TTSOptionsResponse struct {
 type PutSettingInput struct {
 	Revision             *int                `json:"revision,omitempty"`
 	Enabled              bool                `json:"enabled"`
-	EnabledTextModelIDs  []providers.ModelID `json:"enabled_text_model_ids"`
+	EnabledModelIDs      []providers.ModelID `json:"enabled_model_ids"`      // Legacy TASK-017 field, maps to text
+	EnabledTextModelIDs  []providers.ModelID `json:"enabled_text_model_ids"` // New multi-capability field
 	EnabledImageModelIDs []providers.ModelID `json:"enabled_image_model_ids"`
+	EnabledTTSModelIDs   []providers.ModelID `json:"enabled_tts_model_ids"`
 	EnabledVoiceIDs      []providers.VoiceID `json:"enabled_voice_ids"`
 	APIKey               *string             `json:"api_key,omitempty"`
 }
