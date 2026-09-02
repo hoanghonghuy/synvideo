@@ -127,9 +127,9 @@ func TestProviderSettingsHTTP(t *testing.T) {
 		)
 
 		body, _ := json.Marshal(providersettings.PutSettingInput{
-			Enabled:         true,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          &key,
+			APIKey:              &key,
 		})
 
 		rec := httptest.NewRecorder()
@@ -164,8 +164,8 @@ func TestProviderSettingsHTTP(t *testing.T) {
 
 		rev := 1
 		body, _ := json.Marshal(providersettings.PutSettingInput{
-			Revision:        &rev,
-			Enabled:         true,
+			Revision:            &rev,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
 		})
 

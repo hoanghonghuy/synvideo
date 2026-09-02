@@ -168,9 +168,9 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 
 	t.Run("first create requires api key", func(t *testing.T) {
 		_, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Enabled:         true,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          nil,
+			APIKey:              nil,
 		})
 		if !errors.Is(err, providersettings.ErrCredentialRequired) {
 			t.Fatalf("expected ErrCredentialRequired for initial create without key, got %v", err)
@@ -180,9 +180,9 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 	t.Run("first create rejects leading/trailing whitespace", func(t *testing.T) {
 		whitespaceKey := "  sk-key-with-spaces  "
 		_, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Enabled:         true,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          &whitespaceKey,
+			APIKey:              &whitespaceKey,
 		})
 		if !errors.Is(err, providersettings.ErrInvalidSettingInput) {
 			t.Fatalf("expected ErrInvalidSettingInput for whitespace key, got %v", err)
@@ -193,10 +193,10 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 		revZero := 0
 		unconfProvider := providers.ProviderID("openrouter")
 		_, err := svc.PutSetting(ctx, ownerID, unconfProvider, providersettings.PutSettingInput{
-			Revision:        &revZero,
-			Enabled:         true,
+			Revision:            &revZero,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"claude-3-5-sonnet"},
-			APIKey:          &apiKey,
+			APIKey:              &apiKey,
 		})
 		if !errors.Is(err, providersettings.ErrStaleRevision) {
 			t.Fatalf("expected ErrStaleRevision when revision provided on first create, got %v", err)
@@ -205,9 +205,9 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 
 	t.Run("successful initial create", func(t *testing.T) {
 		view, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Enabled:         true,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          &apiKey,
+			APIKey:              &apiKey,
 		})
 		if err != nil {
 			t.Fatalf("put initial setting: %v", err)
@@ -223,10 +223,10 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 	t.Run("update preserving existing key", func(t *testing.T) {
 		rev := 1
 		view, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Revision:        &rev,
-			Enabled:         true,
+			Revision:            &rev,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini", "gpt-4o"},
-			APIKey:          nil, // preserve key
+			APIKey:              nil, // preserve key
 		})
 		if err != nil {
 			t.Fatalf("update setting preserving key: %v", err)
@@ -243,10 +243,10 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 		rev := 2
 		newKey := "sk-rotated-key-67890"
 		view, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Revision:        &rev,
-			Enabled:         true,
+			Revision:            &rev,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-			APIKey:          &newKey,
+			APIKey:              &newKey,
 		})
 		if err != nil {
 			t.Fatalf("rotate key: %v", err)
@@ -259,8 +259,8 @@ func TestService_PutSettingLifecycle(t *testing.T) {
 	t.Run("stale revision update is rejected", func(t *testing.T) {
 		oldRev := 1
 		_, err := svc.PutSetting(ctx, ownerID, providerID, providersettings.PutSettingInput{
-			Revision:        &oldRev,
-			Enabled:         true,
+			Revision:            &oldRev,
+			Enabled:             true,
 			EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
 		})
 		if !errors.Is(err, providersettings.ErrStaleRevision) {
@@ -306,9 +306,9 @@ func TestService_OwnerIsolation(t *testing.T) {
 
 	// Configure ownerA
 	_, err := svc.PutSetting(ctx, ownerA, providerID, providersettings.PutSettingInput{
-		Enabled:         true,
+		Enabled:             true,
 		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &keyA,
+		APIKey:              &keyA,
 	})
 	if err != nil {
 		t.Fatalf("configure ownerA: %v", err)
@@ -394,9 +394,9 @@ func TestService_LiveOpenAICompatResolution(t *testing.T) {
 	secretKey := "sk-live-creator-credential-test"
 
 	_, err = svc.PutSetting(ctx, ownerA, "openai", providersettings.PutSettingInput{
-		Enabled:         true,
+		Enabled:             true,
 		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &secretKey,
+		APIKey:              &secretKey,
 	})
 	if err != nil {
 		t.Fatalf("configure ownerA: %v", err)

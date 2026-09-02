@@ -438,18 +438,18 @@ func TestHandler_EndToEndOwnerCredentialResolutionAndIsolation(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = svc.PutSetting(ctx, ownerA, "openai", providersettings.PutSettingInput{
-		Enabled:         true,
+		Enabled:             true,
 		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &keyA,
+		APIKey:              &keyA,
 	})
 	if err != nil {
 		t.Fatalf("put owner A setting: %v", err)
 	}
 
 	_, err = svc.PutSetting(ctx, ownerB, "openai", providersettings.PutSettingInput{
-		Enabled:         true,
+		Enabled:             true,
 		EnabledTextModelIDs: []providers.ModelID{"gpt-5-mini"},
-		APIKey:          &keyB,
+		APIKey:              &keyB,
 	})
 	if err != nil {
 		t.Fatalf("put owner B setting: %v", err)

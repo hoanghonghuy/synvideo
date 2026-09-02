@@ -767,9 +767,9 @@ func TestHandler_Handle_OwnerCredentialResolution_LiveHttptest(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = runtimeService.PutSetting(ctx, ownerID, "byok-openai", providersettings.PutSettingInput{
-		Enabled:         true,
+		Enabled:             true,
 		EnabledTextModelIDs: []providers.ModelID{"gpt-4o"},
-		APIKey:          &secretKey,
+		APIKey:              &secretKey,
 	})
 	if err != nil {
 		t.Fatalf("put owner setting: %v", err)
