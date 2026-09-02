@@ -1,6 +1,6 @@
 # TASK-029 — Durable generated-image acquisition + MediaAsset ingestion
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
@@ -43,7 +43,7 @@ Creators can now configure and resolve owner-scoped image providers, but SynVide
 - successful assignment uses existing scene-media invariants/history rather than bypassing them.
 
 ## Acceptance criteria
-- [ ] PM/TL frozen contract is present on `develop` before READY.
+- [x] PM/TL frozen contract is present on `develop` before READY.
 - [ ] Durable job/API request has stable idempotency semantics.
 - [ ] Owner/project/scene isolation is enforced end-to-end.
 - [ ] Enabled owner image provider/model resolves through TASK-028 runtime.
@@ -62,4 +62,4 @@ Use RED → GREEN → REFACTOR for new behavior. Minimum evidence includes reque
 Reuse existing durable job abstractions, MediaAsset/storage ports, scene media binding and TASK-028 provider runtime. Keep provider adapter types/config outside durable job/domain payloads. Treat generation, durable ingestion and scene assignment as distinct recovery boundaries; choose a transaction/idempotency strategy that prevents duplicate paid work and duplicate durable assets without coupling domain code to one vendor.
 
 ## Activation gate
-Do not claim while BACKLOG. Promote to READY only after this task + frozen contract are merged to `develop` and the GitHub issue is reconciled last.
+READY — planning spec + frozen contract are now on protected `develop`; implementation may be claimed on `feature/TASK-029-generated-image-acquisition` and must follow RED → GREEN → REFACTOR with PR into `develop`.
