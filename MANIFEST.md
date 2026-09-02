@@ -1,21 +1,23 @@
-# SynVideo PM Scaffold v2
+# SynVideo PM Scaffold
 
-This scaffold is installed on the SynVideo `develop` branch and defines the initial PM / AI Developer / Team Lead operating model before application implementation begins.
+This scaffold is installed on the SynVideo `develop` branch and defines the PM / AI Developer / Team Lead operating model used by current development.
 
-TASK-001 adds the first runnable application scaffold while preserving the PM / AI Developer / Team Lead operating model.
-
-Contents:
+Contents include:
 - lightweight `AGENTS.md` router;
-- four focused Codex/Agent Skills workflows;
+- focused agent skills for continuation, task execution, wave planning, code review, open-source research and product audit;
+- remote-first control-plane authority/freshness protocol;
 - product source-of-truth baseline;
-- PM/AI Developer/Team Lead workflow and token policy;
-- architecture/review constraints;
+- PM/AI Developer/Team Lead workflow and context policy;
+- atomic remote task claiming + dedicated worktree isolation;
+- TDD and exact-head Team Lead review constraints;
+- duplicate-task prevention and abandoned-claim recovery;
 - open-source research map;
-- task board/template;
-- accepted product ADRs;
-- initial Vue frontend, Go API and local infrastructure scaffold.
+- task board/template and accepted product decisions;
+- Vue frontend, Go API and local infrastructure.
 
 Branch policy:
-- `main`: stable/release-ready history;
-- `develop`: PM source of truth and integration branch;
-- implementation: dedicated task branches with PRs to `develop`.
+- `main`: stable/release-ready history and may intentionally lag active development;
+- `develop`: current integration/control-plane baseline;
+- implementation: dedicated canonical task branches/worktrees with PRs to `develop`.
+
+For shared workflow decisions, local Git state is not authoritative. Follow `docs/engineering/CONTROL_PLANE_PROTOCOL.md` and inspect live GitHub plus explicit current `develop`/task/PR refs.
