@@ -85,11 +85,15 @@ func main() {
 		}
 
 		var catalog *providersettings.Catalog
-		if cfg.TextProviderDefinitions != "" {
+		defs := cfg.ProviderDefinitions
+		if defs == "" {
+			defs = cfg.TextProviderDefinitions // backward-compat
+		}
+		if defs != "" {
 			var catErr error
-			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(cfg.TextProviderDefinitions))
+			catalog, catErr = providersettings.NewCatalogFromJSON([]byte(defs))
 			if catErr != nil {
-				logger.Error("text provider definitions parsing failed", "error", catErr)
+				logger.Error("provider definitions parsing failed", "error", catErr)
 				os.Exit(1)
 			}
 		} else {
@@ -99,8 +103,14 @@ func main() {
 					DisplayName: "OpenAI",
 					BaseURL:     "https://api.openai.com/v1",
 					Models: []providersettings.ModelDefinition{
-						{ModelID: "gpt-5-mini", DisplayName: "GPT-5 mini", ExternalModelID: "gpt-5-mini"},
-						{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o"},
+						{ModelID: "gpt-5-mini", DisplayName: "GPT-5 mini", ExternalModelID: "gpt-5-mini", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
+						{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
+						{ModelID: "dall-e-3", DisplayName: "DALL-E 3", ExternalModelID: "dall-e-3", Capabilities: []providersettings.Capability{providersettings.CapabilityImage}},
+						{ModelID: "gpt-4o-mini-tts", DisplayName: "GPT-4o mini TTS", ExternalModelID: "gpt-4o-mini-tts", Capabilities: []providersettings.Capability{providersettings.CapabilityTTS}},
+					},
+					Voices: []providersettings.VoiceDefinition{
+						{VoiceID: "alloy", DisplayName: "Alloy", ExternalVoice: "alloy"},
+						{VoiceID: "verse", DisplayName: "Verse", ExternalVoice: "verse"},
 					},
 				},
 				{
@@ -108,7 +118,7 @@ func main() {
 					DisplayName: "OpenRouter",
 					BaseURL:     "https://openrouter.ai/api/v1",
 					Models: []providersettings.ModelDefinition{
-						{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet"},
+						{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 					},
 				},
 			})

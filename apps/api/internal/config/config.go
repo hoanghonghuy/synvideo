@@ -35,7 +35,8 @@ type Config struct {
 	LocalActorID            *uuid.UUID
 	CredentialEncryptionKey string
 	CredentialKeyVersion    string
-	TextProviderDefinitions string
+	TextProviderDefinitions string // Deprecated: use ProviderDefinitions
+	ProviderDefinitions     string
 	MediaStorage            MediaStorageConfig
 }
 
@@ -112,6 +113,7 @@ func Load() (Config, error) {
 		CredentialEncryptionKey: byokKey,
 		CredentialKeyVersion:    getEnv("SYNVIDEO_CREDENTIAL_KEY_VERSION", "v1"),
 		TextProviderDefinitions: getEnv("SYNVIDEO_TEXT_PROVIDER_DEFINITIONS", ""),
+		ProviderDefinitions:     getEnv("SYNVIDEO_PROVIDER_DEFINITIONS", ""),
 		MediaStorage:            mediaStorage,
 	}
 
