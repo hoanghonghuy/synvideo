@@ -4,6 +4,7 @@ import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
 import ScriptView from '@/features/script/ScriptView.vue'
 import ScenePlanView from '@/features/scene-plan/ScenePlanView.vue'
+import MediaWorkspaceView from '@/features/media/MediaWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
@@ -58,6 +59,11 @@ export const router = createRouter({
       path: '/projects/:id/scene-plan',
       name: 'scene-plan',
       component: ScenePlanView,
+    },
+    {
+      path: '/projects/:id/media',
+      name: 'media-workspace',
+      component: MediaWorkspaceView,
     },
     {
       path: '/settings/ai-providers',

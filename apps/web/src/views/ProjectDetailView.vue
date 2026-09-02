@@ -119,6 +119,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           {{ t('scenePlan.actions.open') }}
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/media`"
+        >
+          {{ t('navigation.media') }}
+        </RouterLink>
       </p>
 
       <div
