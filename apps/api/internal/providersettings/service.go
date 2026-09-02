@@ -61,12 +61,26 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 			enabledModelsMap[mID] = true
 		}
 
+		enabledVoicesMap := make(map[providers.VoiceID]bool, len(st.EnabledVoiceIDs))
+		for _, vID := range st.EnabledVoiceIDs {
+			enabledVoicesMap[vID] = true
+		}
+
 		modelViews := make([]ModelSettingView, len(p.Models))
 		for i, m := range p.Models {
 			modelViews[i] = ModelSettingView{
 				ID:          m.ModelID,
 				DisplayName: m.DisplayName,
 				Enabled:     configured && st.Enabled && enabledModelsMap[m.ModelID],
+			}
+		}
+
+		voiceViews := make([]VoiceSettingView, len(p.Voices))
+		for i, v := range p.Voices {
+			voiceViews[i] = VoiceSettingView{
+				ID:          v.VoiceID,
+				DisplayName: v.DisplayName,
+				Enabled:     configured && st.Enabled && enabledVoicesMap[v.VoiceID],
 			}
 		}
 
@@ -78,6 +92,7 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 			HasAPIKey:   configured && len(st.APIKeyCiphertext) > 0,
 			Revision:    st.Revision,
 			Models:      modelViews,
+			Voices:      voiceViews,
 		})
 	}
 
@@ -625,6 +640,20 @@ func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView 
 		}
 	}
 
+	enabledVoiceMap := make(map[providers.VoiceID]bool, len(s.EnabledVoiceIDs))
+	for _, vID := range s.EnabledVoiceIDs {
+		enabledVoiceMap[vID] = true
+	}
+
+	voiceViews := make([]VoiceSettingView, len(p.Voices))
+	for i, v := range p.Voices {
+		voiceViews[i] = VoiceSettingView{
+			ID:          v.VoiceID,
+			DisplayName: v.DisplayName,
+			Enabled:     s.Enabled && enabledVoiceMap[v.VoiceID],
+		}
+	}
+
 	return ProviderSettingView{
 		ID:          p.ProviderID,
 		DisplayName: p.DisplayName,
@@ -633,6 +662,7 @@ func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView 
 		HasAPIKey:   len(s.APIKeyCiphertext) > 0,
 		Revision:    s.Revision,
 		Models:      modelViews,
+		Voices:      voiceViews,
 	}
 }
 

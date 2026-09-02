@@ -364,6 +364,7 @@ export default {
       apiKeyPreservedPlaceholder: '●●●●●●●● (Giữ nguyên khóa hiện tại)',
       enabled: 'Bật nhà cung cấp này',
       models: 'Các mô hình khả dụng',
+      voices: 'Các giọng nói (TTS)',
       revision: 'Phiên bản {value}',
     },
     actions: {

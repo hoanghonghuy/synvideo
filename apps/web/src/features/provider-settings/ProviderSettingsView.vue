@@ -20,6 +20,7 @@ const successMessage = ref<string | null>(null)
 interface ProviderFormState {
   enabled: boolean
   selectedModels: Record<string, boolean>
+  selectedVoices: Record<string, boolean>
   apiKeyInput: string
   showKey: boolean
   submitting: boolean
@@ -34,6 +35,7 @@ function getFormState(providerId: string): ProviderFormState {
     formStates[providerId] = {
       enabled: false,
       selectedModels: {},
+      selectedVoices: {},
       apiKeyInput: '',
       showKey: false,
       submitting: false,
@@ -50,9 +52,15 @@ function initFormState(p: ProviderSettingView) {
     modelsMap[m.id] = m.enabled
   })
 
+  const voicesMap: Record<string, boolean> = {}
+  p.voices.forEach((v) => {
+    voicesMap[v.id] = v.enabled
+  })
+
   formStates[p.id] = {
     enabled: p.enabled,
     selectedModels: modelsMap,
+    selectedVoices: voicesMap,
     apiKeyInput: '',
     showKey: false,
     submitting: false,
@@ -94,8 +102,11 @@ async function handleSave(provider: ProviderSettingView) {
   const enabledModelIDs = Object.entries(form.selectedModels)
     .filter(([, isSelected]) => isSelected)
     .map(([id]) => id)
+  const enabledVoiceIDs = Object.entries(form.selectedVoices)
+    .filter(([, isSelected]) => isSelected)
+    .map(([id]) => id)
 
-  if (form.enabled && enabledModelIDs.length === 0) {
+  if (form.enabled && enabledModelIDs.length === 0 && enabledVoiceIDs.length === 0) {
     form.error = t('providerSettings.errors.atLeastOneModel')
     return
   }
@@ -111,11 +122,15 @@ async function handleSave(provider: ProviderSettingView) {
     const payload: {
       revision?: number
       enabled: boolean
-      enabled_model_ids: string[]
+      enabled_text_model_ids: string[]
+      enabled_image_model_ids: string[]
+      enabled_voice_ids: string[]
       api_key?: string
     } = {
       enabled: form.enabled,
-      enabled_model_ids: enabledModelIDs,
+      enabled_text_model_ids: enabledModelIDs,
+      enabled_image_model_ids: enabledModelIDs,
+      enabled_voice_ids: enabledVoiceIDs,
     }
 
     if (provider.configured) {
@@ -315,6 +330,27 @@ onMounted(() => {
                 >
                 <span class="model-name">{{ model.display_name }}</span>
                 <span class="model-id">({{ model.id }})</span>
+              </label>
+            </div>
+          </div>
+
+          <div
+            v-if="provider.voices && provider.voices.length > 0"
+            class="form-group"
+          >
+            <label class="group-label">{{ t('providerSettings.fields.voices') }}</label>
+            <div class="models-grid">
+              <label
+                v-for="voice in provider.voices"
+                :key="voice.id"
+                class="checkbox-label model-option"
+              >
+                <input
+                  v-model="getFormState(provider.id).selectedVoices[voice.id]"
+                  type="checkbox"
+                >
+                <span class="model-name">{{ voice.display_name }}</span>
+                <span class="model-id">({{ voice.id }})</span>
               </label>
             </div>
           </div>

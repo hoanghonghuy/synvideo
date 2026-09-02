@@ -53,11 +53,19 @@ type ProviderSettingView struct {
 	HasAPIKey   bool                 `json:"has_api_key"`
 	Revision    int                  `json:"revision"`
 	Models      []ModelSettingView   `json:"models"`
+	Voices      []VoiceSettingView   `json:"voices"`
 }
 
 // ModelSettingView is the safe view of a model under a provider.
 type ModelSettingView struct {
 	ID          providers.ModelID `json:"id"`
+	DisplayName string            `json:"display_name"`
+	Enabled     bool              `json:"enabled"`
+}
+
+// VoiceSettingView is the safe view of a voice under a provider.
+type VoiceSettingView struct {
+	ID          providers.VoiceID `json:"id"`
 	DisplayName string            `json:"display_name"`
 	Enabled     bool              `json:"enabled"`
 }
