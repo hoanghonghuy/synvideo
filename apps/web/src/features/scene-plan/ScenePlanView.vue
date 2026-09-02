@@ -256,6 +256,7 @@ async function loadVersion(version: number, discardDirty = false): Promise<boole
     return false
   }
   const seq = ++currentVersionLoadSeq
+  const startSnapshot = JSON.stringify(formScenes.value)
   planLoading.value = true
   loadErrorCode.value = ''
   mutationErrorCode.value = ''
@@ -266,7 +267,9 @@ async function loadVersion(version: number, discardDirty = false): Promise<boole
     if (seq !== currentVersionLoadSeq) {
       return false
     }
-    if (dirty.value && !discardDirty) {
+    // Protect any fresh edits made while this request was in-flight
+    const formMutatedDuringRequest = JSON.stringify(formScenes.value) !== startSnapshot
+    if (formMutatedDuringRequest || (dirty.value && !discardDirty)) {
       pendingVersion.value = version
       return false
     }
@@ -336,7 +339,9 @@ async function saveAndSwitch() {
 
     const loaded = await loadVersion(targetVersion, true)
     if (!loaded) {
-      failedTargetVersion.value = targetVersion
+      if (pendingVersion.value === null) {
+        failedTargetVersion.value = targetVersion
+      }
       return
     }
     failedTargetVersion.value = null

@@ -952,6 +952,49 @@ describe('ScenePlanView', () => {
       'global_content_rule: Lỗi toàn cục không thuộc về field cụ thể.',
     )
   })
+
+  it('22. preserves new edits made while loadVersion(..., true) is in-flight and routes to pending guard', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [approvedPlan, draftPlan])
+    route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, draftPlan)
+
+    let resolveVersion2!: (value: unknown) => void
+    const version2Promise = new Promise((resolve) => {
+      resolveVersion2 = resolve
+    })
+    routeFn('GET', `/api/v1/projects/${projectId}/scene-plans/2`, () => version2Promise)
+    route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
+    route('GET', '/api/v1/ai/text-generation-options', providers)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    // Make initial dirty edit
+    await wrapper.find('[name="scene_visual_0"]').setValue('Edit 1 trước khi discard')
+    await wrapper.find('[data-testid="version-2"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="dirty-switch-warning"]').exists()).toBe(true)
+
+    // Trigger discard and switch (which calls loadVersion(2, true))
+    await wrapper.find('[data-testid="confirm-discard-switch"]').trigger('click')
+
+    // While GET /scene-plans/2 is pending in flight, user makes a BRAND NEW edit
+    await wrapper.find('[name="scene_visual_0"]').setValue('Edit 2 mới xuất hiện trong lúc GET pending')
+    expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(true)
+
+    // Now GET /scene-plans/2 resolves
+    resolveVersion2(jsonResponse(approvedPlan))
+    await flushPromises()
+
+    // New edit must NOT be lost/overwritten by version 2
+    expect((wrapper.find('[name="scene_visual_0"]').element as HTMLTextAreaElement).value).toBe(
+      'Edit 2 mới xuất hiện trong lúc GET pending',
+    )
+    expect(wrapper.find('[data-testid="dirty-state"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="dirty-switch-warning"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="version-1"]').classes()).toContain('active')
+  })
 })
 
 async function mountView() {
