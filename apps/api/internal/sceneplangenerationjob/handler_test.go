@@ -745,7 +745,7 @@ func TestHandler_Handle_OwnerCredentialResolution_LiveHttptest(t *testing.T) {
 			DisplayName: "OpenAI BYOK",
 			BaseURL:     upstream.URL,
 			Models: []providersettings.ModelDefinition{
-				{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o"},
+				{ModelID: "gpt-4o", DisplayName: "GPT-4o", ExternalModelID: "gpt-4o", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 			},
 		},
 	})
@@ -768,7 +768,7 @@ func TestHandler_Handle_OwnerCredentialResolution_LiveHttptest(t *testing.T) {
 	ctx := context.Background()
 	_, err = runtimeService.PutSetting(ctx, ownerID, "byok-openai", providersettings.PutSettingInput{
 		Enabled:         true,
-		EnabledModelIDs: []providers.ModelID{"gpt-4o"},
+		EnabledTextModelIDs: []providers.ModelID{"gpt-4o"},
 		APIKey:          &secretKey,
 	})
 	if err != nil {

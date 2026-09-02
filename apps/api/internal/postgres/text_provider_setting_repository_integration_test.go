@@ -31,7 +31,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          ownerA,
 			ProviderID:       providerA,
 			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini", "gpt-4o"},
+			EnabledTextModelIDs:  []providers.ModelID{"gpt-5-mini", "gpt-4o"},
 			APIKeyCiphertext: fakeCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -44,13 +44,13 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 		if created.Revision != 1 {
 			t.Fatalf("expected revision 1, got %d", created.Revision)
 		}
-		if !created.Enabled || len(created.EnabledModelIDs) != 2 {
+		if !created.Enabled || len(created.EnabledTextModelIDs) != 2 {
 			t.Fatalf("unexpected created setting fields: %+v", created)
 		}
 
 		// Plaintext sentinel is absent from stored ciphertext in DB
 		var dbCiphertext []byte
-		err = pool.QueryRow(ctx, `SELECT api_key_ciphertext FROM text_provider_settings WHERE owner_id = $1 AND provider_id = $2`, ownerA, string(providerA)).Scan(&dbCiphertext)
+		err = pool.QueryRow(ctx, `SELECT api_key_ciphertext FROM provider_settings WHERE owner_id = $1 AND provider_id = $2`, ownerA, string(providerA)).Scan(&dbCiphertext)
 		if err != nil {
 			t.Fatalf("query db ciphertext: %v", err)
 		}
@@ -64,7 +64,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          ownerA,
 			ProviderID:       providerA,
 			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
+			EnabledTextModelIDs:  []providers.ModelID{"gpt-5-mini"},
 			APIKeyCiphertext: fakeCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -96,7 +96,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          ownerA,
 			ProviderID:       providerB,
 			Enabled:          false,
-			EnabledModelIDs:  []providers.ModelID{"claude-3-5-sonnet"},
+			EnabledTextModelIDs:  []providers.ModelID{"claude-3-5-sonnet"},
 			APIKeyCiphertext: fakeCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -129,7 +129,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          ownerA,
 			ProviderID:       providerA,
 			Enabled:          false,
-			EnabledModelIDs:  []providers.ModelID{"gpt-4o"},
+			EnabledTextModelIDs:  []providers.ModelID{"gpt-4o"},
 			APIKeyCiphertext: newCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -149,7 +149,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          ownerA,
 			ProviderID:       providerA,
 			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-4o"},
+			EnabledTextModelIDs:  []providers.ModelID{"gpt-4o"},
 			APIKeyCiphertext: newCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -193,7 +193,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 			OwnerID:          concurrentOwner,
 			ProviderID:       concurrentProvider,
 			Enabled:          true,
-			EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
+			EnabledTextModelIDs:  []providers.ModelID{"gpt-5-mini"},
 			APIKeyCiphertext: fakeCiphertext,
 			APIKeyNonce:      fakeNonce,
 			KeyVersion:       "v1",
@@ -220,7 +220,7 @@ func TestTextProviderSettingRepository_Integration(t *testing.T) {
 					OwnerID:          concurrentOwner,
 					ProviderID:       concurrentProvider,
 					Enabled:          idx%2 == 0,
-					EnabledModelIDs:  []providers.ModelID{"gpt-5-mini"},
+					EnabledTextModelIDs:  []providers.ModelID{"gpt-5-mini"},
 					APIKeyCiphertext: []byte{byte(idx)},
 					APIKeyNonce:      fakeNonce,
 					KeyVersion:       "v1",

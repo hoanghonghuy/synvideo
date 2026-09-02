@@ -54,8 +54,8 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 	for _, p := range catalogProviders {
 		st, configured := settingsByProvider[p.ProviderID]
 
-		enabledModelsMap := make(map[providers.ModelID]bool, len(st.EnabledModelIDs))
-		for _, mID := range st.EnabledModelIDs {
+		enabledModelsMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
+		for _, mID := range st.EnabledTextModelIDs {
 			enabledModelsMap[mID] = true
 		}
 
@@ -96,17 +96,37 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return ProviderSettingView{}, ErrProviderNotFound
 	}
 
-	// Validate model IDs
-	if len(input.EnabledModelIDs) > 0 {
-		for _, mID := range input.EnabledModelIDs {
+	// Validate model IDs and voice IDs
+	if len(input.EnabledTextModelIDs) > 0 {
+		for _, mID := range input.EnabledTextModelIDs {
 			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
 				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityText) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support text capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
+	if len(input.EnabledImageModelIDs) > 0 {
+		for _, mID := range input.EnabledImageModelIDs {
+			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
+			}
+			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityImage) {
+				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support image capability", ErrInvalidSettingInput, mID)
+			}
+		}
+	}
+	if len(input.EnabledVoiceIDs) > 0 {
+		for _, vID := range input.EnabledVoiceIDs {
+			if _, ok := s.catalog.GetVoice(providerID, vID); !ok {
+				return ProviderSettingView{}, fmt.Errorf("%w: voice %q under provider %q", ErrModelNotFound, vID, providerID)
 			}
 		}
 	}
 
-	if input.Enabled && len(input.EnabledModelIDs) == 0 {
-		return ProviderSettingView{}, fmt.Errorf("%w: at least one model must be enabled when provider is enabled", ErrInvalidSettingInput)
+	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
+		return ProviderSettingView{}, fmt.Errorf("%w: at least one model or voice must be enabled when provider is enabled", ErrInvalidSettingInput)
 	}
 
 	existing, err := s.repo.GetByOwnerAndProvider(ctx, ownerID, providerID)
@@ -133,13 +153,15 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		}
 
 		setting := Setting{
-			OwnerID:          ownerID,
-			ProviderID:       providerID,
-			Enabled:          input.Enabled,
-			EnabledModelIDs:  input.EnabledModelIDs,
-			APIKeyCiphertext: ciphertext,
-			APIKeyNonce:      nonce,
-			KeyVersion:       s.cipher.KeyVersion(),
+			OwnerID:              ownerID,
+			ProviderID:           providerID,
+			Enabled:              input.Enabled,
+			EnabledTextModelIDs:  input.EnabledTextModelIDs,
+			EnabledImageModelIDs: input.EnabledImageModelIDs,
+			EnabledVoiceIDs:      input.EnabledVoiceIDs,
+			APIKeyCiphertext:     ciphertext,
+			APIKeyNonce:          nonce,
+			KeyVersion:           s.cipher.KeyVersion(),
 		}
 
 		saved, err := s.repo.Save(ctx, setting, nil)
@@ -175,13 +197,15 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 	}
 
 	setting := Setting{
-		OwnerID:          ownerID,
-		ProviderID:       providerID,
-		Enabled:          input.Enabled,
-		EnabledModelIDs:  input.EnabledModelIDs,
-		APIKeyCiphertext: ciphertext,
-		APIKeyNonce:      nonce,
-		KeyVersion:       keyVersion,
+		OwnerID:              ownerID,
+		ProviderID:           providerID,
+		Enabled:              input.Enabled,
+		EnabledTextModelIDs:  input.EnabledTextModelIDs,
+		EnabledImageModelIDs: input.EnabledImageModelIDs,
+		EnabledVoiceIDs:      input.EnabledVoiceIDs,
+		APIKeyCiphertext:     ciphertext,
+		APIKeyNonce:          nonce,
+		KeyVersion:           keyVersion,
 	}
 
 	saved, err := s.repo.Save(ctx, setting, input.Revision)
@@ -227,8 +251,8 @@ func (s *Service) GetOwnerTextGenerationOptions(ctx context.Context, ownerID uui
 			continue
 		}
 
-		enabledMap := make(map[providers.ModelID]bool, len(st.EnabledModelIDs))
-		for _, mID := range st.EnabledModelIDs {
+		enabledMap := make(map[providers.ModelID]bool, len(st.EnabledTextModelIDs))
+		for _, mID := range st.EnabledTextModelIDs {
 			enabledMap[mID] = true
 		}
 
@@ -286,7 +310,7 @@ func (s *Service) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, p
 	}
 
 	isModelEnabled := false
-	for _, mID := range setting.EnabledModelIDs {
+	for _, mID := range setting.EnabledTextModelIDs {
 		if mID == modelID {
 			isModelEnabled = true
 			break
@@ -327,8 +351,8 @@ func (s *Service) ResolveTextGenerator(ctx context.Context, ownerID uuid.UUID, p
 }
 
 func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView {
-	enabledMap := make(map[providers.ModelID]bool, len(s.EnabledModelIDs))
-	for _, mID := range s.EnabledModelIDs {
+	enabledMap := make(map[providers.ModelID]bool, len(s.EnabledTextModelIDs))
+	for _, mID := range s.EnabledTextModelIDs {
 		enabledMap[mID] = true
 	}
 

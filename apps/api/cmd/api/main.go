@@ -71,7 +71,7 @@ func main() {
 		scriptRepo := postgres.NewScriptRepository(pool)
 		scenePlanRepo := postgres.NewScenePlanRepository(pool)
 		jobsRepo := postgres.NewJobRepository(pool)
-		settingsRepo := postgres.NewTextProviderSettingRepository(pool)
+		settingsRepo := postgres.NewProviderSettingRepository(pool)
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
 

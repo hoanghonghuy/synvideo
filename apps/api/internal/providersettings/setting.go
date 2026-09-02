@@ -30,16 +30,18 @@ const (
 
 // Setting represents an owner's persisted settings and encrypted credential for a provider.
 type Setting struct {
-	OwnerID          uuid.UUID
-	ProviderID       providers.ProviderID
-	Revision         int
-	Enabled          bool
-	EnabledModelIDs  []providers.ModelID
-	APIKeyCiphertext []byte
-	APIKeyNonce      []byte
-	KeyVersion       string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	OwnerID              uuid.UUID
+	ProviderID           providers.ProviderID
+	Revision             int
+	Enabled              bool
+	EnabledTextModelIDs  []providers.ModelID
+	EnabledImageModelIDs []providers.ModelID
+	EnabledVoiceIDs      []providers.VoiceID
+	APIKeyCiphertext     []byte
+	APIKeyNonce          []byte
+	KeyVersion           string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ProviderSettingView is the safe, non-secret view of a provider's settings.
@@ -85,8 +87,10 @@ type TextGenerationOptionsResponse struct {
 
 // PutSettingInput is the request body for PUT /api/v1/ai/provider-settings/{provider_id}.
 type PutSettingInput struct {
-	Revision        *int                `json:"revision,omitempty"`
-	Enabled         bool                `json:"enabled"`
-	EnabledModelIDs []providers.ModelID `json:"enabled_model_ids"`
-	APIKey          *string             `json:"api_key,omitempty"`
+	Revision             *int                `json:"revision,omitempty"`
+	Enabled              bool                `json:"enabled"`
+	EnabledTextModelIDs  []providers.ModelID `json:"enabled_text_model_ids"`
+	EnabledImageModelIDs []providers.ModelID `json:"enabled_image_model_ids"`
+	EnabledVoiceIDs      []providers.VoiceID `json:"enabled_voice_ids"`
+	APIKey               *string             `json:"api_key,omitempty"`
 }
