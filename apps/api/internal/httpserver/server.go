@@ -60,7 +60,7 @@ func New(
 	scriptService ScriptService,
 	scenePlanService ScenePlanService,
 	proposalGenerationService ProposalGenerationService,
-	textProviderSettingsService TextProviderSettingsService,
+	providerSettingsService ProviderSettingsService,
 	scriptGenerationService ScriptGenerationService,
 	scenePlanGenerationService ScenePlanGenerationService,
 	actorResolver actor.Resolver,
@@ -110,8 +110,8 @@ func New(
 			mux.HandleFunc("GET /api/v1/projects/{id}/creative-proposal-generations/{job_id}", handler.get)
 		}
 	}
-	if textProviderSettingsService != nil && actorResolver != nil {
-		handler := providerSettingsHandler{service: textProviderSettingsService, actorResolver: actorResolver}
+	if providerSettingsService != nil && actorResolver != nil {
+		handler := providerSettingsHandler{service: providerSettingsService, actorResolver: actorResolver}
 		mux.HandleFunc("GET /api/v1/ai/provider-settings", handler.list)
 		mux.HandleFunc("PUT /api/v1/ai/provider-settings/{provider_id}", handler.put)
 		mux.HandleFunc("DELETE /api/v1/ai/provider-settings/{provider_id}", handler.delete)

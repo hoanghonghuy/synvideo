@@ -15,14 +15,14 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 )
 
-type TextProviderSettingsService interface {
+type ProviderSettingsService interface {
 	ListSettings(ctx context.Context, ownerID uuid.UUID) (providersettings.ProviderSettingsListResponse, error)
 	PutSetting(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, input providersettings.PutSettingInput) (providersettings.ProviderSettingView, error)
 	DeleteSetting(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID, revision int) error
 }
 
 type providerSettingsHandler struct {
-	service       TextProviderSettingsService
+	service       ProviderSettingsService
 	actorResolver actor.Resolver
 }
 
@@ -150,7 +150,7 @@ func writeProviderSettingsAPIError(w http.ResponseWriter, err error) {
 	case errors.Is(err, providersettings.ErrModelNotFound):
 		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{
 			Code:    "MODEL_NOT_FOUND",
-			Message: "Model not found in provider catalog.",
+			Message: "Model or voice not found in provider catalog.",
 		}})
 	case errors.Is(err, providersettings.ErrCredentialRequired):
 		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{
