@@ -1,11 +1,12 @@
 # TASK-022 — Scene Plan creator workspace
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
-Planned wave: WAVE-F1-I candidate
-Branch when activated: `feature/TASK-022-scene-plan-workspace`
+Wave: WAVE-F1-I
+Branch: `feature/TASK-022-scene-plan-workspace`
 Base: `develop`
-Depends on: TASK-019 accepted; TASK-021 backend contract frozen and implementation accepted or stable for exact API verification.
+Issue: #40
+Depends on: TASK-019 accepted; TASK-021 accepted via PR #50 / squash `9d2b5306df7755fbcbe487bcd8bd382e5340fdec`.
 
 ## Goal
 Deliver creator-usable Stage 7 Scene Plan history/edit/generate/approve workflow while protecting approved Script narration and durable generation recovery.
@@ -13,7 +14,7 @@ Deliver creator-usable Stage 7 Scene Plan history/edit/generate/approve workflow
 ## Frozen contract
 `docs/contracts/SCENE_PLAN_WORKSPACE_V1.md`.
 
-## Primary ownership when activated
+## Primary ownership
 - `apps/web/src/features/scene-plan/**`;
 - Scene Plan frontend API/types/tests;
 - minimal `/projects/:id/scene-plan` route;
@@ -41,12 +42,13 @@ Scene Plan is not a second Script editor. Any UI operation that can add/omit/par
 ## TDD
 Cover every frontend regression in `SCENE_PLAN_WORKSPACE_V1`, including split/merge preservation, dirty guards, transient polling recovery, exact-version success and long-form responsive behavior.
 
-## Activation gate
-Do **not** claim yet.
+## Activation evidence
+- TASK-019 merged and frontend router/locale/navigation hotspot is released;
+- TASK-021 backend/API accepted and revalidated against frozen workspace contract;
+- remote branch `feature/TASK-022-scene-plan-workspace` was absent at promotion;
+- no other active frontend task owns the same shared route/navigation surfaces.
 
-Before READY:
-- TASK-019 merged and frontend router/locale/navigation hotspot released;
-- TASK-021 API contract revalidated against accepted backend head;
-- PM/TL confirms no other active frontend task owns the same shared route/navigation files.
+## Worktree / claim
+Atomically create remote `feature/TASK-022-scene-plan-workspace` from latest `origin/develop`, then use a dedicated TASK-022 worktree. Shared/control checkout remains on `develop`.
 
-Do not self-mark READY/DONE or self-merge.
+Do not self-mark DONE or self-merge.
