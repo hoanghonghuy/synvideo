@@ -1,12 +1,15 @@
 # TASK-024 — Media Library + scene assignment workspace
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Planned wave: WAVE-F1-J
 Branch: `feature/TASK-024-media-workspace`
 Base: latest `develop`
 Depends on: TASK-022 and TASK-023 accepted/stable — satisfied.
 Issue: #42
+PR: #56
+Accepted head: `25db940f9b726fd50b00cda2cf9479c12292e8e2`
+Squash merge: `f0aa549f932c27e10b23ecf8420fe6992f1866f7`
 
 ## Goal
 Deliver the creator-facing Media Library and manual scene primary-visual assignment workflow without waiting for AI generation providers.
@@ -38,11 +41,9 @@ Frontend-only. Do not modify `apps/api/**`.
 No AI image/video generation, stock search, audio/TTS, crop/fit/timing editor, render/publish or backend changes.
 
 ## TDD
-Cover every regression in `MEDIA_LIBRARY_WORKSPACE_V1`, especially one-preview failure isolation, in-use delete conflict, per-scene replacement state, plan version switch and stale async route protection.
+Required regressions covered under `MEDIA_LIBRARY_WORKSPACE_V1`, including preview-failure isolation, in-use delete conflict, per-scene replacement state, plan-version switching and stale async route protection.
 
-## Claim gate
-TASK-022 and TASK-023 are DONE and the shared frontend hotspot is released. This task is claimable now.
+## Accepted result
+PR #56 was accepted on exact head `25db940f9b726fd50b00cda2cf9479c12292e8e2`, TL re-review `5090827272`, exact-head CI #279 green, and squash-merged to `develop` as `f0aa549f932c27e10b23ecf8420fe6992f1866f7`.
 
-Claim atomically from the then-current `origin/develop` using `feature/TASK-024-media-workspace`. Truthful RED → GREEN → REFACTOR, focused frontend tests, full `npm --prefix apps/web run verify`, and fresh PR CI are required.
-
-Do not self-mark DONE or self-merge.
+The task is complete. Do not re-claim or continue implementation from this task spec; any new outcome requires PM duplicate/overlap review under `docs/engineering/CONTROL_PLANE_PROTOCOL.md`.
