@@ -626,7 +626,285 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  .proposal-workspace {
+  .proposal-workspace,
+  .scene-plan-workspace {
     grid-template-columns: 1fr;
   }
 }
+
+.scene-plan-workspace {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 28px;
+  margin-top: 24px;
+}
+
+.scene-plan-history {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.scene-plan-history h2 {
+  margin: 0;
+  color: #253235;
+  font-size: 16px;
+}
+
+.scene-plan-version-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scene-plan-version-button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d7ddd5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #1d2527;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scene-plan-version-button.active {
+  border-color: #27634e;
+  background: #f4fbf7;
+}
+
+.scene-plan-version-button span {
+  font-weight: 700;
+}
+
+.scene-plan-version-button small,
+.scene-plan-meta {
+  color: #647275;
+}
+
+.scene-plan-editor {
+  min-width: 0;
+}
+
+.scene-plan-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.scene-plan-meta p {
+  margin: 0;
+}
+
+.scene-plan-generation-bar {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.scene-plan-form {
+  display: grid;
+  gap: 18px;
+  max-width: 760px;
+  margin-top: 24px;
+}
+
+.scene-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d7ddd5;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.scene-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scene-card-header h3 {
+  margin: 0;
+  color: #143d36;
+  font-size: 16px;
+}
+
+.scene-section-badge {
+  border-radius: 4px;
+  padding: 2px 8px;
+  background: #e7efe9;
+  color: #12302c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scene-narration-block {
+  display: grid;
+  gap: 6px;
+}
+
+.scene-narration-block label {
+  color: #253235;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scene-narration-display {
+  border: 1px solid #e1e7e3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #f9faf8;
+  color: #2e3b3d;
+  font-size: 14px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.scene-fields-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.scene-fields-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.scene-fields-grid span {
+  color: #253235;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scene-fields-grid input,
+.scene-fields-grid textarea,
+.scene-fields-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd6d0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #1d2527;
+  font: inherit;
+}
+
+.scene-fields-grid input:disabled,
+.scene-fields-grid textarea:disabled,
+.scene-fields-grid select:disabled {
+  background: #f4f6f4;
+  color: #647275;
+  cursor: not-allowed;
+}
+
+.scene-fields-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.scene-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.scene-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 48, 44, 0.4);
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  border: 1px solid #d7ddd5;
+  border-radius: 10px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  display: grid;
+  gap: 16px;
+}
+
+.modal-card h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #143d36;
+}
+
+.split-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.split-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.split-controls span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #253235;
+}
+
+.split-controls input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd6d0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.split-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-box {
+  border: 1px solid #e1e7e3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #f9faf8;
+}
+
+.preview-box strong {
+  display: block;
+  font-size: 12px;
+  color: #4f6b62;
+  margin-bottom: 4px;
+}
+
+.preview-box p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #1d2527;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
