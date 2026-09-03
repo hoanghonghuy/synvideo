@@ -27,8 +27,12 @@ func NewAssetStore(writer MediaAssetWriter, finder GeneratedAssetFinder) *AssetS
 }
 
 func (s *AssetStore) FindGeneratedByJob(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID) (mediaasset.MediaAsset, error) {
-	if principal.OwnerID == uuid.Nil { return mediaasset.MediaAsset{}, mediaasset.ErrUnauthenticated }
-	if s.finder == nil { return mediaasset.MediaAsset{}, mediaasset.ErrNotFound }
+	if principal.OwnerID == uuid.Nil {
+		return mediaasset.MediaAsset{}, mediaasset.ErrUnauthenticated
+	}
+	if s.finder == nil {
+		return mediaasset.MediaAsset{}, mediaasset.ErrNotFound
+	}
 	return s.finder.FindGeneratedByJob(ctx, principal.OwnerID, projectID, jobID)
 }
 

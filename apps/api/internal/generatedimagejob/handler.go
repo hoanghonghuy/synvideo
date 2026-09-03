@@ -17,10 +17,10 @@ import (
 
 const (
 	ErrorProviderUnavailable = "ERR_IMAGE_PROVIDER_UNAVAILABLE"
-	ErrorProviderFailed = "ERR_IMAGE_PROVIDER_FAILED"
-	ErrorStorageFailed = "ERR_IMAGE_STORAGE_FAILED"
-	ErrorAssignmentFailed = "ERR_IMAGE_ASSIGNMENT_FAILED"
-	ErrorInvalidPayload = "ERR_IMAGE_JOB_INVALID"
+	ErrorProviderFailed      = "ERR_IMAGE_PROVIDER_FAILED"
+	ErrorStorageFailed       = "ERR_IMAGE_STORAGE_FAILED"
+	ErrorAssignmentFailed    = "ERR_IMAGE_ASSIGNMENT_FAILED"
+	ErrorInvalidPayload      = "ERR_IMAGE_JOB_INVALID"
 )
 
 type GeneratedAssetStore interface {
@@ -34,8 +34,8 @@ type SceneBinder interface {
 }
 
 type Handler struct {
-	runtime ImageProviderRuntime
-	assets GeneratedAssetStore
+	runtime  ImageProviderRuntime
+	assets   GeneratedAssetStore
 	bindings SceneBinder
 }
 
@@ -60,7 +60,9 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	}
 	if errors.Is(err, mediaasset.ErrNotFound) {
 		asset, err = h.generateAndStore(ctx, principal, projectID, job.ID, payload)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	assigned := false
@@ -82,7 +84,9 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	}
 
 	result, err := json.Marshal(Result{MediaAssetID: asset.ID, AssignedPrimaryVisual: assigned})
-	if err != nil { return nil, jobs.NewTerminalError(ErrorInvalidPayload, err) }
+	if err != nil {
+		return nil, jobs.NewTerminalError(ErrorInvalidPayload, err)
+	}
 	return result, nil
 }
 
@@ -96,31 +100,43 @@ func (h *Handler) generateAndStore(ctx context.Context, principal project.Princi
 	}
 	one := 1
 	response, err := generator.GenerateImage(ctx, providers.ImageGenerationRequest{Prompt: payload.Prompt, AspectRatio: payload.AspectRatio, OutputCount: &one})
-	if err != nil { return mediaasset.MediaAsset{}, classifyProviderError(err) }
-	if err := response.Validate(); err != nil { return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorProviderFailed, err) }
+	if err != nil {
+		return mediaasset.MediaAsset{}, classifyProviderError(err)
+	}
+	if err := response.Validate(); err != nil {
+		return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorProviderFailed, err)
+	}
 	binary := response.Outputs[0].Binary
 	reader, err := binary.Open(ctx)
-	if err != nil { return mediaasset.MediaAsset{}, classifyProviderError(err) }
+	if err != nil {
+		return mediaasset.MediaAsset{}, classifyProviderError(err)
+	}
 	defer reader.Close()
 
 	metadata, err := json.Marshal(map[string]any{
 		"origin": "generated", "job_id": jobID.String(), "provider_id": payload.ProviderID, "model_id": payload.ModelID,
 		"scene_plan_version": payload.ScenePlanVersion, "scene_key": payload.SceneKey,
 	})
-	if err != nil { return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorInvalidPayload, err) }
+	if err != nil {
+		return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorInvalidPayload, err)
+	}
 	asset, err := h.assets.Store(ctx, principal, projectID, mediaasset.CreateInput{
 		Kind: mediaasset.KindImage, Origin: mediaasset.OriginGeneratedImage, MimeType: binary.MIMEType(), Metadata: metadata,
 		Reader: reader, MaxBytes: MaxGeneratedImageBytes,
 	})
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) { return mediaasset.MediaAsset{}, err }
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return mediaasset.MediaAsset{}, err
+		}
 		return mediaasset.MediaAsset{}, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
 	}
 	return asset, nil
 }
 
 func classifyProviderError(err error) error {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) { return err }
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if errors.Is(err, providers.ErrRateLimited) || errors.Is(err, providers.ErrTransientExecution) || errors.Is(err, providers.ErrProviderUnavailable) || errors.Is(err, providers.ErrAuthenticationUnavailable) {
 		return jobs.NewRetryableError(ErrorProviderFailed, err, nil)
 	}
