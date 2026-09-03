@@ -1,6 +1,6 @@
 # TASK-030 — Per-scene AI Image Generation Workspace
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
@@ -21,7 +21,7 @@ No cross-owner/project/scene generation; ambiguous submit reuses request ID; pol
 
 ## Acceptance criteria
 - [x] TASK-029 accepted on `develop`.
-- [ ] contract is on `develop` before READY.
+- [x] `GENERATED_IMAGE_WORKSPACE_V1` is on `develop`.
 - [ ] creator can generate/observe/resume/preview.
 - [ ] duplicate paid generation is avoided across ambiguous submit/recovery.
 - [ ] creator can keep alternative or assign/replace.
@@ -37,4 +37,4 @@ No cross-owner/project/scene generation; ambiguous submit reuses request ID; pol
 Follow `docs/engineering/TDD_PROTOCOL.md`; first RED coverage includes request-id reuse, same-job polling recovery, exact result load, asset-success/assignment-failure and stale-response protection.
 
 ## Activation gate
-BACKLOG. Promote only after this spec/contract are merged to `develop`, fresh overlap/branch checks are clean, and issue #65 moves to READY last.
+READY — TASK-029 is accepted, task/contract are on protected `develop`, duplicate/canonical-branch checks are clean, and issue #65 is the authoritative live authorization once updated to READY. Claim only by atomically creating `feature/TASK-030-image-generation-workspace` from current `origin/develop`.
