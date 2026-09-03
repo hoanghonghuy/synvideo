@@ -137,6 +137,39 @@ func TestStorageLocalS3CompatibleRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStorageLocalS3CompatibleInternalChunkRoundTrip(t *testing.T) {
+	endpoint := storageEnv("SYNVIDEO_MEDIA_STORAGE_ENDPOINT", "SYNVIDEO_S3_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("SYNVIDEO_MEDIA_STORAGE_ENDPOINT is not set; start local SeaweedFS/MinIO for this integration test")
+	}
+	cfg := validConfig()
+	cfg.Endpoint = endpoint
+	storage, err := s3storage.New(cfg)
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := storage.EnsureBucket(ctx); err != nil {
+		t.Fatalf("ensure bucket: %v", err)
+	}
+	key := "projects/22222222-2222-4222-8222-222222222222/internal_chunks/33333333-3333-4333-8333-333333333333/0"
+	want := "durable narration chunk"
+	if _, err := storage.Put(ctx, mediaasset.PutObjectInput{Key: key, Body: strings.NewReader(want), ContentType: "application/octet-stream"}); err != nil {
+		t.Fatalf("put internal chunk: %v", err)
+	}
+	t.Cleanup(func() { _ = storage.Delete(context.Background(), key) })
+	reader, err := storage.Open(ctx, key)
+	if err != nil {
+		t.Fatalf("open internal chunk: %v", err)
+	}
+	got, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil || string(got) != want {
+		t.Fatalf("read internal chunk: bytes=%q read_err=%v close_err=%v", got, readErr, closeErr)
+	}
+}
+
 func storageEnv(primary, legacy string) string {
 	if value := os.Getenv(primary); value != "" {
 		return value

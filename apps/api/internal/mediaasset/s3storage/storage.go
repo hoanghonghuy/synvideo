@@ -74,7 +74,7 @@ func New(cfg Config) (*Storage, error) {
 }
 
 func (s *Storage) Put(ctx context.Context, input mediaasset.PutObjectInput) (mediaasset.ObjectInfo, error) {
-	if err := mediaasset.ValidateObjectKey(input.Key); err != nil {
+	if err := mediaasset.ValidateObjectStorageKey(input.Key); err != nil {
 		return mediaasset.ObjectInfo{}, fmt.Errorf("%w", mediaasset.ErrStorageFailed)
 	}
 	if input.Body == nil {
@@ -90,7 +90,7 @@ func (s *Storage) Put(ctx context.Context, input mediaasset.PutObjectInput) (med
 }
 
 func (s *Storage) Stat(ctx context.Context, key string) (mediaasset.ObjectInfo, error) {
-	if err := mediaasset.ValidateObjectKey(key); err != nil {
+	if err := mediaasset.ValidateObjectStorageKey(key); err != nil {
 		return mediaasset.ObjectInfo{}, fmt.Errorf("%w", mediaasset.ErrStorageFailed)
 	}
 	operationCtx, cancel := s.operationContext(ctx)
@@ -141,7 +141,7 @@ func (s *Storage) OpenRange(ctx context.Context, key string, offset, length int6
 }
 
 func (s *Storage) Delete(ctx context.Context, key string) error {
-	if err := mediaasset.ValidateObjectKey(key); err != nil {
+	if err := mediaasset.ValidateObjectStorageKey(key); err != nil {
 		return fmt.Errorf("%w", mediaasset.ErrStorageFailed)
 	}
 	operationCtx, cancel := s.operationContext(ctx)

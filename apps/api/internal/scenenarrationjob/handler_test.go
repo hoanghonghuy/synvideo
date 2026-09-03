@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -144,8 +146,12 @@ func (b *fakeBinder) AssignNarration(_ context.Context, principal project.Princi
 }
 
 type inMemoryChunkStore struct {
-	mu     sync.Mutex
-	chunks map[string][]byte
+	mu          sync.Mutex
+	chunks      map[string][]byte
+	getErr      error
+	putErr      error
+	getCalls    int
+	putCalls    int
 }
 
 func newInMemoryChunkStore() *inMemoryChunkStore {
@@ -155,6 +161,10 @@ func newInMemoryChunkStore() *inMemoryChunkStore {
 func (s *inMemoryChunkStore) GetChunk(_ context.Context, _ uuid.UUID, jobID uuid.UUID, chunkIndex int) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.getCalls++
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
 	key := jobID.String() + ":" + string(rune('0'+chunkIndex))
 	data, ok := s.chunks[key]
 	if !ok {
@@ -166,6 +176,10 @@ func (s *inMemoryChunkStore) GetChunk(_ context.Context, _ uuid.UUID, jobID uuid
 func (s *inMemoryChunkStore) PutChunk(_ context.Context, _ uuid.UUID, jobID uuid.UUID, chunkIndex int, data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.putCalls++
+	if s.putErr != nil {
+		return s.putErr
+	}
 	key := jobID.String() + ":" + string(rune('0'+chunkIndex))
 	s.chunks[key] = append([]byte(nil), data...)
 	return nil
@@ -179,6 +193,107 @@ func (s *inMemoryChunkStore) DeleteChunks(_ context.Context, _ uuid.UUID, jobID 
 		delete(s.chunks, key)
 	}
 	return nil
+}
+
+func TestSceneNarrationHandler_ChunkStoreReadFailureDoesNotSynthesize(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	jobID := uuid.New()
+	sampleWAV := makeSampleWAV(1.0)
+	tts := &recordingTTS{sampleWAV: sampleWAV}
+	chunkStore := newInMemoryChunkStore()
+	chunkStore.getErr = errors.New("object storage unavailable")
+	assetStore := newFakeAssetStore()
+	handler := scenenarrationjob.NewHandler(
+		&fakeTTSRuntime{synthesizer: tts},
+		assetStore,
+		newFakeBinder(),
+		chunkStore,
+	)
+
+	payloadBytes, err := json.Marshal(scenenarrationjob.Payload{
+		SchemaVersion:    scenenarrationjob.SchemaVersion,
+		ProviderID:       "openai",
+		ModelID:          "tts-1",
+		VoiceID:          "voice-nova",
+		Format:           "wav",
+		ScenePlanVersion: 1,
+		SceneKey:         "sc-1",
+		NarrationText:    "Storage recovery must be safe.",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	projectRef := projectID
+	job := jobs.Job{ID: jobID, OwnerID: ownerID, ProjectID: &projectRef, Kind: scenenarrationjob.JobKind, Payload: payloadBytes}
+
+	got, err := handler.Handle(ctx, job)
+	if err == nil {
+		t.Fatalf("expected storage error, got result %s", got)
+	}
+	var retryErr *jobs.RetryableJobError
+	if !errors.As(err, &retryErr) || retryErr.Code != scenenarrationjob.ErrorStorageFailed {
+		t.Fatalf("expected retryable storage error, got %T %v", err, err)
+	}
+	if len(tts.requests) != 0 {
+		t.Fatalf("expected no paid synthesis after chunk read failure, got %d calls", len(tts.requests))
+	}
+	if len(assetStore.assets) != 0 {
+		t.Fatalf("expected no final asset after chunk read failure, got %d assets", len(assetStore.assets))
+	}
+}
+
+func TestSceneNarrationHandler_ChunkStoreWriteFailureStopsPaidWork(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	jobID := uuid.New()
+	sampleWAV := makeSampleWAV(1.0)
+	tts := &recordingTTS{sampleWAV: sampleWAV}
+	chunkStore := newInMemoryChunkStore()
+	chunkStore.putErr = errors.New("object storage write failed")
+	assetStore := newFakeAssetStore()
+	handler := scenenarrationjob.NewHandler(
+		&fakeTTSRuntime{synthesizer: tts},
+		assetStore,
+		newFakeBinder(),
+		chunkStore,
+	)
+
+	payloadBytes, err := json.Marshal(scenenarrationjob.Payload{
+		SchemaVersion:    scenenarrationjob.SchemaVersion,
+		ProviderID:       "openai",
+		ModelID:          "tts-1",
+		VoiceID:          "voice-nova",
+		Format:           "wav",
+		ScenePlanVersion: 1,
+		SceneKey:         "sc-1",
+		NarrationText:    strings.Repeat("Paid narration chunk. ", 250),
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	projectRef := projectID
+	job := jobs.Job{ID: jobID, OwnerID: ownerID, ProjectID: &projectRef, Kind: scenenarrationjob.JobKind, Payload: payloadBytes}
+
+	got, err := handler.Handle(ctx, job)
+	if err == nil {
+		t.Fatalf("expected storage error, got result %s", got)
+	}
+	var retryErr *jobs.RetryableJobError
+	if !errors.As(err, &retryErr) || retryErr.Code != scenenarrationjob.ErrorStorageFailed {
+		t.Fatalf("expected retryable storage error, got %T %v", err, err)
+	}
+	if len(tts.requests) != 1 {
+		t.Fatalf("expected exactly one paid synthesis before checkpoint failure, got %d calls", len(tts.requests))
+	}
+	if chunkStore.putCalls != 1 {
+		t.Fatalf("expected one failed checkpoint write, got %d calls", chunkStore.putCalls)
+	}
+	if len(assetStore.assets) != 0 {
+		t.Fatalf("expected no final asset after checkpoint failure, got %d assets", len(assetStore.assets))
+	}
 }
 
 func makeSampleWAV(durationSec float64) []byte {

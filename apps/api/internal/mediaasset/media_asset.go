@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -194,6 +195,28 @@ func isJSONObject(raw json.RawMessage) bool {
 func ValidateObjectKey(key string) error {
 	_, _, err := parseCanonicalObjectKey(key)
 	return err
+}
+
+// ValidateObjectStorageKey accepts canonical creator-visible asset keys and
+// private, project-scoped generation checkpoint keys.
+func ValidateObjectStorageKey(key string) error {
+	if err := ValidateObjectKey(key); err == nil {
+		return nil
+	}
+	if key == "" || strings.ContainsAny(key, "\\\r\n") || strings.Contains(key, "..") || strings.HasPrefix(key, "/") || strings.Contains(key, "://") {
+		return fmt.Errorf("object key is unsafe")
+	}
+	parts := strings.Split(key, "/")
+	if len(parts) != 5 || parts[0] != "projects" || parts[2] != "internal_chunks" {
+		return fmt.Errorf("object key is not a supported storage key")
+	}
+	projectID, projectErr := uuid.Parse(parts[1])
+	jobID, jobErr := uuid.Parse(parts[3])
+	chunkIndex, indexErr := strconv.Atoi(parts[4])
+	if projectErr != nil || jobErr != nil || projectID.String() != parts[1] || jobID.String() != parts[3] || indexErr != nil || chunkIndex < 0 || strconv.Itoa(chunkIndex) != parts[4] {
+		return fmt.Errorf("object key is not a supported storage key")
+	}
+	return nil
 }
 
 func ValidateObjectKeyForAsset(key string, projectID, assetID uuid.UUID) error {

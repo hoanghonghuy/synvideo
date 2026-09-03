@@ -142,7 +142,10 @@ func (h *Handler) synthesizeAndStore(ctx context.Context, principal project.Prin
 		// Try recovering chunk from chunkStore if available
 		if h.chunkStore != nil {
 			cached, err := h.chunkStore.GetChunk(ctx, projectID, jobID, i)
-			if err == nil && len(cached) > 0 {
+			if err != nil {
+				return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
+			}
+			if len(cached) > 0 {
 				audioChunks = append(audioChunks, cached)
 				continue
 			}
@@ -172,7 +175,9 @@ func (h *Handler) synthesizeAndStore(ctx context.Context, principal project.Prin
 		}
 
 		if h.chunkStore != nil {
-			_ = h.chunkStore.PutChunk(ctx, projectID, jobID, i, chunkBytes)
+			if err := h.chunkStore.PutChunk(ctx, projectID, jobID, i, chunkBytes); err != nil {
+				return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
+			}
 		}
 		audioChunks = append(audioChunks, chunkBytes)
 	}
