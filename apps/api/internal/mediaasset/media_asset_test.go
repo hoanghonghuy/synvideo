@@ -84,6 +84,22 @@ func TestObjectKeyValidationRejectsTraversalAndExternalSelectors(t *testing.T) {
 	}
 }
 
+func TestObjectStorageKeyValidationAcceptsInternalChunkKeys(t *testing.T) {
+	key := "projects/22222222-2222-4222-8222-222222222222/internal_chunks/33333333-3333-4333-8333-333333333333/0"
+	if err := mediaasset.ValidateObjectStorageKey(key); err != nil {
+		t.Fatalf("expected internal chunk key to pass: %v", err)
+	}
+	for _, unsafeKey := range []string{
+		"projects/22222222-2222-4222-8222-222222222222/internal_chunks/33333333-3333-4333-8333-333333333333/-1",
+		"projects/22222222-2222-4222-8222-222222222222/internal_chunks/33333333-3333-4333-8333-333333333333/../0",
+		"projects/22222222-2222-4222-8222-222222222222/internal_chunks/not-a-job/0",
+	} {
+		if err := mediaasset.ValidateObjectStorageKey(unsafeKey); err == nil {
+			t.Errorf("expected internal key %q to fail", unsafeKey)
+		}
+	}
+}
+
 func TestAssetValidationRejectsObjectKeyIdentityMismatch(t *testing.T) {
 	asset := validAssetForValidation()
 
