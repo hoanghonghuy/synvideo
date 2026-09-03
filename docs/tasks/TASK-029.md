@@ -64,5 +64,7 @@ Reuse existing durable job abstractions, MediaAsset/storage ports, scene media b
 ## Completion evidence
 DONE via PR #63, merged into `develop` as `2dbba467ccc77d489f123210fb2e680f91e93c15`. Exact implementation head `1b9a91238b33dfac83e60044f06b09cfde9c3886` passed CI #328 with Frontend, Backend (including real PostgreSQL + SeaweedFS integration coverage), and Local Infrastructure all green.
 
+Post-merge status reconciliation was refreshed onto current `develop` after activation planning PR #76, so this completion record does not overwrite newer planning state.
+
 ## Activation gate
 DONE — implementation merged through PR #63 after PM/TL exact-head review and protected CI quality gate.
