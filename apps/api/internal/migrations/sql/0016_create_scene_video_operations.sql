@@ -1,3 +1,6 @@
+ALTER TABLE provider_settings
+	ADD COLUMN enabled_video_model_ids jsonb NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE scene_video_operations (
 	job_id uuid PRIMARY KEY,
 	owner_id uuid NOT NULL,
