@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	JobKind       = "scene_video_generation_v1"
-	SchemaVersion = "scene_video_generation_job_v1"
+	JobKind                      = "scene_video_generation_v1"
+	SchemaVersion                = "scene_video_generation_job_v1"
 	MaxGeneratedVideoBytes int64 = 2 << 30
 )
 
