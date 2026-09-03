@@ -40,8 +40,8 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-027 | Provider-neutral TTS + OpenAI speech adapter | DONE | Accepted. |
 | TASK-028 | Secure multi-capability provider runtime/settings | DONE | Accepted PR #58. |
 | TASK-029 | Durable generated-image acquisition + MediaAsset ingestion | DONE | Issue #60 closed; PR #63 squash `2dbba467...`. |
-| TASK-030 | Per-scene AI Image Generation Workspace | BACKLOG | Issue #65; frozen workspace contract in planning PR #64. |
-| TASK-031 | Scene Narration & Voice V1 | BACKLOG | Issue #66; frozen narration contract in planning PR #64. |
+| TASK-030 | Per-scene AI Image Generation Workspace | READY | Issue #65; canonical branch `feature/TASK-030-image-generation-workspace`. |
+| TASK-031 | Scene Narration & Voice V1 | READY | Issue #66; canonical branch `feature/TASK-031-scene-narration-voice`. |
 | TASK-032 | Per-scene AI Video Generation V1 | BACKLOG | Issue #67; fresh provider research required before READY. |
 | TASK-033 | Stock Media Search & Acquisition V1 | BACKLOG | Issue #68; provider/license contract required before READY. |
 | TASK-034 | Captions & Scene Timing V1 | BACKLOG | Issue #69; depends on TASK-031. |
@@ -50,11 +50,12 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
-## Candidate WAVE-F1-K
-- TASK-030 — Per-scene AI Image Generation Workspace.
-- TASK-031 — Scene Narration & Voice V1.
-
-After planning PR #64 lands, both have satisfied foundational dependencies. PM/TL must still perform fresh branch/overlap/write-surface checks and promote each issue to READY last. Do not manufacture a third task merely to fill a slot.
+## Active WAVE-F1-K authorization
+- TASK-030 and TASK-031 are the only newly authorized feature tasks.
+- They may be claimed independently using their exact canonical branch as an atomic lock from current `origin/develop`.
+- TASK-030 primarily owns the generated-image creator workspace surface.
+- TASK-031 owns dedicated narration/audio orchestration, binding and UI. Shared runtime/router/locale integration hotspots must remain minimal and explicitly reconciled.
+- Do not manufacture a third task merely to fill a slot.
 
 ## Subsequent sequence
 1. TASK-032 video after fresh provider revalidation.

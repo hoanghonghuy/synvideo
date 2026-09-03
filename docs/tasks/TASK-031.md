@@ -1,6 +1,6 @@
 # TASK-031 — Scene Narration & Voice V1
 
-Status: BACKLOG
+Status: READY
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
@@ -20,7 +20,7 @@ Immutable narration snapshot; owner-scoped TTS model/voice resolution; determini
 Never trim/rewrite/truncate narration; execute against snapped source; all chunks synthesized in order; invalid/disabled options fail before paid work; duplicate request/worker delivery does not duplicate logical outcome; retry reuses durable chunk work where safe; final asset is normal creator-visible audio; audio binding separate from visual; asset and binding success distinct; refresh resumes same job; deliberate regeneration preserves history.
 
 ## Acceptance criteria
-- [ ] contract on `develop` before READY.
+- [x] `SCENE_NARRATION_V1` is on `develop`.
 - [ ] exact narration/chunking invariants proven.
 - [ ] durable paid-work recovery proven.
 - [ ] final generated audio + measured duration persisted.
@@ -38,4 +38,4 @@ Inspect current MoneyPrinterTurbo and short-video-maker references/licenses befo
 First RED set covers exact narration, chunk recomposition, idempotency, durable chunk recovery, final asset ingestion and replacement history.
 
 ## Activation gate
-BACKLOG. May be promoted independently after this planning PR merges, fresh overlap/write-surface checks are clean, and issue #66 moves to READY last.
+READY — task/contract are on protected `develop`, foundational dependencies are accepted, duplicate/canonical-branch checks are clean, and issue #66 is the authoritative live authorization once updated to READY. Claim only by atomically creating `feature/TASK-031-scene-narration-voice` from current `origin/develop`.
