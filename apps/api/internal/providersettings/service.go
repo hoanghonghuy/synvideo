@@ -64,6 +64,10 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 		for _, mID := range st.EnabledImageModelIDs {
 			enabledImageMap[mID] = true
 		}
+		enabledVideoMap := make(map[providers.ModelID]bool, len(st.EnabledVideoModelIDs))
+		for _, mID := range st.EnabledVideoModelIDs {
+			enabledVideoMap[mID] = true
+		}
 		enabledTTSMap := make(map[providers.ModelID]bool, len(st.EnabledTTSModelIDs))
 		for _, mID := range st.EnabledTTSModelIDs {
 			enabledTTSMap[mID] = true
@@ -82,6 +86,7 @@ func (s *Service) ListSettings(ctx context.Context, ownerID uuid.UUID) (Provider
 				Capabilities: m.Capabilities,
 				EnabledText:  configured && st.Enabled && enabledTextMap[m.ModelID],
 				EnabledImage: configured && st.Enabled && enabledImageMap[m.ModelID],
+				EnabledVideo: configured && st.Enabled && enabledVideoMap[m.ModelID],
 				EnabledTTS:   configured && st.Enabled && enabledTTSMap[m.ModelID],
 			}
 		}
@@ -125,41 +130,22 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 	}
 
 	// Backward compatibility: merge legacy enabled_model_ids into enabled_text_model_ids
-	// if explicit text list is empty (TASK-017 clients)
+	// if explicit text list is empty (TASK-017 clients).
 	if len(input.EnabledModelIDs) > 0 && len(input.EnabledTextModelIDs) == 0 {
 		input.EnabledTextModelIDs = input.EnabledModelIDs
 	}
 
-	// Validate model IDs and voice IDs
-	if len(input.EnabledTextModelIDs) > 0 {
-		for _, mID := range input.EnabledTextModelIDs {
-			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
-			}
-			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityText) {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support text capability", ErrInvalidSettingInput, mID)
-			}
-		}
+	if err := s.validateEnabledModels(providerID, input.EnabledTextModelIDs, CapabilityText); err != nil {
+		return ProviderSettingView{}, err
 	}
-	if len(input.EnabledImageModelIDs) > 0 {
-		for _, mID := range input.EnabledImageModelIDs {
-			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
-			}
-			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityImage) {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support image capability", ErrInvalidSettingInput, mID)
-			}
-		}
+	if err := s.validateEnabledModels(providerID, input.EnabledImageModelIDs, CapabilityImage); err != nil {
+		return ProviderSettingView{}, err
 	}
-	if len(input.EnabledTTSModelIDs) > 0 {
-		for _, mID := range input.EnabledTTSModelIDs {
-			if _, ok := s.catalog.GetModel(providerID, mID); !ok {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, mID, providerID)
-			}
-			if !s.catalog.ModelSupportsCapability(providerID, mID, CapabilityTTS) {
-				return ProviderSettingView{}, fmt.Errorf("%w: model %q does not support tts capability", ErrInvalidSettingInput, mID)
-			}
-		}
+	if err := s.validateEnabledModels(providerID, input.EnabledVideoModelIDs, CapabilityVideo); err != nil {
+		return ProviderSettingView{}, err
+	}
+	if err := s.validateEnabledModels(providerID, input.EnabledTTSModelIDs, CapabilityTTS); err != nil {
+		return ProviderSettingView{}, err
 	}
 	if len(input.EnabledVoiceIDs) > 0 {
 		for _, vID := range input.EnabledVoiceIDs {
@@ -169,7 +155,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		}
 	}
 
-	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledTTSModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
+	if input.Enabled && len(input.EnabledTextModelIDs) == 0 && len(input.EnabledImageModelIDs) == 0 && len(input.EnabledVideoModelIDs) == 0 && len(input.EnabledTTSModelIDs) == 0 && len(input.EnabledVoiceIDs) == 0 {
 		return ProviderSettingView{}, fmt.Errorf("%w: at least one model or voice must be enabled when provider is enabled", ErrInvalidSettingInput)
 	}
 
@@ -179,7 +165,6 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return ProviderSettingView{}, fmt.Errorf("get existing setting: %w", err)
 	}
 
-	// First configuration: revision must be omitted (nil), api_key is required
 	if !isExisting {
 		if input.Revision != nil {
 			return ProviderSettingView{}, ErrStaleRevision
@@ -202,6 +187,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 			Enabled:              input.Enabled,
 			EnabledTextModelIDs:  input.EnabledTextModelIDs,
 			EnabledImageModelIDs: input.EnabledImageModelIDs,
+			EnabledVideoModelIDs: input.EnabledVideoModelIDs,
 			EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
 			EnabledVoiceIDs:      input.EnabledVoiceIDs,
 			APIKeyCiphertext:     ciphertext,
@@ -216,7 +202,6 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		return toProviderSettingView(provDef, saved), nil
 	}
 
-	// Update existing configuration
 	if input.Revision == nil || *input.Revision != existing.Revision {
 		return ProviderSettingView{}, ErrStaleRevision
 	}
@@ -247,6 +232,7 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 		Enabled:              input.Enabled,
 		EnabledTextModelIDs:  input.EnabledTextModelIDs,
 		EnabledImageModelIDs: input.EnabledImageModelIDs,
+		EnabledVideoModelIDs: input.EnabledVideoModelIDs,
 		EnabledTTSModelIDs:   input.EnabledTTSModelIDs,
 		EnabledVoiceIDs:      input.EnabledVoiceIDs,
 		APIKeyCiphertext:     ciphertext,
@@ -260,6 +246,18 @@ func (s *Service) PutSetting(ctx context.Context, ownerID uuid.UUID, providerID 
 	}
 
 	return toProviderSettingView(provDef, saved), nil
+}
+
+func (s *Service) validateEnabledModels(providerID providers.ProviderID, modelIDs []providers.ModelID, capability Capability) error {
+	for _, modelID := range modelIDs {
+		if _, ok := s.catalog.GetModel(providerID, modelID); !ok {
+			return fmt.Errorf("%w: model %q under provider %q", ErrModelNotFound, modelID, providerID)
+		}
+		if !s.catalog.ModelSupportsCapability(providerID, modelID, capability) {
+			return fmt.Errorf("%w: model %q does not support %s capability", ErrInvalidSettingInput, modelID, capability)
+		}
+	}
+	return nil
 }
 
 // DeleteSetting removes an owner's settings and encrypted credential for a provider.
@@ -647,7 +645,6 @@ func (s *Service) ResolveSpeechSynthesizer(ctx context.Context, ownerID uuid.UUI
 		return nil, providers.ErrProviderUnavailable
 	}
 
-	// Filter voices to only those enabled by owner
 	enabledVoiceMap := make(map[providers.VoiceID]bool, len(setting.EnabledVoiceIDs))
 	for _, vID := range setting.EnabledVoiceIDs {
 		enabledVoiceMap[vID] = true
@@ -705,6 +702,10 @@ func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView 
 	for _, mID := range s.EnabledImageModelIDs {
 		enabledImageMap[mID] = true
 	}
+	enabledVideoMap := make(map[providers.ModelID]bool, len(s.EnabledVideoModelIDs))
+	for _, mID := range s.EnabledVideoModelIDs {
+		enabledVideoMap[mID] = true
+	}
 	enabledTTSMap := make(map[providers.ModelID]bool, len(s.EnabledTTSModelIDs))
 	for _, mID := range s.EnabledTTSModelIDs {
 		enabledTTSMap[mID] = true
@@ -718,6 +719,7 @@ func toProviderSettingView(p ProviderDefinition, s Setting) ProviderSettingView 
 			Capabilities: m.Capabilities,
 			EnabledText:  s.Enabled && enabledTextMap[m.ModelID],
 			EnabledImage: s.Enabled && enabledImageMap[m.ModelID],
+			EnabledVideo: s.Enabled && enabledVideoMap[m.ModelID],
 			EnabledTTS:   s.Enabled && enabledTTSMap[m.ModelID],
 		}
 	}
