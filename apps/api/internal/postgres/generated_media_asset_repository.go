@@ -13,7 +13,7 @@ func (r *MediaAssetRepository) FindGeneratedByJob(ctx context.Context, ownerID, 
 	query := fmt.Sprintf(`
 		SELECT %s FROM media_assets
 		WHERE owner_id = $1 AND project_id = $2
-		  AND origin IN ('generated_image', 'generated_audio')
+		  AND origin IN ('generated_image', 'generated_video', 'generated_audio')
 		  AND metadata ->> 'job_id' = $3
 		  AND deletion_requested_at IS NULL
 		ORDER BY created_at ASC, id ASC
