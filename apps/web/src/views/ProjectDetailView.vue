@@ -125,6 +125,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           {{ t('navigation.media') }}
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/narration`"
+        >
+          {{ t('navigation.sceneNarration') }}
+        </RouterLink>
       </p>
 
       <div

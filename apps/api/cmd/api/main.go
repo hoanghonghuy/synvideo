@@ -26,6 +26,8 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenemedia"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarration"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarrationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplan"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplangenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
@@ -88,8 +90,10 @@ func main() {
 	var scriptGenerationService *scriptgenerationjob.Service
 	var scenePlanGenerationService *sceneplangenerationjob.Service
 	var generatedImageGenerationService *generatedimagejob.Service
+	var sceneNarrationJobService *scenenarrationjob.Service
 	var mediaAssetService *mediaasset.Service
 	var sceneMediaService *scenemedia.Service
+	var sceneNarrationService *scenenarration.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -110,6 +114,7 @@ func main() {
 		settingsRepo := postgres.NewProviderSettingRepository(pool)
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
+		narrationBindingRepo := postgres.NewSceneNarrationBindingRepository(pool)
 
 		var cipher providersettings.Cipher
 		if cfg.CredentialEncryptionKey != "" {
@@ -134,8 +139,10 @@ func main() {
 		scriptService = script.NewService(scriptRepo)
 		scenePlanService = sceneplan.NewService(scenePlanRepo)
 
+		var storage *s3storage.Storage
 		if cfg.MediaStorage.Configured() {
-			storage, storageErr := s3storage.New(s3storage.Config{
+			var storageErr error
+			storage, storageErr = s3storage.New(s3storage.Config{
 				Endpoint:        cfg.MediaStorage.Endpoint,
 				Region:          cfg.MediaStorage.Region,
 				Bucket:          cfg.MediaStorage.Bucket,
@@ -157,6 +164,8 @@ func main() {
 			mediaAssetService = mediaasset.NewService(projectRepo, mediaAssetRepo, storage)
 			sceneMediaService = scenemedia.NewService(scenePlanRepo, mediaAssetRepo, bindingRepo)
 			generatedImageGenerationService = generatedimagejob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
+			sceneNarrationService = scenenarration.NewService(narrationBindingRepo, scenePlanRepo, mediaAssetRepo)
+			sceneNarrationJobService = scenenarrationjob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 		}
 
 		proposalJobHandler := proposalgenerationjob.NewHandlerWithResolver(providerSettingsService, proposalRepo)
@@ -184,6 +193,15 @@ func main() {
 				os.Exit(1)
 			}
 		}
+		if mediaAssetService != nil && sceneNarrationService != nil {
+			narrationAssetStore := scenenarrationjob.NewAssetStore(mediaAssetService, mediaAssetRepo)
+			narrationChunkStore := scenenarrationjob.NewObjectStorageChunkStore(storage)
+			narrationJobHandler := scenenarrationjob.NewHandler(providerSettingsService, narrationAssetStore, sceneNarrationService, narrationChunkStore)
+			if err := jobsRegistry.Register(scenenarrationjob.JobKind, narrationJobHandler); err != nil {
+				logger.Error("register scene narration job handler failed", "error", err)
+				os.Exit(1)
+			}
+		}
 
 		executor := jobs.NewExecutor(jobsRepo, jobsRegistry, jobs.ExecutorConfig{
 			LeaseDuration:  30 * time.Second,
@@ -199,7 +217,13 @@ func main() {
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
 		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
 		scenePlanGenerationService = sceneplangenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, scriptRepo, proposalRepo)
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg), httpserver.MediaServices{Assets: mediaAssetService, Bindings: sceneMediaService, GeneratedImages: generatedImageGenerationService})
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg), httpserver.MediaServices{
+			Assets:          mediaAssetService,
+			Bindings:        sceneMediaService,
+			GeneratedImages: generatedImageGenerationService,
+			Narrations:      sceneNarrationService,
+			GeneratedAudio:  sceneNarrationJobService,
+		})
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
 	}
