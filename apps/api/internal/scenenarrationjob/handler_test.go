@@ -146,12 +146,12 @@ func (b *fakeBinder) AssignNarration(_ context.Context, principal project.Princi
 }
 
 type inMemoryChunkStore struct {
-	mu          sync.Mutex
-	chunks      map[string][]byte
-	getErr      error
-	putErr      error
-	getCalls    int
-	putCalls    int
+	mu       sync.Mutex
+	chunks   map[string][]byte
+	getErr   error
+	putErr   error
+	getCalls int
+	putCalls int
 }
 
 func newInMemoryChunkStore() *inMemoryChunkStore {
