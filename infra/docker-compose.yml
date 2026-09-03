@@ -28,7 +28,9 @@ services:
 
   seaweed-volume:
     image: chrislusf/seaweedfs:4.44
-    command: volume -ip=seaweed-volume -ip.bind=0.0.0.0 -master=seaweed-master:9333 -dir=/data -max=5 -metricsPort=9325
+    # Let SeaweedFS size the volume pool from available disk so concurrent
+    # integration buckets do not exhaust the development volume server.
+    command: volume -ip=seaweed-volume -ip.bind=0.0.0.0 -master=seaweed-master:9333 -dir=/data -max=0 -metricsPort=9325
     volumes:
       - seaweed-volume-data:/data
     depends_on:
