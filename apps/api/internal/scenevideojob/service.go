@@ -68,13 +68,23 @@ func NewService(runtime VideoProviderRuntime, jobsRepo jobs.Repository, projects
 }
 
 func (s *Service) CreateGeneration(ctx context.Context, principal project.Principal, projectID uuid.UUID, planVersion int, sceneKey string, input CreateGenerationInput) (JobView, error) {
-	if principal.OwnerID == uuid.Nil { return JobView{}, ErrUnauthenticated }
-	if input.RequestID == uuid.Nil { return JobView{}, ErrInvalidRequestID }
-	if projectID == uuid.Nil || planVersion < 1 || sceneKey == "" { return JobView{}, ErrScenePlanNotFound }
-	if input.ProviderID == "" || input.ModelID == "" { return JobView{}, ErrProviderUnavailable }
+	if principal.OwnerID == uuid.Nil {
+		return JobView{}, ErrUnauthenticated
+	}
+	if input.RequestID == uuid.Nil {
+		return JobView{}, ErrInvalidRequestID
+	}
+	if projectID == uuid.Nil || planVersion < 1 || sceneKey == "" {
+		return JobView{}, ErrScenePlanNotFound
+	}
+	if input.ProviderID == "" || input.ModelID == "" {
+		return JobView{}, ErrProviderUnavailable
+	}
 
 	if existing, err := s.jobs.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID); err == nil {
-		if err := validateExistingJob(existing, planVersion, sceneKey, input); err != nil { return JobView{}, err }
+		if err := validateExistingJob(existing, planVersion, sceneKey, input); err != nil {
+			return JobView{}, err
+		}
 		return ToJobView(existing), nil
 	} else if !errors.Is(err, jobs.ErrJobNotFound) {
 		return JobView{}, err
@@ -82,42 +92,70 @@ func (s *Service) CreateGeneration(ctx context.Context, principal project.Princi
 
 	proj, err := s.projects.Get(ctx, principal.OwnerID, projectID)
 	if err != nil {
-		if errors.Is(err, project.ErrNotFound) { return JobView{}, ErrProjectNotFound }
+		if errors.Is(err, project.ErrNotFound) {
+			return JobView{}, ErrProjectNotFound
+		}
 		return JobView{}, err
 	}
 	plan, err := s.plans.GetByVersion(ctx, principal.OwnerID, projectID, planVersion)
 	if err != nil {
-		if errors.Is(err, sceneplan.ErrNotFound) { return JobView{}, ErrScenePlanNotFound }
+		if errors.Is(err, sceneplan.ErrNotFound) {
+			return JobView{}, ErrScenePlanNotFound
+		}
 		return JobView{}, err
 	}
-	if plan.ProjectID != projectID { return JobView{}, ErrScenePlanNotFound }
-	if plan.Status != sceneplan.StatusApproved { return JobView{}, ErrScenePlanNotApproved }
+	if plan.ProjectID != projectID {
+		return JobView{}, ErrScenePlanNotFound
+	}
+	if plan.Status != sceneplan.StatusApproved {
+		return JobView{}, ErrScenePlanNotApproved
+	}
 	var scene *sceneplan.Scene
 	for i := range plan.Scenes {
-		if plan.Scenes[i].Key == sceneKey { scene = &plan.Scenes[i]; break }
+		if plan.Scenes[i].Key == sceneKey {
+			scene = &plan.Scenes[i]
+			break
+		}
 	}
-	if scene == nil { return JobView{}, ErrSceneKeyNotFound }
+	if scene == nil {
+		return JobView{}, ErrSceneKeyNotFound
+	}
 
-	if s.runtime == nil { return JobView{}, ErrProviderUnavailable }
+	if s.runtime == nil {
+		return JobView{}, ErrProviderUnavailable
+	}
 	generator, err := s.runtime.ResolveVideoGenerator(ctx, principal.OwnerID, providers.ProviderID(input.ProviderID), providers.ModelID(input.ModelID))
-	if err != nil || generator == nil { return JobView{}, ErrProviderUnavailable }
+	if err != nil || generator == nil {
+		return JobView{}, ErrProviderUnavailable
+	}
 
 	request := providers.VideoGenerationRequest{Prompt: scene.VisualInstruction, AspectRatio: string(proj.AspectRatio), DurationSeconds: input.DurationSeconds}
-	if err := request.Validate(); err != nil { return JobView{}, ErrProviderUnavailable }
+	if err := request.Validate(); err != nil {
+		return JobView{}, ErrProviderUnavailable
+	}
 	payload := Payload{
-		SchemaVersion: SchemaVersion, ProviderID: input.ProviderID, ModelID: input.ModelID,
-		ScenePlanVersion: planVersion, SceneKey: sceneKey, Prompt: scene.VisualInstruction,
-		AspectRatio: string(proj.AspectRatio), DurationSeconds: input.DurationSeconds,
+		SchemaVersion:       SchemaVersion,
+		ProviderID:          input.ProviderID,
+		ModelID:             input.ModelID,
+		ScenePlanVersion:    planVersion,
+		SceneKey:            sceneKey,
+		Prompt:              scene.VisualInstruction,
+		AspectRatio:         string(proj.AspectRatio),
+		DurationSeconds:     input.DurationSeconds,
 		AssignPrimaryVisual: input.AssignPrimaryVisual,
 	}
 	payloadBytes, err := json.Marshal(payload)
-	if err != nil { return JobView{}, fmt.Errorf("marshal scene video payload: %w", err) }
+	if err != nil {
+		return JobView{}, fmt.Errorf("marshal scene video payload: %w", err)
+	}
 	job, err := s.jobs.Enqueue(ctx, jobs.EnqueueInput{ID: input.RequestID, OwnerID: principal.OwnerID, ProjectID: &projectID, Kind: JobKind, MaxAttempts: 20, Payload: payloadBytes})
 	if err != nil {
 		if errors.Is(err, jobs.ErrDuplicateJob) {
 			race, getErr := s.jobs.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID)
 			if getErr == nil {
-				if valErr := validateExistingJob(race, planVersion, sceneKey, input); valErr != nil { return JobView{}, valErr }
+				if valErr := validateExistingJob(race, planVersion, sceneKey, input); valErr != nil {
+					return JobView{}, valErr
+				}
 				return ToJobView(race), nil
 			}
 			return JobView{}, ErrGenerationRequestConflict
@@ -128,9 +166,13 @@ func (s *Service) CreateGeneration(ctx context.Context, principal project.Princi
 }
 
 func validateExistingJob(job jobs.Job, planVersion int, sceneKey string, input CreateGenerationInput) error {
-	if job.Kind != JobKind { return ErrGenerationRequestConflict }
+	if job.Kind != JobKind {
+		return ErrGenerationRequestConflict
+	}
 	var payload Payload
-	if json.Unmarshal(job.Payload, &payload) != nil { return ErrGenerationRequestConflict }
+	if json.Unmarshal(job.Payload, &payload) != nil {
+		return ErrGenerationRequestConflict
+	}
 	if payload.SchemaVersion != SchemaVersion || payload.ScenePlanVersion != planVersion || payload.SceneKey != sceneKey ||
 		payload.ProviderID != input.ProviderID || payload.ModelID != input.ModelID || payload.AssignPrimaryVisual != input.AssignPrimaryVisual || !equalOptionalInt(payload.DurationSeconds, input.DurationSeconds) {
 		return ErrGenerationRequestConflict
@@ -139,18 +181,26 @@ func validateExistingJob(job jobs.Job, planVersion int, sceneKey string, input C
 }
 
 func equalOptionalInt(a, b *int) bool {
-	if a == nil || b == nil { return a == nil && b == nil }
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
 	return *a == *b
 }
 
 func (s *Service) GetGeneration(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID) (JobView, error) {
-	if principal.OwnerID == uuid.Nil { return JobView{}, ErrUnauthenticated }
+	if principal.OwnerID == uuid.Nil {
+		return JobView{}, ErrUnauthenticated
+	}
 	job, err := s.jobs.GetByIDForProject(ctx, principal.OwnerID, projectID, jobID)
 	if err != nil {
-		if errors.Is(err, jobs.ErrJobNotFound) { return JobView{}, ErrJobNotFound }
+		if errors.Is(err, jobs.ErrJobNotFound) {
+			return JobView{}, ErrJobNotFound
+		}
 		return JobView{}, err
 	}
-	if job.Kind != JobKind { return JobView{}, ErrJobNotFound }
+	if job.Kind != JobKind {
+		return JobView{}, ErrJobNotFound
+	}
 	return ToJobView(job), nil
 }
 
@@ -162,7 +212,10 @@ func ToJobView(job jobs.Job) JobView {
 			id := result.MediaAssetID
 			view.MediaAssetID = &id
 			view.AssignedPrimaryVisual = result.AssignedPrimaryVisual
-			if result.ExternalOperationID != "" { op := result.ExternalOperationID; view.ExternalOperationID = &op }
+			if result.ExternalOperationID != "" {
+				op := result.ExternalOperationID
+				view.ExternalOperationID = &op
+			}
 		}
 	}
 	return view
