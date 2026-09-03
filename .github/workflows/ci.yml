@@ -47,6 +47,12 @@ jobs:
       SYNVIDEO_DATABASE_URL: postgres://synvideo:synvideo_dev_password@localhost:5432/synvideo_test?sslmode=disable
       SYNVIDEO_TEST_DATABASE_URL: postgres://synvideo:synvideo_dev_password@localhost:5432/synvideo_test?sslmode=disable
       SYNVIDEO_LOCAL_ACTOR_ID: 11111111-1111-4111-8111-111111111111
+      SYNVIDEO_MEDIA_STORAGE_ENDPOINT: http://localhost:8333
+      SYNVIDEO_MEDIA_STORAGE_REGION: local
+      SYNVIDEO_MEDIA_STORAGE_BUCKET: synvideo-local
+      SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID: synvideo
+      SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY: synvideo_dev_password
+      SYNVIDEO_MEDIA_STORAGE_PATH_STYLE: "true"
     defaults:
       run:
         working-directory: apps/api
@@ -55,6 +61,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/api/go.mod
+      - name: Start S3-compatible integration storage
+        run: docker compose -f ../../infra/docker-compose.yml up -d --wait seaweed-s3
       - run: test -z "$(gofmt -l .)"
       - run: go run ./cmd/migrate up
       - run: go vet ./...
