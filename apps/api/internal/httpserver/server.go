@@ -50,6 +50,7 @@ type MediaServices struct {
 	Assets          MediaAssetService
 	Bindings        SceneMediaService
 	GeneratedImages GeneratedImageGenerationService
+	GeneratedVideos GeneratedVideoGenerationService
 	Narrations      SceneNarrationService
 	GeneratedAudio  SceneNarrationGenerationService
 }
@@ -155,6 +156,11 @@ func New(
 			handler := generatedImageGenerationHandler{service: services.GeneratedImages, actorResolver: actorResolver}
 			mux.HandleFunc("POST /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/image-generations", handler.create)
 			mux.HandleFunc("GET /api/v1/projects/{id}/image-generations/{job_id}", handler.get)
+		}
+		if services.GeneratedVideos != nil && actorResolver != nil {
+			handler := generatedVideoGenerationHandler{service: services.GeneratedVideos, actorResolver: actorResolver}
+			mux.HandleFunc("POST /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/video-generations", handler.create)
+			mux.HandleFunc("GET /api/v1/projects/{id}/video-generations/{job_id}", handler.get)
 		}
 		if services.Assets != nil && services.Narrations != nil && actorResolver != nil {
 			handler := sceneNarrationHandler{bindings: services.Narrations, assets: services.Assets, actorResolver: actorResolver}
