@@ -16,6 +16,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/generatedimagejob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/httpserver"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
@@ -86,6 +87,7 @@ func main() {
 	var proposalGenerationService *proposalgenerationjob.Service
 	var scriptGenerationService *scriptgenerationjob.Service
 	var scenePlanGenerationService *sceneplangenerationjob.Service
+	var generatedImageGenerationService *generatedimagejob.Service
 	var mediaAssetService *mediaasset.Service
 	var sceneMediaService *scenemedia.Service
 	if cfg.DatabaseURL != "" {
@@ -154,6 +156,7 @@ func main() {
 			}
 			mediaAssetService = mediaasset.NewService(projectRepo, mediaAssetRepo, storage)
 			sceneMediaService = scenemedia.NewService(scenePlanRepo, mediaAssetRepo, bindingRepo)
+			generatedImageGenerationService = generatedimagejob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 		}
 
 		proposalJobHandler := proposalgenerationjob.NewHandlerWithResolver(providerSettingsService, proposalRepo)
@@ -173,6 +176,14 @@ func main() {
 			logger.Error("register scene plan generation job handler failed", "error", err)
 			os.Exit(1)
 		}
+		if mediaAssetService != nil && sceneMediaService != nil {
+			generatedAssetStore := generatedimagejob.NewAssetStore(mediaAssetService, mediaAssetRepo)
+			generatedImageJobHandler := generatedimagejob.NewHandler(providerSettingsService, generatedAssetStore, sceneMediaService)
+			if err := jobsRegistry.Register(generatedimagejob.JobKind, generatedImageJobHandler); err != nil {
+				logger.Error("register generated image job handler failed", "error", err)
+				os.Exit(1)
+			}
+		}
 
 		executor := jobs.NewExecutor(jobsRepo, jobsRegistry, jobs.ExecutorConfig{
 			LeaseDuration:  30 * time.Second,
@@ -188,7 +199,7 @@ func main() {
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
 		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
 		scenePlanGenerationService = sceneplangenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, scriptRepo, proposalRepo)
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg), httpserver.MediaServices{Assets: mediaAssetService, Bindings: sceneMediaService})
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg), httpserver.MediaServices{Assets: mediaAssetService, Bindings: sceneMediaService, GeneratedImages: generatedImageGenerationService})
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
 	}
