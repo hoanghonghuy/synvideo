@@ -1,6 +1,6 @@
 # TASK-029 — Durable generated-image acquisition + MediaAsset ingestion
 
-Status: READY
+Status: DONE
 Milestone: F1 Creative Workflow
 Owner role: AI Developer
 PR target: develop
@@ -44,16 +44,16 @@ Creators can now configure and resolve owner-scoped image providers, but SynVide
 
 ## Acceptance criteria
 - [x] PM/TL frozen contract is present on `develop` before READY.
-- [ ] Durable job/API request has stable idempotency semantics.
-- [ ] Owner/project/scene isolation is enforced end-to-end.
-- [ ] Enabled owner image provider/model resolves through TASK-028 runtime.
-- [ ] Generated result becomes a durable MediaAsset/object before success.
-- [ ] Safe provenance is stored without provider secrets/external IDs/URLs.
-- [ ] Duplicate worker/API delivery is regression-tested and does not duplicate asset/assignment outcome.
-- [ ] Crash/retry boundary around generation→ingestion has explicit tested recovery behavior.
-- [ ] Optional scene assignment is idempotent and owner/project scoped.
-- [ ] Provider/storage/cancellation failure states are provider-neutral and truthful.
-- [ ] Real PostgreSQL + object-storage integration coverage, focused tests, race/full API verification and fresh PR CI pass.
+- [x] Durable job/API request has stable idempotency semantics.
+- [x] Owner/project/scene isolation is enforced end-to-end.
+- [x] Enabled owner image provider/model resolves through TASK-028 runtime.
+- [x] Generated result becomes a durable MediaAsset/object before success.
+- [x] Safe provenance is stored without provider secrets/external IDs/URLs.
+- [x] Duplicate worker/API delivery is regression-tested and does not duplicate asset/assignment outcome.
+- [x] Crash/retry boundary around generation→ingestion has explicit tested recovery behavior.
+- [x] Optional scene assignment is idempotent and owner/project scoped.
+- [x] Provider/storage/cancellation failure states are provider-neutral and truthful.
+- [x] Real PostgreSQL + object-storage integration coverage, focused tests, race/full API verification and fresh PR CI pass.
 
 ## TDD / quality expectations
 Use RED → GREEN → REFACTOR for new behavior. Minimum evidence includes request/idempotency regressions, owner-isolation tests, disabled-selection tests, provider fake exact-call capture, storage/MediaAsset integration, duplicate-delivery tests and crash/retry boundary coverage. Do not satisfy the gate with only happy-path unit tests.
@@ -61,5 +61,10 @@ Use RED → GREEN → REFACTOR for new behavior. Minimum evidence includes reque
 ## Implementation notes
 Reuse existing durable job abstractions, MediaAsset/storage ports, scene media binding and TASK-028 provider runtime. Keep provider adapter types/config outside durable job/domain payloads. Treat generation, durable ingestion and scene assignment as distinct recovery boundaries; choose a transaction/idempotency strategy that prevents duplicate paid work and duplicate durable assets without coupling domain code to one vendor.
 
+## Completion evidence
+DONE via PR #63, merged into `develop` as `2dbba467ccc77d489f123210fb2e680f91e93c15`. Exact implementation head `1b9a91238b33dfac83e60044f06b09cfde9c3886` passed CI #328 with Frontend, Backend (including real PostgreSQL + SeaweedFS integration coverage), and Local Infrastructure all green.
+
+Post-merge status reconciliation was refreshed onto current `develop` after activation planning PR #76, so this completion record does not overwrite newer planning state.
+
 ## Activation gate
-READY — planning spec + frozen contract are now on protected `develop`; implementation may be claimed on `feature/TASK-029-generated-image-acquisition` and must follow RED → GREEN → REFACTOR with PR into `develop`.
+DONE — implementation merged through PR #63 after PM/TL exact-head review and protected CI quality gate.
