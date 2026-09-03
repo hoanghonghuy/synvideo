@@ -27,7 +27,7 @@ const (
 	ErrorCheckpointFailed    = "ERR_VIDEO_CHECKPOINT_FAILED"
 )
 
-var defaultPollDelay = 2 * time.Second
+var defaultPollDelay = 5 * time.Second
 
 type VideoProviderRuntime interface {
 	ResolveVideoGenerator(context.Context, uuid.UUID, providers.ProviderID, providers.ModelID) (providers.VideoGenerator, error)
@@ -50,10 +50,10 @@ type SceneBinder interface {
 }
 
 type Handler struct {
-	runtime     VideoProviderRuntime
-	operations  OperationRepository
-	assets      GeneratedAssetStore
-	bindings    SceneBinder
+	runtime    VideoProviderRuntime
+	operations OperationRepository
+	assets     GeneratedAssetStore
+	bindings   SceneBinder
 }
 
 func NewHandler(runtime VideoProviderRuntime, operations OperationRepository, assets GeneratedAssetStore, bindings SceneBinder) *Handler {
@@ -94,7 +94,9 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	}
 	if errors.Is(err, ErrCheckpointNotFound) {
 		operation, startErr := generator.StartVideo(ctx, providers.VideoGenerationRequest{
-			Prompt: payload.Prompt, AspectRatio: payload.AspectRatio, DurationSeconds: payload.DurationSeconds,
+			Prompt:          payload.Prompt,
+			AspectRatio:     payload.AspectRatio,
+			DurationSeconds: payload.DurationSeconds,
 		})
 		if startErr != nil {
 			if errors.Is(startErr, providers.ErrAmbiguousSubmit) {
@@ -145,7 +147,7 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	case providers.VideoOperationFailed:
 		return nil, jobs.NewTerminalError(ErrorProviderFailed, providers.NewVideoOperationFailedError(errors.New("video operation failed")))
 	case providers.VideoOperationSucceeded:
-		// continue to durable acquisition below
+		// Continue to durable acquisition below.
 	default:
 		return nil, jobs.NewTerminalError(ErrorProviderFailed, errors.New("unsupported video operation state"))
 	}
@@ -164,20 +166,24 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	defer reader.Close()
 
 	metadata, err := json.Marshal(map[string]any{
-		"origin": "generated",
-		"job_id": job.ID.String(),
-		"provider_id": payload.ProviderID,
-		"model_id": payload.ModelID,
+		"origin":                "generated",
+		"job_id":                job.ID.String(),
+		"provider_id":           payload.ProviderID,
+		"model_id":              payload.ModelID,
 		"external_operation_id": checkpoint.ExternalOperationID,
-		"scene_plan_version": payload.ScenePlanVersion,
-		"scene_key": payload.SceneKey,
+		"scene_plan_version":    payload.ScenePlanVersion,
+		"scene_key":             payload.SceneKey,
 	})
 	if err != nil {
 		return nil, jobs.NewTerminalError(ErrorInvalidPayload, err)
 	}
 	asset, err = h.assets.Store(ctx, principal, projectID, mediaasset.CreateInput{
-		Kind: mediaasset.KindVideo, Origin: mediaasset.OriginGeneratedVideo, MimeType: binary.MIMEType(), Metadata: metadata,
-		Reader: reader, MaxBytes: MaxGeneratedVideoBytes,
+		Kind:     mediaasset.KindVideo,
+		Origin:   mediaasset.OriginGeneratedVideo,
+		MimeType: binary.MIMEType(),
+		Metadata: metadata,
+		Reader:   reader,
+		MaxBytes: MaxGeneratedVideoBytes,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
