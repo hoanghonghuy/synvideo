@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrInvalidWAVHeader = errors.New("invalid WAV header")
-	ErrUnsupportedWAV   = errors.New("unsupported WAV format")
+	ErrInvalidWAVHeader  = errors.New("invalid WAV header")
+	ErrUnsupportedWAV    = errors.New("unsupported WAV format")
 	ErrWAVFormatMismatch = errors.New("WAV chunk formats do not match")
 )
 

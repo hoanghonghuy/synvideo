@@ -3,10 +3,10 @@ package scenenarrationjob
 import "github.com/google/uuid"
 
 const (
-	JobKind                     = "scene_narration_generation_v1"
-	SchemaVersion               = "scene_narration_generation_job_v1"
+	JobKind                      = "scene_narration_generation_v1"
+	SchemaVersion                = "scene_narration_generation_job_v1"
 	MaxGeneratedAudioBytes int64 = 50 << 20
-	DefaultMaxChunkRunes        = 4000
+	DefaultMaxChunkRunes         = 4000
 )
 
 type Payload struct {

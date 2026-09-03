@@ -21,8 +21,8 @@ import (
 )
 
 type recordingTTS struct {
-	mu       sync.Mutex
-	requests []providers.SpeechSynthesisRequest
+	mu        sync.Mutex
+	requests  []providers.SpeechSynthesisRequest
 	sampleWAV []byte
 }
 
@@ -345,4 +345,3 @@ func TestSceneNarrationHandler_DurableChunkRecovery(t *testing.T) {
 		t.Fatalf("expected generated media asset ID")
 	}
 }
-

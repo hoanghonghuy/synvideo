@@ -27,10 +27,10 @@ type sceneNarrationHandler struct {
 }
 
 type sceneNarrationBindingResponse struct {
-	SceneKey string                   `json:"scene_key"`
-	Role     scenenarration.Role      `json:"role"`
-	Binding  *scenenarration.Binding  `json:"binding,omitempty"`
-	Asset    *mediaasset.MediaAsset   `json:"asset,omitempty"`
+	SceneKey string                  `json:"scene_key"`
+	Role     scenenarration.Role     `json:"role"`
+	Binding  *scenenarration.Binding `json:"binding,omitempty"`
+	Asset    *mediaasset.MediaAsset  `json:"asset,omitempty"`
 }
 
 type assignNarrationRequest struct {

@@ -57,6 +57,13 @@ const selectedProvider = computed(() =>
 const availableModels = computed(() => selectedProvider.value?.models || [])
 const availableVoices = computed(() => selectedProvider.value?.voices || [])
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) {
+    return err.message
+  }
+  return fallback
+}
+
 async function loadInitialData() {
   loading.value = true
   pageError.value = null
@@ -87,8 +94,8 @@ async function loadInitialData() {
       selectedPlanVersion.value = approved[0].version
       await loadPlanVersion(approved[0].version)
     }
-  } catch (err: any) {
-    pageError.value = err.message || t('sceneNarration.errors.request_failed')
+  } catch (err: unknown) {
+    pageError.value = errorMessage(err, t('sceneNarration.errors.request_failed'))
   } finally {
     loading.value = false
   }
@@ -125,8 +132,8 @@ async function loadPlanVersion(version: number) {
       map[b.scene_key] = b
     }
     narrationEntries.value = map
-  } catch (err: any) {
-    pageError.value = err.message || t('sceneNarration.errors.request_failed')
+  } catch (err: unknown) {
+    pageError.value = errorMessage(err, t('sceneNarration.errors.request_failed'))
   }
 }
 
@@ -175,9 +182,9 @@ async function handleGenerate(sceneKey: string) {
 
     // Poll until complete
     pollJob(sceneKey, job.id)
-  } catch (err: any) {
+  } catch (err: unknown) {
     delete generatingScenes.value[sceneKey]
-    sceneErrors.value[sceneKey] = err.message || t('sceneNarration.errors.generation_failed')
+    sceneErrors.value[sceneKey] = errorMessage(err, t('sceneNarration.errors.generation_failed'))
   }
 }
 
@@ -224,8 +231,8 @@ async function openHistory(sceneKey: string) {
       sceneKey,
     )
     historyEntries.value = list
-  } catch (err: any) {
-    sceneErrors.value[sceneKey] = err.message || t('sceneNarration.errors.request_failed')
+  } catch (err: unknown) {
+    sceneErrors.value[sceneKey] = errorMessage(err, t('sceneNarration.errors.request_failed'))
   } finally {
     loadingHistory.value = false
   }
@@ -248,8 +255,8 @@ async function handleAssignAlternative(assetID: string) {
     )
     await loadPlanVersion(selectedPlanVersion.value)
     closeHistory()
-  } catch (err: any) {
-    sceneErrors.value[sceneKey] = err.message || t('sceneNarration.errors.request_failed')
+  } catch (err: unknown) {
+    sceneErrors.value[sceneKey] = errorMessage(err, t('sceneNarration.errors.request_failed'))
   }
 }
 
@@ -264,41 +271,71 @@ onMounted(() => {
       <div class="header-content">
         <span class="eyebrow">{{ t('sceneNarration.eyebrow') }}</span>
         <h1>{{ project?.title || t('sceneNarration.title') }}</h1>
-        <p class="description">{{ t('sceneNarration.description') }}</p>
+        <p class="description">
+          {{ t('sceneNarration.description') }}
+        </p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary" @click="router.push(`/projects/${projectID}`)">
+        <button
+          class="btn btn-secondary"
+          @click="router.push(`/projects/${projectID}`)"
+        >
           {{ t('projects.actions.backToList') }}
         </button>
       </div>
     </header>
 
-    <div v-if="pageError" class="alert alert-error">
+    <div
+      v-if="pageError"
+      class="alert alert-error"
+    >
       {{ pageError }}
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
+    <div
+      v-if="loading"
+      class="loading-state"
+    >
+      <div class="spinner" />
       <span>{{ t('projects.states.loading') }}...</span>
     </div>
 
-    <div v-else-if="approvedPlans.length === 0" class="empty-state">
+    <div
+      v-else-if="approvedPlans.length === 0"
+      class="empty-state"
+    >
       <h3>{{ t('sceneNarration.noApprovedPlan') }}</h3>
       <div class="empty-actions">
-        <button class="btn btn-primary" @click="router.push(`/projects/${projectID}/scene-plan`)">
+        <button
+          class="btn btn-primary"
+          @click="router.push(`/projects/${projectID}/scene-plan`)"
+        >
           {{ t('sceneNarration.openScenePlan') }}
         </button>
       </div>
     </div>
 
-    <div v-else class="workspace-content">
+    <div
+      v-else
+      class="workspace-content"
+    >
       <!-- Toolbar Controls: Plan Version & TTS Options -->
       <section class="settings-card">
         <div class="settings-grid">
-          <div class="form-group" v-if="approvedPlans.length > 1">
+          <div
+            v-if="approvedPlans.length > 1"
+            class="form-group"
+          >
             <label>{{ t('sceneNarration.selectPlanVersion') }}</label>
-            <select v-model="selectedPlanVersion" class="form-control">
-              <option v-for="plan in approvedPlans" :key="plan.version" :value="plan.version">
+            <select
+              v-model="selectedPlanVersion"
+              class="form-control"
+            >
+              <option
+                v-for="plan in approvedPlans"
+                :key="plan.version"
+                :value="plan.version"
+              >
                 v{{ plan.version }}
               </option>
             </select>
@@ -306,8 +343,16 @@ onMounted(() => {
 
           <div class="form-group">
             <label>{{ t('sceneNarration.ttsSettings.provider') }}</label>
-            <select v-model="selectedProviderId" class="form-control" data-testid="provider-select">
-              <option v-for="prov in ttsProviders" :key="prov.id" :value="prov.id">
+            <select
+              v-model="selectedProviderId"
+              class="form-control"
+              data-testid="provider-select"
+            >
+              <option
+                v-for="prov in ttsProviders"
+                :key="prov.id"
+                :value="prov.id"
+              >
                 {{ prov.display_name }}
               </option>
             </select>
@@ -315,8 +360,16 @@ onMounted(() => {
 
           <div class="form-group">
             <label>{{ t('sceneNarration.ttsSettings.model') }}</label>
-            <select v-model="selectedModelId" class="form-control" data-testid="model-select">
-              <option v-for="m in availableModels" :key="m.id" :value="m.id">
+            <select
+              v-model="selectedModelId"
+              class="form-control"
+              data-testid="model-select"
+            >
+              <option
+                v-for="m in availableModels"
+                :key="m.id"
+                :value="m.id"
+              >
                 {{ m.display_name }}
               </option>
             </select>
@@ -324,8 +377,16 @@ onMounted(() => {
 
           <div class="form-group">
             <label>{{ t('sceneNarration.ttsSettings.voice') }}</label>
-            <select v-model="selectedVoiceId" class="form-control" data-testid="voice-select">
-              <option v-for="v in availableVoices" :key="v.id" :value="v.id">
+            <select
+              v-model="selectedVoiceId"
+              class="form-control"
+              data-testid="voice-select"
+            >
+              <option
+                v-for="v in availableVoices"
+                :key="v.id"
+                :value="v.id"
+              >
                 {{ v.display_name }}
               </option>
             </select>
@@ -333,16 +394,29 @@ onMounted(() => {
 
           <div class="form-group">
             <label>{{ t('sceneNarration.ttsSettings.format') }}</label>
-            <select v-model="selectedFormat" class="form-control">
-              <option value="mp3">MP3</option>
-              <option value="wav">WAV</option>
+            <select
+              v-model="selectedFormat"
+              class="form-control"
+            >
+              <option value="mp3">
+                MP3
+              </option>
+              <option value="wav">
+                WAV
+              </option>
             </select>
           </div>
         </div>
 
-        <div v-if="ttsProviders.length === 0" class="alert alert-warning">
+        <div
+          v-if="ttsProviders.length === 0"
+          class="alert alert-warning"
+        >
           {{ t('sceneNarration.ttsSettings.noProviders') }}
-          <button class="btn btn-link" @click="router.push('/provider-settings')">
+          <button
+            class="btn btn-link"
+            @click="router.push('/provider-settings')"
+          >
             {{ t('sceneNarration.openProviderSettings') }}
           </button>
         </div>
@@ -366,8 +440,8 @@ onMounted(() => {
             <div class="scene-actions">
               <button
                 class="btn btn-secondary btn-sm"
-                @click="openHistory(scene.key)"
                 :data-testid="`history-btn-${scene.key}`"
+                @click="openHistory(scene.key)"
               >
                 {{ t('sceneNarration.sceneCard.actions.history', { count: narrationEntries[scene.key]?.binding ? 1 : 0 }) }}
               </button>
@@ -375,8 +449,8 @@ onMounted(() => {
               <button
                 class="btn btn-primary btn-sm"
                 :disabled="Boolean(generatingScenes[scene.key]) || !selectedVoiceId"
-                @click="handleGenerate(scene.key)"
                 :data-testid="`generate-narration-${scene.key}`"
+                @click="handleGenerate(scene.key)"
               >
                 {{ generatingScenes[scene.key] ? t('sceneNarration.sceneCard.actions.generating') : t('sceneNarration.sceneCard.actions.generate') }}
               </button>
@@ -386,24 +460,38 @@ onMounted(() => {
           <div class="scene-card-body">
             <div class="narration-box">
               <label class="narration-label">{{ t('sceneNarration.sceneCard.narrationText') }}</label>
-              <p class="narration-text">{{ scene.narration }}</p>
+              <p class="narration-text">
+                {{ scene.narration }}
+              </p>
             </div>
 
-            <div v-if="sceneErrors[scene.key]" class="alert alert-error">
+            <div
+              v-if="sceneErrors[scene.key]"
+              class="alert alert-error"
+            >
               {{ sceneErrors[scene.key] }}
             </div>
 
             <!-- Active Audio Player or Generation State -->
             <div class="audio-status-panel">
-              <div v-if="generatingScenes[scene.key]" class="generating-indicator">
-                <div class="spinner-sm"></div>
+              <div
+                v-if="generatingScenes[scene.key]"
+                class="generating-indicator"
+              >
+                <div class="spinner-sm" />
                 <span>{{ t('sceneNarration.sceneCard.status.generating') }} ({{ generatingScenes[scene.key]?.state }})</span>
               </div>
 
-              <div v-else-if="narrationEntries[scene.key]?.binding && narrationEntries[scene.key]?.asset" class="audio-player-container">
+              <div
+                v-else-if="narrationEntries[scene.key]?.binding && narrationEntries[scene.key]?.asset"
+                class="audio-player-container"
+              >
                 <div class="audio-meta">
                   <span class="badge badge-success">{{ t('sceneNarration.sceneCard.status.active') }} (v{{ narrationEntries[scene.key]?.binding?.binding_version }})</span>
-                  <span v-if="narrationEntries[scene.key]?.asset?.metadata?.duration_seconds" class="measured-duration">
+                  <span
+                    v-if="narrationEntries[scene.key]?.asset?.metadata?.duration_seconds"
+                    class="measured-duration"
+                  >
                     {{ t('sceneNarration.sceneCard.measuredDuration', { seconds: Number(narrationEntries[scene.key]?.asset?.metadata?.duration_seconds).toFixed(1) }) }}
                   </span>
                 </div>
@@ -412,10 +500,13 @@ onMounted(() => {
                   class="audio-player"
                   :src="audioContentURL(projectID, narrationEntries[scene.key]?.binding?.asset_id || '')"
                   :data-testid="`audio-player-${scene.key}`"
-                ></audio>
+                />
               </div>
 
-              <div v-else class="empty-audio-notice">
+              <div
+                v-else
+                class="empty-audio-notice"
+              >
                 <span class="text-muted">{{ t('sceneNarration.sceneCard.status.none') }}</span>
               </div>
             </div>
@@ -425,21 +516,39 @@ onMounted(() => {
     </div>
 
     <!-- History Modal / Drawer -->
-    <div v-if="activeHistorySceneKey" class="modal-backdrop" @click.self="closeHistory">
+    <div
+      v-if="activeHistorySceneKey"
+      class="modal-backdrop"
+      @click.self="closeHistory"
+    >
       <div class="modal-dialog">
         <div class="modal-header">
           <h3>{{ t('sceneNarration.historyModal.title', { key: activeHistorySceneKey }) }}</h3>
-          <button class="btn-close" @click="closeHistory">&times;</button>
+          <button
+            class="btn-close"
+            @click="closeHistory"
+          >
+            &times;
+          </button>
         </div>
         <div class="modal-body">
-          <div v-if="loadingHistory" class="loading-state">
-            <div class="spinner-sm"></div>
+          <div
+            v-if="loadingHistory"
+            class="loading-state"
+          >
+            <div class="spinner-sm" />
             <span>{{ t('projects.states.loading') }}...</span>
           </div>
-          <div v-else-if="historyEntries.length === 0" class="empty-state">
+          <div
+            v-else-if="historyEntries.length === 0"
+            class="empty-state"
+          >
             <p>{{ t('sceneNarration.historyModal.empty') }}</p>
           </div>
-          <div v-else class="history-list">
+          <div
+            v-else
+            class="history-list"
+          >
             <div
               v-for="entry in historyEntries"
               :key="entry.binding?.id"
@@ -447,7 +556,10 @@ onMounted(() => {
               :class="{ active: entry.binding?.status === 'active' }"
             >
               <div class="history-item-header">
-                <span class="badge" :class="entry.binding?.status === 'active' ? 'badge-success' : 'badge-secondary'">
+                <span
+                  class="badge"
+                  :class="entry.binding?.status === 'active' ? 'badge-success' : 'badge-secondary'"
+                >
                   {{ entry.binding?.status === 'active' ? t('sceneNarration.historyModal.currentBadge') : t('sceneNarration.historyModal.supersededBadge') }}
                   (v{{ entry.binding?.binding_version }})
                 </span>
@@ -461,7 +573,7 @@ onMounted(() => {
                   controls
                   class="audio-player"
                   :src="audioContentURL(projectID, entry.binding?.asset_id || '')"
-                ></audio>
+                />
               </div>
 
               <div class="history-item-actions">
@@ -477,7 +589,10 @@ onMounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeHistory">
+          <button
+            class="btn btn-secondary"
+            @click="closeHistory"
+          >
             {{ t('sceneNarration.historyModal.close') }}
           </button>
         </div>
