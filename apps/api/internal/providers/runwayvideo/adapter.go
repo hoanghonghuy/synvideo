@@ -21,6 +21,8 @@ const (
 	defaultTimeout           = 30 * time.Second
 	defaultMaxResponseBytes  = int64(2 << 20)
 	maxTaskFailureDetailSize = 512
+	MinDurationSeconds       = 2
+	MaxDurationSeconds       = 10
 )
 
 type SecretSource interface {
@@ -103,6 +105,9 @@ func New(cfg Config) (*Adapter, error) {
 func (a *Adapter) StartVideo(ctx context.Context, request providers.VideoGenerationRequest) (providers.VideoOperation, error) {
 	if err := request.Validate(); err != nil {
 		return providers.VideoOperation{}, err
+	}
+	if request.DurationSeconds != nil && (*request.DurationSeconds < MinDurationSeconds || *request.DurationSeconds > MaxDurationSeconds) {
+		return providers.VideoOperation{}, providers.NewInvalidRequestError(fmt.Errorf("Runway Gen-4.5 duration must be between %d and %d seconds", MinDurationSeconds, MaxDurationSeconds))
 	}
 	if request.ReferenceImage != nil {
 		return providers.VideoOperation{}, providers.NewInvalidRequestError(errors.New("Runway V1 text-to-video adapter does not accept reference images"))
