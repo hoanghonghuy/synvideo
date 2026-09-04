@@ -272,7 +272,11 @@ func (a *Adapter) doJSON(ctx context.Context, method, path string, body []byte, 
 		return providers.NewMalformedResponseError(errors.New("Runway response exceeded size limit"))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return classifyHTTPError(resp.StatusCode, data)
+		httpErr := classifyHTTPError(resp.StatusCode, data)
+		if submit && resp.StatusCode >= 500 {
+			return providers.NewAmbiguousSubmitError(httpErr)
+		}
+		return httpErr
 	}
 	if output == nil {
 		return nil
