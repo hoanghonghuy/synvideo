@@ -63,7 +63,13 @@ jobs:
           go-version-file: apps/api/go.mod
       - name: Start S3-compatible integration storage
         run: docker compose -f ../../infra/docker-compose.yml up -d --wait seaweed-s3
-      - run: test -z "$(gofmt -l .)"
+      - name: Check gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            printf 'Unformatted Go files:\n%s\n' "$unformatted"
+            exit 1
+          fi
       - run: go run ./cmd/migrate up
       - run: go vet ./...
       - run: go test ./...
