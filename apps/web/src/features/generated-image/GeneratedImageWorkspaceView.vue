@@ -235,7 +235,7 @@ async function submitPending(scene: Scene, rawPending: PendingGeneration) {
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       await refreshJob(scene)
-    } else if (job.state === 'succeeded') {
+    } else if (job.media_asset_id) {
       await refreshHistory()
     }
   } catch (error) {
@@ -256,7 +256,7 @@ async function recoverScene(scene: Scene, pending: PendingGeneration) {
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       schedulePoll(scene)
-    } else if (job.state === 'succeeded') {
+    } else if (job.media_asset_id) {
       await refreshHistory()
     }
   } catch (error) {
@@ -278,7 +278,7 @@ async function refreshJob(scene: Scene) {
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       schedulePoll(scene)
-    } else if (job.state === 'succeeded') {
+    } else if (job.media_asset_id) {
       await refreshHistory()
     }
   } catch (error) {
@@ -294,7 +294,7 @@ function applyJob(sceneKey: string, job: SceneImageGenerationJobView) {
   state.errorCode = job.error_code
   state.assetId = job.media_asset_id
   state.assigned = job.assigned_primary_visual
-  if (job.media_asset_id && job.state === 'succeeded') state.keptAlternative = !job.assigned_primary_visual
+  if (job.media_asset_id) state.keptAlternative = !job.assigned_primary_visual
 }
 
 function schedulePoll(scene: Scene) {
