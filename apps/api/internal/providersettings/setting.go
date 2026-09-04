@@ -119,8 +119,10 @@ type ImageGenerationOptionsResponse struct {
 
 // VideoGenerationOptionModel is a model option for video generation.
 type VideoGenerationOptionModel struct {
-	ID          providers.ModelID `json:"id"`
-	DisplayName string            `json:"display_name"`
+	ID                 providers.ModelID `json:"id"`
+	DisplayName        string            `json:"display_name"`
+	MinDurationSeconds int               `json:"min_duration_seconds,omitempty"`
+	MaxDurationSeconds int               `json:"max_duration_seconds,omitempty"`
 }
 
 // VideoGenerationOptionProvider is a provider option with available video models.
