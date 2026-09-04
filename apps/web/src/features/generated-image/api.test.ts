@@ -103,4 +103,37 @@ describe('generated image API', () => {
       { headers: { Accept: 'application/json' } },
     )
   })
+
+  it.each([
+    ['ERR_IMAGE_PROVIDER_TIMEOUT', 'providerUnavailable'],
+    ['ERR_IMAGE_PROVIDER_FAILED', 'providerUnavailable'],
+    ['ERR_IMAGE_ASSIGNMENT_FAILED', 'assignmentFailed'],
+    ['ERR_IMAGE_INTERNAL_SECRET_DETAIL', 'requestFailed'],
+  ])('maps durable terminal error %s to creator-safe state %s', async (backendCode, safeCode) => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'request-123',
+          state: 'failed',
+          attempt: 3,
+          max_attempts: 3,
+          error_code: backendCode,
+          media_asset_id: backendCode === 'ERR_IMAGE_ASSIGNMENT_FAILED' ? 'asset-9' : undefined,
+          assigned_primary_visual: false,
+          created_at: '2026-09-04T00:00:00Z',
+          updated_at: '2026-09-04T00:00:03Z',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const job = await getSceneImageGeneration('project-1', 'request-123')
+
+    expect(job.error_code).toBe(safeCode)
+    expect(job.error_code).not.toBe(backendCode)
+    if (backendCode === 'ERR_IMAGE_ASSIGNMENT_FAILED') {
+      expect(job.media_asset_id).toBe('asset-9')
+    }
+  })
 })
