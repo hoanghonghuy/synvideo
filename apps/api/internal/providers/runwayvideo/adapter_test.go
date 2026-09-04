@@ -32,8 +32,8 @@ func TestStartVideoUsesTextToVideoModeAndReturnsTaskID(t *testing.T) {
 	adapter := newTestAdapter(t, server.URL, server.Client())
 	duration := 5
 	op, err := adapter.StartVideo(context.Background(), providers.VideoGenerationRequest{
-		Prompt: "A slow cinematic push through mist",
-		AspectRatio: "16:9",
+		Prompt:          "A slow cinematic push through mist",
+		AspectRatio:     "16:9",
 		DurationSeconds: &duration,
 	})
 	if err != nil {
@@ -116,11 +116,11 @@ func TestOpenVideoResultStreamsEphemeralOutput(t *testing.T) {
 func newTestAdapter(t *testing.T, baseURL string, client *http.Client) *Adapter {
 	t.Helper()
 	adapter, err := New(Config{
-		ProviderID: "runway",
-		BaseURL: baseURL,
+		ProviderID:       "runway",
+		BaseURL:          baseURL,
 		CredentialSource: SecretSourceFunc(func(context.Context) (string, error) { return "secret", nil }),
-		Model: ModelConfig{ID: "gen4.5", ExternalModelID: "gen4.5"},
-		HTTPClient: client,
+		Model:            ModelConfig{ID: "gen4.5", ExternalModelID: "gen4.5"},
+		HTTPClient:       client,
 	})
 	if err != nil {
 		t.Fatal(err)
