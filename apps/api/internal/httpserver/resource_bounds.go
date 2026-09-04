@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"errors"
 	"mime"
 	"net/http"
 	"strings"
@@ -25,7 +24,7 @@ func limitJSONRequestBody(maxBytes int64, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isJSONRequest(r) {
+		if !shouldLimitJSONRequestBody(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -42,19 +41,20 @@ func limitJSONRequestBody(maxBytes int64, next http.Handler) http.Handler {
 	})
 }
 
-func isJSONRequest(r *http.Request) bool {
+func shouldLimitJSONRequestBody(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
+	default:
+		return false
+	}
+
 	contentType := strings.TrimSpace(r.Header.Get("Content-Type"))
 	if contentType == "" {
-		return false
+		return true
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return false
+		return true
 	}
-	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
-}
-
-func isRequestBodyTooLarge(err error) bool {
-	var maxBytesErr *http.MaxBytesError
-	return errors.As(err, &maxBytesErr)
+	return mediaType != "multipart/form-data"
 }
