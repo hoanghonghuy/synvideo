@@ -1,4 +1,4 @@
-.PHONY: help install dev-web dev-api migrate infra-config infra-up infra-down verify-web verify-api verify-infra verify
+.PHONY: help install dev-web dev-api migrate infra-config infra-up infra-down verify-web verify-api verify-infra verify e2e
 
 help:
 	@printf '%s\n' \
@@ -8,6 +8,7 @@ help:
 		'  make dev-api       Start the Go API' \
 		'  make migrate       Apply database migrations' \
 		'  make infra-up      Start local PostgreSQL and S3-compatible storage' \
+		'  make e2e           Run isolated browser acceptance smoke test' \
 		'  make verify        Run frontend, backend and infra checks'
 
 install:
@@ -37,9 +38,10 @@ verify-web:
 verify-api:
 	export PATH="/usr/local/go/bin:$$PATH"; set -a; if [ -f .env ]; then . ./.env; else . ./.env.example; fi; set +a; cd apps/api && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" test -z "$$(gofmt -l .)" && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go vet ./... && SYNVIDEO_TEST_DATABASE_URL="$${SYNVIDEO_DATABASE_URL}" go test ./... && go build -o bin/api ./cmd/api
 
-
-
 verify-infra:
 	docker compose -f infra/docker-compose.yml config
+
+e2e:
+	bash scripts/e2e/run.sh
 
 verify: verify-web verify-api verify-infra
