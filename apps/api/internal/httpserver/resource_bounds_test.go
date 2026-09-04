@@ -98,13 +98,11 @@ func TestJSONBodyLimitLeavesMediaUploadSemanticsAlone(t *testing.T) {
 	}
 }
 
-func TestJSONBodyLimitUsesFiniteStreamingGuard(t *testing.T) {
+func TestJSONBodyLimitRejectsOversizedUnknownLengthBeforeHandler(t *testing.T) {
+	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := io.Copy(io.Discard, r.Body)
-		if err == nil {
-			t.Fatal("expected body read to fail after finite limit")
-		}
-		w.WriteHeader(http.StatusBadRequest)
+		called = true
+		w.WriteHeader(http.StatusNoContent)
 	})
 	handler := limitJSONRequestBody(8, next)
 
@@ -115,8 +113,42 @@ func TestJSONBodyLimitUsesFiniteStreamingGuard(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+	if called {
+		t.Fatal("downstream handler was called for oversized unknown-length JSON request")
+	}
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestJSONBodyLimitPreservesAllowedUnknownLengthBody(t *testing.T) {
+	const body = `{"a":1}`
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		got, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read downstream body: %v", err)
+		}
+		if string(got) != body {
+			t.Fatalf("downstream body = %q, want %q", string(got), body)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := limitJSONRequestBody(8, next)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", io.NopCloser(bytes.NewBufferString(body)))
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if !called {
+		t.Fatal("downstream handler was not called for allowed unknown-length JSON request")
+	}
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNoContent)
 	}
 }
 
