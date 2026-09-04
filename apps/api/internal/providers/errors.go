@@ -19,6 +19,7 @@ var (
 	ErrVideoOperationFailed      = errors.New("video operation failed")
 	ErrResultUnavailable         = errors.New("generated result is unavailable")
 	ErrUnknownVideoOperation     = errors.New("unknown video operation")
+	ErrAmbiguousSubmit           = errors.New("video submit outcome is ambiguous")
 	ErrDuplicateRegistration     = errors.New("duplicate provider registration")
 	ErrSpeechInputTooLong        = errors.New("speech input is too long")
 )
@@ -40,6 +41,7 @@ const (
 	CategoryVideoOperationFailed      Category = "video_operation_failed"
 	CategoryResultUnavailable         Category = "result_unavailable"
 	CategoryUnknownVideoOperation     Category = "unknown_video_operation"
+	CategoryAmbiguousSubmit           Category = "ambiguous_submit"
 	CategoryDuplicateRegistration     Category = "duplicate_registration"
 	CategorySpeechInputTooLong        Category = "speech_input_too_long"
 )
@@ -137,6 +139,12 @@ func NewResultUnavailableError(cause error) error {
 
 func NewUnknownVideoOperationError(cause error) error {
 	return newSafeError(CategoryUnknownVideoOperation, "The video generation operation is not known.", ErrUnknownVideoOperation, cause)
+}
+
+// NewAmbiguousSubmitError marks a video submit failure where upstream acceptance cannot be ruled out.
+// Callers must not automatically submit another paid operation for the same logical request.
+func NewAmbiguousSubmitError(cause error) error {
+	return newSafeError(CategoryAmbiguousSubmit, "The video submit outcome is uncertain and requires safe recovery.", ErrAmbiguousSubmit, cause)
 }
 
 func NewDuplicateRegistrationError(providerID ProviderID) error {

@@ -22,7 +22,7 @@ func NewProviderSettingRepository(pool *pgxpool.Pool) *ProviderSettingRepository
 	return &ProviderSettingRepository{pool: pool}
 }
 
-// Legacy alias for backward compatibility during migration
+// Legacy alias for backward compatibility during migration.
 func NewTextProviderSettingRepository(pool *pgxpool.Pool) *ProviderSettingRepository {
 	return NewProviderSettingRepository(pool)
 }
@@ -30,7 +30,7 @@ func NewTextProviderSettingRepository(pool *pgxpool.Pool) *ProviderSettingReposi
 func (r *ProviderSettingRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]providersettings.Setting, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT owner_id, provider_id, revision, enabled,
-		       enabled_text_model_ids, enabled_image_model_ids, enabled_tts_model_ids, enabled_voice_ids,
+		       enabled_text_model_ids, enabled_image_model_ids, enabled_video_model_ids, enabled_tts_model_ids, enabled_voice_ids,
 		       api_key_ciphertext, api_key_nonce, key_version, created_at, updated_at
 		FROM provider_settings
 		WHERE owner_id = $1
@@ -58,7 +58,7 @@ func (r *ProviderSettingRepository) ListByOwner(ctx context.Context, ownerID uui
 func (r *ProviderSettingRepository) GetByOwnerAndProvider(ctx context.Context, ownerID uuid.UUID, providerID providers.ProviderID) (providersettings.Setting, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT owner_id, provider_id, revision, enabled,
-		       enabled_text_model_ids, enabled_image_model_ids, enabled_tts_model_ids, enabled_voice_ids,
+		       enabled_text_model_ids, enabled_image_model_ids, enabled_video_model_ids, enabled_tts_model_ids, enabled_voice_ids,
 		       api_key_ciphertext, api_key_nonce, key_version, created_at, updated_at
 		FROM provider_settings
 		WHERE owner_id = $1 AND provider_id = $2
@@ -83,6 +83,10 @@ func (r *ProviderSettingRepository) Save(ctx context.Context, setting providerse
 	if err != nil {
 		return providersettings.Setting{}, fmt.Errorf("marshal enabled image model ids: %w", err)
 	}
+	enabledVideoModelIDsJSON, err := json.Marshal(setting.EnabledVideoModelIDs)
+	if err != nil {
+		return providersettings.Setting{}, fmt.Errorf("marshal enabled video model ids: %w", err)
+	}
 	enabledTTSModelIDsJSON, err := json.Marshal(setting.EnabledTTSModelIDs)
 	if err != nil {
 		return providersettings.Setting{}, fmt.Errorf("marshal enabled tts model ids: %w", err)
@@ -93,21 +97,20 @@ func (r *ProviderSettingRepository) Save(ctx context.Context, setting providerse
 	}
 
 	if expectedRevision == nil {
-		var created providersettings.Setting
-		created = setting
+		created := setting
 		created.Revision = 1
 
 		row := r.pool.QueryRow(ctx, `
 			INSERT INTO provider_settings (
 				owner_id, provider_id, revision, enabled,
-				enabled_text_model_ids, enabled_image_model_ids, enabled_tts_model_ids, enabled_voice_ids,
+				enabled_text_model_ids, enabled_image_model_ids, enabled_video_model_ids, enabled_tts_model_ids, enabled_voice_ids,
 				api_key_ciphertext, api_key_nonce, key_version, created_at, updated_at
 			) VALUES (
-				$1, $2, 1, $3, $4, $5, $6, $7, $8, $9, $10, now(), now()
+				$1, $2, 1, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now()
 			)
 			RETURNING created_at, updated_at
 		`, setting.OwnerID, string(setting.ProviderID), setting.Enabled,
-			enabledTextModelIDsJSON, enabledImageModelIDsJSON, enabledTTSModelIDsJSON, enabledVoiceIDsJSON,
+			enabledTextModelIDsJSON, enabledImageModelIDsJSON, enabledVideoModelIDsJSON, enabledTTSModelIDsJSON, enabledVoiceIDsJSON,
 			setting.APIKeyCiphertext, setting.APIKeyNonce, setting.KeyVersion)
 
 		if err := row.Scan(&created.CreatedAt, &created.UpdatedAt); err != nil {
@@ -119,8 +122,7 @@ func (r *ProviderSettingRepository) Save(ctx context.Context, setting providerse
 		return created, nil
 	}
 
-	var updated providersettings.Setting
-	updated = setting
+	updated := setting
 	updated.Revision = *expectedRevision + 1
 
 	row := r.pool.QueryRow(ctx, `
@@ -129,16 +131,17 @@ func (r *ProviderSettingRepository) Save(ctx context.Context, setting providerse
 		    enabled = $3,
 		    enabled_text_model_ids = $4,
 		    enabled_image_model_ids = $5,
-		    enabled_tts_model_ids = $6,
-		    enabled_voice_ids = $7,
-		    api_key_ciphertext = $8,
-		    api_key_nonce = $9,
-		    key_version = $10,
+		    enabled_video_model_ids = $6,
+		    enabled_tts_model_ids = $7,
+		    enabled_voice_ids = $8,
+		    api_key_ciphertext = $9,
+		    api_key_nonce = $10,
+		    key_version = $11,
 		    updated_at = now()
-		WHERE owner_id = $1 AND provider_id = $2 AND revision = $11
+		WHERE owner_id = $1 AND provider_id = $2 AND revision = $12
 		RETURNING created_at, updated_at
 	`, setting.OwnerID, string(setting.ProviderID), setting.Enabled,
-		enabledTextModelIDsJSON, enabledImageModelIDsJSON, enabledTTSModelIDsJSON, enabledVoiceIDsJSON,
+		enabledTextModelIDsJSON, enabledImageModelIDsJSON, enabledVideoModelIDsJSON, enabledTTSModelIDsJSON, enabledVoiceIDsJSON,
 		setting.APIKeyCiphertext, setting.APIKeyNonce, setting.KeyVersion, *expectedRevision)
 
 	if err := row.Scan(&updated.CreatedAt, &updated.UpdatedAt); err != nil {
@@ -186,7 +189,7 @@ type rowScanner interface {
 func scanSetting(scanner rowScanner) (providersettings.Setting, error) {
 	var s providersettings.Setting
 	var providerIDStr string
-	var enabledTextModelIDsRaw, enabledImageModelIDsRaw, enabledTTSModelIDsRaw, enabledVoiceIDsRaw []byte
+	var enabledTextModelIDsRaw, enabledImageModelIDsRaw, enabledVideoModelIDsRaw, enabledTTSModelIDsRaw, enabledVoiceIDsRaw []byte
 
 	if err := scanner.Scan(
 		&s.OwnerID,
@@ -195,6 +198,7 @@ func scanSetting(scanner rowScanner) (providersettings.Setting, error) {
 		&s.Enabled,
 		&enabledTextModelIDsRaw,
 		&enabledImageModelIDsRaw,
+		&enabledVideoModelIDsRaw,
 		&enabledTTSModelIDsRaw,
 		&enabledVoiceIDsRaw,
 		&s.APIKeyCiphertext,
@@ -222,6 +226,14 @@ func scanSetting(scanner rowScanner) (providersettings.Setting, error) {
 		}
 	} else {
 		s.EnabledImageModelIDs = []providers.ModelID{}
+	}
+
+	if len(enabledVideoModelIDsRaw) > 0 {
+		if err := json.Unmarshal(enabledVideoModelIDsRaw, &s.EnabledVideoModelIDs); err != nil {
+			return providersettings.Setting{}, fmt.Errorf("unmarshal enabled_video_model_ids: %w", err)
+		}
+	} else {
+		s.EnabledVideoModelIDs = []providers.ModelID{}
 	}
 
 	if len(enabledTTSModelIDsRaw) > 0 {

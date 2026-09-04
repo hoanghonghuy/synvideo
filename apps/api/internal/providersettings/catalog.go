@@ -17,6 +17,7 @@ type Capability string
 const (
 	CapabilityText  Capability = "text"
 	CapabilityImage Capability = "image"
+	CapabilityVideo Capability = "video"
 	CapabilityTTS   Capability = "tts"
 )
 
@@ -35,7 +36,7 @@ type ModelDefinition struct {
 	Capabilities    []Capability      `json:"capabilities"`
 }
 
-// ProviderDefinition contains non-secret deployment configuration for an OpenAI-compatible provider.
+// ProviderDefinition contains non-secret deployment configuration for a provider.
 type ProviderDefinition struct {
 	ProviderID       providers.ProviderID `json:"provider_id"`
 	DisplayName      string               `json:"display_name"`
@@ -171,7 +172,7 @@ func NewCatalog(defs []ProviderDefinition) (*Catalog, error) {
 			}
 			seenCaps := make(map[Capability]bool, len(m.Capabilities))
 			for _, cap := range m.Capabilities {
-				if cap != CapabilityText && cap != CapabilityImage && cap != CapabilityTTS {
+				if cap != CapabilityText && cap != CapabilityImage && cap != CapabilityVideo && cap != CapabilityTTS {
 					return nil, fmt.Errorf("provider %q model %q has invalid capability %q", p.ProviderID, m.ModelID, cap)
 				}
 				if seenCaps[cap] {
