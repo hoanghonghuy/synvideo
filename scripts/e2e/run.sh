@@ -69,7 +69,7 @@ docker compose -p "$COMPOSE_PROJECT_NAME" -f infra/docker-compose.yml up -d --wa
 (
   cd apps/api
   go run ./cmd/migrate up
-  go run ./cmd/api
+  exec go run ./cmd/api
 ) > >(redact > "$ARTIFACT_DIR/api.log") 2>&1 &
 API_PID=$!
 wait_http http://127.0.0.1:8080/readyz API
@@ -78,5 +78,7 @@ npm run dev:web -- --host 127.0.0.1 --port 4173 > >(redact > "$ARTIFACT_DIR/web.
 WEB_PID=$!
 wait_http http://127.0.0.1:4173/projects Web
 
-npm exec --yes --package=@playwright/test@1.55.0 playwright install chromium
-npm exec --yes --package=@playwright/test@1.55.0 playwright test --config e2e/playwright.config.ts
+# Keep the existing repository lockfile untouched while pinning the acceptance runner.
+npm install --no-save --package-lock=false @playwright/test@1.55.0
+npx playwright install chromium
+npx playwright test --config e2e/playwright.config.ts
