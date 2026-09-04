@@ -7,10 +7,10 @@ Downstream consumer: TASK-037 Render & Export V1
 ## Purpose
 Define the durable, render-engine-neutral Scene Editor composition contract that turns accepted creative-workflow resources into one versioned editable project composition without mutating approved upstream history.
 
-The Scene Editor is the composition boundary. It does not become a second Script/Scene Plan editor, a provider orchestration layer, or a render-engine configuration surface.
+The Scene Editor is the composition boundary. It does not become a second Script/Scene Plan persistence model, a provider orchestration layer, or a render-engine configuration surface.
 
 ## Product outcome
-A creator can open a project composition, reorder/duplicate/remove scene instances, choose exact accepted visual/narration/caption/audio inputs, edit bounded presentation/timing/transition settings, preview the same normalized semantics that will be snapshotted for rendering, save/recover work safely, detect stale or broken dependencies, and explicitly create an immutable render-input snapshot.
+A creator can open a project composition, review and initiate narration/script edits through the authoritative upstream versioning workflow, reorder/duplicate/remove scene instances, choose exact accepted visual/narration/caption/audio inputs, edit bounded presentation/timing/transition settings, preview the same normalized semantics that will be snapshotted for rendering, save/recover work safely, detect stale or broken dependencies, reconcile accepted upstream changes explicitly, and create an immutable render-input snapshot.
 
 ## Upstream authority and non-mutation rule
 TASK-036 consumes accepted upstream resources and never silently rewrites them.
@@ -24,7 +24,21 @@ Authoritative upstream identities include, where applicable:
 
 An existing composition remains historical against the exact identities it recorded. A newer Scene Plan, visual assignment, narration regeneration, caption rebuild, music replacement, or audio-mix edit never mutates a saved composition in place.
 
-Editing Script text, Scene Plan narration/visual instruction, provider prompts, TTS text, caption source derivation, or MediaAsset provenance belongs to the owning upstream feature. The Scene Editor may link the creator to that workflow but must not perform a hidden upstream rewrite.
+Editing Script text, Scene Plan narration/visual instruction, provider prompts, TTS text, caption source derivation, or MediaAsset provenance belongs to the owning upstream feature. The Scene Editor may initiate or navigate those workflows, but must not perform a hidden upstream rewrite or persist an alternative composition-only source-of-truth for them.
+
+## Integrated narration/script edit bridge
+Stage-9 Scene Editor must still provide a coherent narration/script editing experience. In V1 this is an **integrated upstream-versioned bridge**, not a local text override inside the composition.
+
+When the creator initiates a narration/script edit from Scene Editor:
+1. the edit is performed through the authoritative Script/Scene Plan versioning path owned by the upstream workflow;
+2. approved Script/Scene Plan history is preserved rather than mutated in place;
+3. the resulting accepted upstream version/scene identity is explicit before it becomes production-current for the composition;
+4. narration audio, captions, generated-media assumptions, or other dependencies affected by the source change become stale/rebuild-required according to their owning contracts instead of being silently rebound;
+5. the existing composition remains recoverable against its recorded source identities until the creator explicitly reconciles to the accepted newer upstream version;
+6. reconciliation creates a new saved composition revision and preserves unrelated presentation edits where mapping is unambiguous;
+7. no local-only narration/script text may appear in preview or render snapshot unless it exists in the exact accepted upstream source lineage recorded by that composition revision.
+
+The UI may keep transient unsaved input while the upstream edit workflow is open, but it must label it truthfully and must not present that text as persisted composition/render state before upstream acceptance and reconciliation succeed.
 
 ## Composition document
 A project may have versioned composition documents/snapshots. The live editable composition contains at least:
@@ -91,7 +105,7 @@ Crop/position/scale validation must be deterministic. Preview and render normali
 Changing the project's current scene-media binding after a composition save makes the composition dependency stale when it no longer matches the recorded selected binding/asset. It does not silently replace the composition's asset.
 
 ## Narration and scene duration
-Narration references the exact accepted narration asset/binding lineage. The Scene Editor does not rewrite narration text or regenerate TTS implicitly.
+Narration references the exact accepted narration asset/binding lineage. The Scene Editor does not rewrite narration text or regenerate TTS implicitly; narration/source edits follow the integrated upstream-versioned bridge defined above, and narration regeneration/rebinding remains an explicit owning-workflow action.
 
 V1 scene duration is explicit positive integer milliseconds. Without an explicit trim/time-stretch contract, Scene Editor V1 must not silently truncate or stretch narration/captions to force a shorter scene.
 
@@ -156,6 +170,8 @@ A reconcile preview identifies, per affected dependency:
 
 Applying reconciliation is revision-checked. If source Scene Plan structure changed materially, automatic mapping is permitted only for exact stable `scene_key` matches whose semantics remain valid; ambiguous removed/renamed/split/merged scenes require creator choice or a new composition. No heuristic remap may silently alter output.
 
+An upstream narration/script edit uses this same reconciliation boundary after the new Script/Scene Plan version is accepted. The editor must show that the old composition remains historical/current-to-its-own-recorded-lineage until the creator deliberately accepts the candidate mapping.
+
 ## Save, dirty state and concurrency
 The browser keeps unsaved editor changes as transient dirty state. Persisted writes require the expected composition revision.
 
@@ -191,11 +207,12 @@ Creator preview may use browser-specific rendering, but it must consume the same
 
 Preview must not:
 - read a newer current dependency than the saved editor revision without marking the preview dirty/stale;
+- render transient narration/script bridge text as production state before its upstream version is accepted and reconciled;
 - silently ignore unsupported persisted controls;
 - mutate composition state merely by playing;
 - claim frame/codec equivalence when the browser preview is only semantic/visual approximation.
 
-The contract requires semantic equivalence: order, selected assets, duration, crop/fit/position, captions on/off/style semantics, audio-mix selection and transitions must correspond to the snapshot consumed by TASK-037.
+The contract requires semantic equivalence: order, selected assets, accepted source/narration lineage, duration, crop/fit/position, captions on/off/style semantics, audio-mix selection and transitions must correspond to the snapshot consumed by TASK-037.
 
 ## Isolation, privacy and deletion
 Every composition read/write/reconcile/snapshot operation is scoped through authenticated project/principal ownership.
@@ -213,35 +230,40 @@ The API/UI must distinguish at least:
 - save conflict;
 - stale dependency;
 - broken dependency;
+- upstream narration/script edit pending acceptance/reconciliation;
 - preview unavailable/error;
 - snapshot-ready vs snapshot-blocked.
 
 Unsupported V1 controls (including split/merge and arbitrary timeline effects) must not be displayed as functioning actions.
 
+Narration/script editing initiated from the Scene Editor must make the upstream versioning/reconciliation transition understandable to the creator; it may feel integrated in one workspace, but the UI must never imply a local edit has already changed persisted/renderable composition state when it has not.
+
 Keyboard navigation, focus state, labels, error announcements and responsive layout are part of acceptance for the editor workspace; drag/drop must have an accessible non-pointer alternative for reorder.
 
 ## Required TDD / integration gates
 1. create/load a composition from an exact approved Scene Plan without mutating it;
-2. stable composition scene identity across ordinary edits/reorder;
-3. reorder round-trip and deterministic ordering;
-4. duplicate creates independent local identity without duplicating upstream/provider work;
-5. remove is composition-local and preserves upstream history; last-scene removal rejected;
-6. split/merge rejected/not exposed in V1;
-7. visual asset/project/kind validation and bounded crop/fit/position round-trip;
-8. scene duration rejects truncation of authoritative narration/caption timing;
-9. exact narration/caption/audio-mix lineage persisted;
-10. visual/narration/caption/mix replacement => deterministic stale state without silent rebind;
-11. missing required asset/revision => truthful broken state;
-12. explicit reconciliation preserves unrelated creator edits and rejects ambiguous scene mapping;
-13. optimistic concurrency permits one writer and rejects stale competitors;
-14. ambiguous save recovery does not duplicate logical mutation;
-15. refresh recovers persisted state; dirty client state is not misreported as saved;
-16. immutable snapshot records exact revision/dependencies and deterministic canonical digest;
-17. later upstream/editor changes do not mutate an existing snapshot;
-18. preview normalization and snapshot semantics agree for representative image/video, captions, narration/audio and transition cases;
-19. cross-owner/project access fails safely;
-20. accessibility keyboard reorder/focus/error-state coverage;
-21. representative real PostgreSQL/object-storage integration plus required repository CI remains green.
+2. narration/script edit initiated from Scene Editor persists through the authoritative upstream version workflow, preserves approved history, and cannot produce hidden local render text;
+3. accepted upstream narration/script change deterministically stales affected composition/dependencies and explicit reconciliation preserves unrelated creator edits;
+4. stable composition scene identity across ordinary edits/reorder;
+5. reorder round-trip and deterministic ordering;
+6. duplicate creates independent local identity without duplicating upstream/provider work;
+7. remove is composition-local and preserves upstream history; last-scene removal rejected;
+8. split/merge rejected/not exposed in V1;
+9. visual asset/project/kind validation and bounded crop/fit/position round-trip;
+10. scene duration rejects truncation of authoritative narration/caption timing;
+11. exact narration/caption/audio-mix lineage persisted;
+12. visual/narration/caption/mix replacement => deterministic stale state without silent rebind;
+13. missing required asset/revision => truthful broken state;
+14. explicit reconciliation preserves unrelated creator edits and rejects ambiguous scene mapping;
+15. optimistic concurrency permits one writer and rejects stale competitors;
+16. ambiguous save recovery does not duplicate logical mutation;
+17. refresh recovers persisted state; dirty client state is not misreported as saved;
+18. immutable snapshot records exact revision/dependencies and deterministic canonical digest;
+19. later upstream/editor changes do not mutate an existing snapshot;
+20. preview normalization and snapshot semantics agree for representative image/video, accepted narration source, captions, narration audio and transition cases;
+21. cross-owner/project access fails safely;
+22. accessibility keyboard reorder/focus/error-state coverage;
+23. representative real PostgreSQL/object-storage integration plus required repository CI remains green.
 
 ## Reference and reuse checkpoint — 2026-09-04
 References are architectural/product-study inputs, not authority over this contract.
