@@ -69,6 +69,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data
 }
 
+export function creatorSafeDurableJobError(code?: string): string | undefined {
+  if (!code) return undefined
+  if (code === 'ERR_IMAGE_ASSIGNMENT_FAILED') return 'assignmentFailed'
+  if (
+    code === 'ERR_IMAGE_PROVIDER_UNAVAILABLE' ||
+    code === 'ERR_IMAGE_PROVIDER_FAILED' ||
+    code === 'ERR_IMAGE_PROVIDER_TIMEOUT'
+  ) {
+    return 'providerUnavailable'
+  }
+  if (code === 'ERR_IMAGE_REQUEST_CONFLICT') return 'requestConflict'
+  return 'requestFailed'
+}
+
+function normalizeJob(job: SceneImageGenerationJobView): SceneImageGenerationJobView {
+  return {
+    ...job,
+    error_code: creatorSafeDurableJobError(job.error_code),
+  }
+}
+
 export async function fetchImageGenerationOptions(): Promise<ImageGenerationOptionsResponse> {
   const response = await fetch('/api/v1/ai/image-generation-options', {
     headers: { Accept: 'application/json' },
@@ -93,7 +114,7 @@ export async function createSceneImageGeneration(
       body: JSON.stringify(input),
     },
   )
-  return handleResponse<SceneImageGenerationJobView>(response)
+  return normalizeJob(await handleResponse<SceneImageGenerationJobView>(response))
 }
 
 export async function getSceneImageGeneration(
@@ -104,5 +125,5 @@ export async function getSceneImageGeneration(
     `/api/v1/projects/${encodeURIComponent(projectID)}/image-generations/${encodeURIComponent(jobID)}`,
     { headers: { Accept: 'application/json' } },
   )
-  return handleResponse<SceneImageGenerationJobView>(response)
+  return normalizeJob(await handleResponse<SceneImageGenerationJobView>(response))
 }
