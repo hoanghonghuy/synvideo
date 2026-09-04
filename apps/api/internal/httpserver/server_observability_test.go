@@ -15,25 +15,31 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 )
 
+type fakeReadinessProbe struct {
+	calls int
+	err   error
+	block bool
+}
+
+func (p *fakeReadinessProbe) Ready(ctx context.Context) error {
+	p.calls++
+	if p.block {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return p.err
+}
+
 func TestReadinessHandlerDatabaseFailureRecoveryAndTimeout(t *testing.T) {
-	oldDatabaseProbe := readinessDatabaseProbe
-	oldStorageProbe := readinessStorageProbe
 	oldTimeout := readinessProbeTimeout
-	t.Cleanup(func() {
-		readinessDatabaseProbe = oldDatabaseProbe
-		readinessStorageProbe = oldStorageProbe
-		readinessProbeTimeout = oldTimeout
-	})
+	t.Cleanup(func() { readinessProbeTimeout = oldTimeout })
 	readinessProbeTimeout = 20 * time.Millisecond
-	readinessStorageProbe = func(context.Context, config.MediaStorageConfig) error { return nil }
 
 	cfg := config.Config{Environment: config.EnvironmentProduction, DatabaseURL: "postgres://configured"}
-	var databaseErr error
-	readinessDatabaseProbe = func(context.Context, string) error { return databaseErr }
+	probe := &fakeReadinessProbe{err: errors.New("database unavailable")}
 
-	databaseErr = errors.New("database unavailable")
 	recorder := httptest.NewRecorder()
-	readinessHandler(cfg).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	readinessHandler(cfg, probe, nil).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 while database is unavailable, got %d", recorder.Code)
 	}
@@ -41,20 +47,17 @@ func TestReadinessHandlerDatabaseFailureRecoveryAndTimeout(t *testing.T) {
 		t.Fatal("readiness response leaked dependency error")
 	}
 
-	databaseErr = nil
+	probe.err = nil
 	recorder = httptest.NewRecorder()
-	readinessHandler(cfg).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	readinessHandler(cfg, probe, nil).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected readiness recovery, got %d", recorder.Code)
 	}
 
-	readinessDatabaseProbe = func(ctx context.Context, _ string) error {
-		<-ctx.Done()
-		return ctx.Err()
-	}
+	probe.block = true
 	started := time.Now()
 	recorder = httptest.NewRecorder()
-	readinessHandler(cfg).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	readinessHandler(cfg, probe, nil).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 on probe timeout, got %d", recorder.Code)
 	}
@@ -63,28 +66,77 @@ func TestReadinessHandlerDatabaseFailureRecoveryAndTimeout(t *testing.T) {
 	}
 }
 
-func TestReadinessHandlerOptionalStorageIsNotRequired(t *testing.T) {
-	oldDatabaseProbe := readinessDatabaseProbe
-	oldStorageProbe := readinessStorageProbe
-	t.Cleanup(func() {
-		readinessDatabaseProbe = oldDatabaseProbe
-		readinessStorageProbe = oldStorageProbe
-	})
+func TestReadinessHandlerConfiguredStorageFailureRecoveryAndTimeout(t *testing.T) {
+	oldTimeout := readinessProbeTimeout
+	t.Cleanup(func() { readinessProbeTimeout = oldTimeout })
+	readinessProbeTimeout = 20 * time.Millisecond
 
-	readinessDatabaseProbe = func(context.Context, string) error { return nil }
-	storageCalls := 0
-	readinessStorageProbe = func(context.Context, config.MediaStorageConfig) error {
-		storageCalls++
-		return errors.New("should not run")
-	}
+	cfg := config.Config{Environment: config.EnvironmentProduction}
+	cfg.MediaStorage.Endpoint = "http://storage.example.test"
+	cfg.MediaStorage.Bucket = "media"
+	cfg.MediaStorage.AccessKeyID = "configured"
+	cfg.MediaStorage.SecretAccessKey = "configured"
+	probe := &fakeReadinessProbe{err: errors.New("bucket unavailable")}
 
 	recorder := httptest.NewRecorder()
-	readinessHandler(config.Config{Environment: config.EnvironmentTest}).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	readinessHandler(cfg, nil, probe).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 while storage is unavailable, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "bucket unavailable") || strings.Contains(recorder.Body.String(), "media") {
+		t.Fatal("readiness response leaked storage detail")
+	}
+
+	probe.err = nil
+	recorder = httptest.NewRecorder()
+	readinessHandler(cfg, nil, probe).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected storage readiness recovery, got %d", recorder.Code)
+	}
+
+	probe.block = true
+	started := time.Now()
+	recorder = httptest.NewRecorder()
+	readinessHandler(cfg, nil, probe).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 on storage probe timeout, got %d", recorder.Code)
+	}
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		t.Fatalf("storage readiness probe was not bounded: %s", elapsed)
+	}
+}
+
+func TestReadinessHandlerReusesInjectedRuntimeProbes(t *testing.T) {
+	cfg := config.Config{Environment: config.EnvironmentProduction, DatabaseURL: "postgres://configured"}
+	cfg.MediaStorage.Endpoint = "http://storage.example.test"
+	cfg.MediaStorage.Bucket = "media"
+	cfg.MediaStorage.AccessKeyID = "configured"
+	cfg.MediaStorage.SecretAccessKey = "configured"
+	databaseProbe := &fakeReadinessProbe{}
+	storageProbe := &fakeReadinessProbe{}
+	handler := readinessHandler(cfg, databaseProbe, storageProbe)
+
+	for i := 0; i < 3; i++ {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected ready response on request %d, got %d", i+1, recorder.Code)
+		}
+	}
+	if databaseProbe.calls != 3 || storageProbe.calls != 3 {
+		t.Fatalf("expected the same long-lived probes to serve all checks, got db=%d storage=%d", databaseProbe.calls, storageProbe.calls)
+	}
+}
+
+func TestReadinessHandlerOptionalStorageIsNotRequired(t *testing.T) {
+	storageProbe := &fakeReadinessProbe{err: errors.New("should not run")}
+	recorder := httptest.NewRecorder()
+	readinessHandler(config.Config{Environment: config.EnvironmentTest}, nil, storageProbe).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected unconfigured optional dependencies to stay ready, got %d", recorder.Code)
 	}
-	if storageCalls != 0 {
-		t.Fatalf("expected no optional storage probe, got %d calls", storageCalls)
+	if storageProbe.calls != 0 {
+		t.Fatalf("expected no optional storage probe, got %d calls", storageProbe.calls)
 	}
 }
 
