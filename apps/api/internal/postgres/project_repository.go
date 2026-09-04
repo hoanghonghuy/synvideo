@@ -22,6 +22,10 @@ func NewProjectRepository(pool *pgxpool.Pool) *ProjectRepository {
 	return &ProjectRepository{pool: pool}
 }
 
+func (r *ProjectRepository) Ready(ctx context.Context) error {
+	return r.pool.Ping(ctx)
+}
+
 func (r *ProjectRepository) Create(ctx context.Context, ownerID uuid.UUID, input project.CreateInput) (project.Project, error) {
 	id := uuid.New()
 	row := r.pool.QueryRow(ctx, `

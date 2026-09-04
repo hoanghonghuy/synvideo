@@ -24,6 +24,14 @@ func NewService(repository Repository) *Service {
 	return &Service{repository: repository}
 }
 
+func (s *Service) Ready(ctx context.Context) error {
+	probe, ok := s.repository.(interface{ Ready(context.Context) error })
+	if !ok {
+		return fmt.Errorf("project repository readiness unavailable")
+	}
+	return probe.Ready(ctx)
+}
+
 func (s *Service) Create(ctx context.Context, principal Principal, input CreateInput) (Project, error) {
 	if err := requirePrincipal(principal); err != nil {
 		return Project{}, err
