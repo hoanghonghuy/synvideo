@@ -1,6 +1,6 @@
 # TASK-043 — HTTP server resource bounds & request-size hardening
 
-Status: BACKLOG
+Status: READY
 Priority: P1
 Base branch: `develop`
 Canonical branch: `feature/TASK-043-http-resource-bounds`
@@ -52,8 +52,14 @@ TASK-039 owns readiness/request observability, not connection/request resource l
 - TASK-041: production proxy/deployment configuration must align with these limits.
 - Current feature implementation can continue independently; this task is a production hardening gate.
 
-## Activation gate
-Remain BACKLOG until PM/TL reconciles implementation WIP capacity, reruns duplicate/branch checks and confirms no overlapping edge-hardening work has landed.
+## Activation evidence — 2026-09-05
+- protected `develop` rechecked at `0ee9c1ad768645389648123a6fe49bae7d6de3e6` after TASK-042 merged;
+- TASK-030 and TASK-042 are complete, leaving implementation capacity available for one additional bounded workstream;
+- no canonical `feature/TASK-043-http-resource-bounds` implementation branch or implementation PR is active at activation time;
+- no overlapping issue/PR owns the same HTTP edge resource-bounding outcome;
+- current `develop` still lacks an explicit `ReadHeaderTimeout`/shared JSON request-size boundary for this outcome.
+
+TASK-043 is therefore READY for Developer claim on the canonical branch. READY authorizes implementation but does not authorize PM/TL to write runtime code or self-open the implementation PR.
 
 ## Delivery
 Developer implements on `feature/TASK-043-http-resource-bounds` and opens a PR into `develop`. Developer must not self-merge or self-mark DONE.
