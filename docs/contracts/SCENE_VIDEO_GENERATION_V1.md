@@ -1,6 +1,6 @@
 # SCENE_VIDEO_GENERATION_V1
 
-Status: DRAFT FOR PM/TL REVIEW
+Status: ACCEPTED — implemented by TASK-032 / PR #89
 Applies to: TASK-032
 
 ## Purpose
@@ -78,7 +78,7 @@ Tests must demonstrate at least:
 9. explicit scene assignment and history/idempotency;
 10. owner/project isolation and safe error/provenance exposure.
 
-## Current provider research checkpoint — 2026-09-03
+## Provider research checkpoint — 2026-09-03
 - Runway Dev official SDK/API documents generation as asynchronous tasks returning an `id`, retrievable via `GET /v1/tasks/{id}`, with terminal statuses and polling/backoff guidance.
 - Google Gemini API Veo 3.1 documents long-running video operations with an operation name retrieved/polled until completion; older Veo 3 model IDs are deprecated, validating the decision not to freeze model names into SynVideo's domain contract.
 
@@ -87,5 +87,5 @@ Official references:
 - https://docs.dev.runwayml.com/api-details/api_changelog/
 - https://ai.google.dev/gemini-api/docs/veo
 
-## Activation rule
-Merging this contract does not itself activate TASK-032. Keep TASK-032 BACKLOG while current WIP capacity is occupied by TASK-030/TASK-031. PM/TL promotes the task to READY only after current dependency/WIP reconciliation and a final duplicate/branch check.
+## Acceptance record — 2026-09-04
+TASK-032 is DONE. PR #89 passed exact-head required CI and was squash-merged to protected `develop` as `7b3569bd09d8a35ad7a57363eaccfbf4eb6d545c`. Downstream planning may treat this contract/implementation boundary as accepted unless a later explicit amendment supersedes it.
