@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"bytes"
+	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -29,16 +31,32 @@ func limitJSONRequestBody(maxBytes int64, next http.Handler) http.Handler {
 			return
 		}
 		if r.ContentLength > maxBytes {
-			writeProjectJSON(w, http.StatusRequestEntityTooLarge, requestBodyTooLargeResponse{Error: apiError{
-				Code:    "request_body_too_large",
-				Message: "Request body is too large.",
-			}})
+			writeRequestBodyTooLarge(w)
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
+		if err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		_ = r.Body.Close()
+		if int64(len(body)) > maxBytes {
+			writeRequestBodyTooLarge(w)
+			return
+		}
+
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
 		next.ServeHTTP(w, r)
 	})
+}
+
+func writeRequestBodyTooLarge(w http.ResponseWriter) {
+	writeProjectJSON(w, http.StatusRequestEntityTooLarge, requestBodyTooLargeResponse{Error: apiError{
+		Code:    "request_body_too_large",
+		Message: "Request body is too large.",
+	}})
 }
 
 func shouldLimitJSONRequestBody(r *http.Request) bool {
