@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ type CreateGenerationInput struct {
 	RequestID           uuid.UUID
 	ProviderID          string
 	ModelID             string
+	Prompt              string
 	AssignPrimaryVisual bool
 }
 
@@ -83,6 +85,7 @@ func (s *Service) CreateGeneration(ctx context.Context, principal project.Princi
 		return JobView{}, ErrProviderUnavailable
 	}
 
+	input.Prompt = strings.TrimSpace(input.Prompt)
 	if existing, err := s.jobs.GetByIDForProject(ctx, principal.OwnerID, projectID, input.RequestID); err == nil {
 		if err := validateExistingJob(existing, planVersion, sceneKey, input); err != nil {
 			return JobView{}, err
@@ -131,8 +134,12 @@ func (s *Service) CreateGeneration(ctx context.Context, principal project.Princi
 		return JobView{}, ErrProviderUnavailable
 	}
 
+	prompt := input.Prompt
+	if prompt == "" {
+		prompt = scene.VisualInstruction
+	}
 	payload := Payload{SchemaVersion: SchemaVersion, ProviderID: input.ProviderID, ModelID: input.ModelID,
-		ScenePlanVersion: planVersion, SceneKey: sceneKey, Prompt: scene.VisualInstruction,
+		ScenePlanVersion: planVersion, SceneKey: sceneKey, Prompt: prompt,
 		AspectRatio: string(proj.AspectRatio), AssignPrimaryVisual: input.AssignPrimaryVisual}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -165,6 +172,9 @@ func validateExistingJob(job jobs.Job, planVersion int, sceneKey string, input C
 	}
 	if payload.SchemaVersion != SchemaVersion || payload.ScenePlanVersion != planVersion || payload.SceneKey != sceneKey ||
 		payload.ProviderID != input.ProviderID || payload.ModelID != input.ModelID || payload.AssignPrimaryVisual != input.AssignPrimaryVisual {
+		return ErrGenerationRequestConflict
+	}
+	if input.Prompt != "" && payload.Prompt != input.Prompt {
 		return ErrGenerationRequestConflict
 	}
 	return nil

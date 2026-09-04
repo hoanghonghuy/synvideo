@@ -23,11 +23,18 @@ func TestCreateGenerationIsIdempotentAndRejectsParameterReuse(t *testing.T) {
 	runtime := &fakeImageRuntime{generator: fakeImageGenerator{}}
 	svc := NewService(runtime, repo, projects, plans)
 	principal := project.Principal{OwnerID: ownerID}
-	input := CreateGenerationInput{RequestID: requestID, ProviderID: "openai", ModelID: "image-1", AssignPrimaryVisual: true}
+	input := CreateGenerationInput{RequestID: requestID, ProviderID: "openai", ModelID: "image-1", Prompt: "custom cinematic prompt", AssignPrimaryVisual: true}
 
 	first, err := svc.CreateGeneration(context.Background(), principal, projectID, 1, "scene-1", input)
 	if err != nil {
 		t.Fatalf("first create: %v", err)
+	}
+	var payload Payload
+	if repo.job == nil || json.Unmarshal(repo.job.Payload, &payload) != nil {
+		t.Fatalf("expected generated image payload")
+	}
+	if payload.Prompt != input.Prompt {
+		t.Fatalf("prompt=%q, want %q", payload.Prompt, input.Prompt)
 	}
 	second, err := svc.CreateGeneration(context.Background(), principal, projectID, 1, "scene-1", input)
 	if err != nil {
@@ -37,6 +44,11 @@ func TestCreateGenerationIsIdempotentAndRejectsParameterReuse(t *testing.T) {
 		t.Fatalf("expected one logical job, got ids %s/%s calls=%d", first.ID, second.ID, repo.enqueueCalls)
 	}
 
+	input.Prompt = "different prompt"
+	if _, err := svc.CreateGeneration(context.Background(), principal, projectID, 1, "scene-1", input); !errors.Is(err, ErrGenerationRequestConflict) {
+		t.Fatalf("expected prompt request conflict, got %v", err)
+	}
+	input.Prompt = "custom cinematic prompt"
 	input.ModelID = "other"
 	if _, err := svc.CreateGeneration(context.Background(), principal, projectID, 1, "scene-1", input); !errors.Is(err, ErrGenerationRequestConflict) {
 		t.Fatalf("expected request conflict, got %v", err)
@@ -50,7 +62,7 @@ func TestCreateGenerationRejectsUnavailableProviderBeforeEnqueue(t *testing.T) {
 		fakeProjectRepo{project: project.Project{ID: projectID, OwnerID: ownerID, AspectRatio: "16:9"}},
 		fakePlanRepo{plan: approvedPlan(projectID)})
 	_, err := svc.CreateGeneration(context.Background(), project.Principal{OwnerID: ownerID}, projectID, 1, "scene-1", CreateGenerationInput{
-		RequestID: uuid.New(), ProviderID: "openai", ModelID: "disabled",
+		RequestID: uuid.New(), ProviderID: "openai", ModelID: "disabled", Prompt: "custom prompt",
 	})
 	if !errors.Is(err, ErrProviderUnavailable) {
 		t.Fatalf("expected provider unavailable, got %v", err)

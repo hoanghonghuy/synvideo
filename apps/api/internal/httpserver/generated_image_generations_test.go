@@ -48,14 +48,14 @@ func TestGeneratedImageGenerationEndpoints(t *testing.T) {
 				if principal.OwnerID != ownerID || gotProjectID != projectID || version != 2 || sceneKey != "intro" {
 					t.Fatalf("unexpected scope: principal=%v project=%s version=%d scene=%s", principal, gotProjectID, version, sceneKey)
 				}
-				if input.RequestID != requestID || input.ProviderID != "openai" || input.ModelID != "image-1" || !input.AssignPrimaryVisual {
+				if input.RequestID != requestID || input.ProviderID != "openai" || input.ModelID != "image-1" || input.Prompt != "custom cinematic prompt" || !input.AssignPrimaryVisual {
 					t.Fatalf("unexpected input: %+v", input)
 				}
 				return generatedimagejob.JobView{ID: requestID, State: string(jobs.StateQueued), Attempt: 0, MaxAttempts: 3, CreatedAt: now, UpdatedAt: now}, nil
 			},
 		}
 		server := New(config.Config{Environment: config.EnvironmentTest}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, resolver, MediaServices{GeneratedImages: service})
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/scene-plans/2/scenes/intro/image-generations", bytes.NewBufferString(`{"request_id":"`+requestID.String()+`","provider_id":"openai","model_id":"image-1","assign_primary_visual":true}`))
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/scene-plans/2/scenes/intro/image-generations", bytes.NewBufferString(`{"request_id":"`+requestID.String()+`","provider_id":"openai","model_id":"image-1","prompt":"custom cinematic prompt","assign_primary_visual":true}`))
 		request.Header.Set("Content-Type", "application/json")
 		recorder := httptest.NewRecorder()
 
