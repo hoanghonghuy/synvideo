@@ -1,6 +1,6 @@
 # TASK-035 — Background Music & Audio Mix V1
 
-Status: BACKLOG
+Status: READY
 Priority: P1
 Milestone: F1 Creative Workflow
 Canonical branch when activated: `feature/TASK-035-background-music-mix`
@@ -58,7 +58,7 @@ Creator can select or upload durable project music, configure trim/loop/level/na
 - TASK-037 owns final render/export integration.
 
 ## Activation gate
-Remain BACKLOG after contract freeze while current implementation WIP is occupied by TASK-030/TASK-032. Immediately before READY, PM/TL must re-check exact `develop`, duplicate branches/PRs/issues, verify TASK-031 semantics have not drifted, confirm referenced MediaAsset audio semantics remain compatible, and reconcile WIP capacity. Move issue #70 to READY only after those checks.
+Activation revalidated on protected `develop` after TASK-043 completion: no canonical implementation branch or active implementation PR exists for TASK-035, planning contract remains on `develop`, TASK-031 is DONE, and bounded implementation capacity has one free slot while TASK-046 remains independently active. Developer may claim `feature/TASK-035-background-music-mix` from latest protected `develop`; runtime implementation still belongs to Developer and must follow TDD plus the frozen `AUDIO_MIX_V1` contract.
 
 ## TDD focus
 Asset type/isolation, narration-lineage staleness, timing/gain/loop validation, persistence/reload, deletion/broken-state safety, optimistic concurrency, immutable snapshot behavior and frontend truthfulness.
