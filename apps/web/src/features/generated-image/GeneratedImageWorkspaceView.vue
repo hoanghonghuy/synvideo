@@ -113,10 +113,11 @@ async function loadWorkspace() {
         keptAlternative: false,
         busy: false,
       }
+      const state = stateFor(scene.key)
       const pending = readPending(scene.key)
       if (pending) {
-        sceneStates[scene.key].submitted = pending
-        if (pending.prompt) sceneStates[scene.key].prompt = pending.prompt
+        state.submitted = pending
+        if (pending.prompt) state.prompt = pending.prompt
         recoveries.push(recoverScene(scene, pending))
       }
     }
