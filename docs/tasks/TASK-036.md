@@ -7,15 +7,16 @@ Depends on: stable accepted visual/audio/caption/music foundations and accepted 
 Authoritative contract: `docs/contracts/SCENE_EDITOR_COMPOSITION_V1.md`
 
 ## Product outcome
-Deliver the first baseline comprehensive scene editor: compose exact accepted scene/media/audio/caption inputs into a versioned project edit; reorder/duplicate/remove scene instances; edit bounded timing, visual treatment and transition semantics; preview truthfully; save/recover creator work; surface stale/broken dependencies; and produce an immutable composition snapshot suitable for deterministic TASK-037 rendering.
+Deliver the first baseline comprehensive scene editor: compose exact accepted scene/media/audio/caption inputs into a versioned project edit; review and edit narration/script through an explicit upstream-versioned bridge; reorder/duplicate/remove scene instances; edit bounded timing, visual treatment and transition semantics; preview truthfully; save/recover creator work; surface stale/broken dependencies; and produce an immutable composition snapshot suitable for deterministic TASK-037 rendering.
 
 ## Scope
 - versioned composition document with optimistic concurrency and exact approved Scene Plan lineage;
 - stable composition-local scene identity;
 - reorder/duplicate/remove as composition-local operations;
 - **split/merge explicitly unsupported in V1** and redirected to the upstream Scene Plan workflow;
+- integrated narration/script edit affordance that creates/updates the owning upstream Script/Scene Plan versioned workflow and then requires explicit composition reconciliation; no composition-local text override and no mutation of approved history;
 - exact durable visual MediaAsset/binding references plus bounded `contain|cover`, crop, position/scale and video-audio mute semantics;
-- exact narration asset/binding lineage; no hidden narration rewrite or TTS regeneration;
+- exact narration asset/binding lineage; narration changes invalidate/rebuild dependent narration audio/captions through their owning workflows rather than silently editing generated assets;
 - explicit duration in integer milliseconds without silent narration/caption truncation or time stretch;
 - exact caption document/revision/source-lineage selection plus render-neutral style semantics;
 - exact project audio-mix document/revision/music/narration lineage;
@@ -27,6 +28,7 @@ Deliver the first baseline comprehensive scene editor: compose exact accepted sc
 
 ## Required behavior
 - Never silently mutate approved Script/Scene Plan, MediaAsset provenance, narration generation, captions or audio-mix history.
+- A narration/script edit initiated from Scene Editor must use the authoritative upstream versioning path, make affected downstream narration/caption/media assumptions stale as appropriate, and return through explicit composition reconciliation; it must never be stored as a hidden composition-only text override.
 - A newer upstream assignment/revision/lineage never silently rewrites a saved composition.
 - Stale/broken dependencies preserve creator edits and require explicit reconciliation before default render snapshot creation.
 - Reconciliation may auto-map only exact stable `scene_key` matches; ambiguous removed/renamed/split/merged scenes require creator choice/new composition.
@@ -57,8 +59,9 @@ References are for architectural/product study; SynVideo owns its domain/impleme
 Actual render-engine/runtime licensing remains a TASK-037 decision; TASK-036 remains render-engine neutral.
 
 ## TDD focus
-Required coverage is frozen in `SCENE_EDITOR_COMPOSITION_V1`, including:
+Required coverage is frozen in `SCENE_EDITOR_COMPOSITION_V1`, plus integrated workflow coverage for upstream narration/script edits, including:
 - composition create/load and upstream non-mutation;
+- narration/script edit bridge creates/version-selects through the owning upstream workflow and marks/reconciles affected downstream state without hidden local text divergence;
 - stable local scene identity, reorder/duplicate/remove invariants and last-scene protection;
 - split/merge non-support;
 - visual kind/project/transform validation;
