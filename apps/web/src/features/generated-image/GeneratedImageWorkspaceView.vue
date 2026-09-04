@@ -3,11 +3,13 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
-import { getProject, type Project } from '@/api/projects'
+import { getProject } from '@/api/projects'
 import {
   assignPrimaryVisual,
+  listMediaAssets,
   listSceneMediaBindings,
   mediaAssetContentURL,
+  type MediaAsset,
   type SceneMediaEntry,
 } from '@/features/media/api'
 import { getScenePlan, listScenePlans, type Scene, type ScenePlan } from '@/features/scene-plan/api'
@@ -43,9 +45,9 @@ interface SceneGenerationState {
 const route = useRoute()
 const { t } = useI18n({ useScope: 'local', messages })
 
-const project = ref<Project | null>(null)
 const plan = ref<ScenePlan | null>(null)
 const providers = ref<ImageGenerationOptionProvider[]>([])
+const generatedAssets = ref<MediaAsset[]>([])
 const selectedProviderId = ref('')
 const selectedModelId = ref('')
 const assignOnSuccess = ref(false)
@@ -80,12 +82,11 @@ async function loadWorkspace() {
   loading.value = true
   loadFailed.value = false
   try {
-    const [loadedProject, summaries, optionResponse] = await Promise.all([
+    const [, summaries, optionResponse] = await Promise.all([
       getProject(projectId.value),
       listScenePlans(projectId.value),
       fetchImageGenerationOptions(),
     ])
-    project.value = loadedProject
     providers.value = optionResponse.providers
     selectedProviderId.value = providers.value[0]?.id ?? ''
     selectedModelId.value = providers.value[0]?.models[0]?.id ?? ''
@@ -95,11 +96,13 @@ async function loadWorkspace() {
       .sort((a, b) => b.version - a.version)[0]
     if (!approved) return
 
-    const [loadedPlan, currentBindings] = await Promise.all([
+    const [loadedPlan, currentBindings, assetResponse] = await Promise.all([
       getScenePlan(projectId.value, approved.version),
       listSceneMediaBindings(projectId.value, approved.version),
+      listMediaAssets(projectId.value),
     ])
     plan.value = loadedPlan
+    generatedAssets.value = assetResponse.assets
     for (const entry of currentBindings) bindings[entry.scene_key] = entry
 
     const recoveries: Promise<void>[] = []
@@ -132,6 +135,24 @@ function stateFor(sceneKey: string): SceneGenerationState {
     keptAlternative: false,
     busy: false,
   }
+}
+
+function historyFor(sceneKey: string): MediaAsset[] {
+  if (!plan.value) return []
+  return generatedAssets.value
+    .filter(
+      (asset) =>
+        asset.origin === 'generated_image' &&
+        asset.kind === 'image' &&
+        asset.metadata?.scene_plan_version === plan.value?.version &&
+        asset.metadata?.scene_key === sceneKey,
+    )
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+}
+
+async function refreshHistory() {
+  const response = await listMediaAssets(projectId.value)
+  generatedAssets.value = response.assets
 }
 
 function storageKey(sceneKey: string): string {
@@ -210,7 +231,11 @@ async function submitPending(scene: Scene, rawPending: PendingGeneration) {
       assign_primary_visual: pending.assignPrimaryVisual,
     })
     applyJob(scene.key, job)
-    if (job.state === 'queued' || job.state === 'running') await refreshJob(scene)
+    if (job.state === 'queued' || job.state === 'running') {
+      await refreshJob(scene)
+    } else if (job.state === 'succeeded') {
+      await refreshHistory()
+    }
   } catch (error) {
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
@@ -225,7 +250,11 @@ async function recoverScene(scene: Scene, pending: PendingGeneration) {
   try {
     const job = await getSceneImageGeneration(projectId.value, pending.requestId)
     applyJob(scene.key, job)
-    if (job.state === 'queued' || job.state === 'running') schedulePoll(scene)
+    if (job.state === 'queued' || job.state === 'running') {
+      schedulePoll(scene)
+    } else if (job.state === 'succeeded') {
+      await refreshHistory()
+    }
   } catch (error) {
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
@@ -241,7 +270,11 @@ async function refreshJob(scene: Scene) {
   try {
     const job = await getSceneImageGeneration(projectId.value, requestId)
     applyJob(scene.key, job)
-    if (job.state === 'queued' || job.state === 'running') schedulePoll(scene)
+    if (job.state === 'queued' || job.state === 'running') {
+      schedulePoll(scene)
+    } else if (job.state === 'succeeded') {
+      await refreshHistory()
+    }
   } catch (error) {
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
@@ -269,15 +302,23 @@ function schedulePoll(scene: Scene) {
 }
 
 async function assignGenerated(scene: Scene) {
+  const assetId = stateFor(scene.key).assetId
+  if (!assetId) return
+  await assignAsset(scene, assetId)
+}
+
+async function assignAsset(scene: Scene, assetId: string) {
   const state = stateFor(scene.key)
-  if (!plan.value || !state.assetId) return
+  if (!plan.value) return
   state.busy = true
   state.errorCode = undefined
   try {
-    const entry = await assignPrimaryVisual(projectId.value, plan.value.version, scene.key, state.assetId)
+    const entry = await assignPrimaryVisual(projectId.value, plan.value.version, scene.key, assetId)
     bindings[scene.key] = entry
-    state.assigned = true
-    state.keptAlternative = false
+    if (state.assetId === assetId) {
+      state.assigned = true
+      state.keptAlternative = false
+    }
   } catch (error) {
     state.errorCode = apiErrorCode(error)
   } finally {
@@ -379,7 +420,7 @@ function jobLabel(state: SceneGenerationState): string {
           <div v-if="bindings[scene.key]?.asset" class="preview-block">
             <strong>{{ t('generatedImage.currentVisual') }}</strong>
             <img
-              :src="mediaAssetContentURL(projectId, bindings[scene.key].asset!.id)"
+              :src="mediaAssetContentURL(projectId, bindings[scene.key]?.asset?.id ?? '')"
               :alt="t('generatedImage.currentVisual')"
             />
           </div>
@@ -389,7 +430,7 @@ function jobLabel(state: SceneGenerationState): string {
             <strong>{{ t('generatedImage.generatedPreview') }}</strong>
             <img
               :data-testid="`generated-image-${scene.key}`"
-              :src="mediaAssetContentURL(projectId, stateFor(scene.key).assetId!)"
+              :src="mediaAssetContentURL(projectId, stateFor(scene.key).assetId ?? '')"
               :alt="t('generatedImage.generatedPreview')"
             />
             <div class="action-row">
@@ -413,6 +454,30 @@ function jobLabel(state: SceneGenerationState): string {
               </button>
             </div>
           </div>
+
+          <section class="history-block" :aria-label="t('generatedImage.history')">
+            <strong>{{ t('generatedImage.history') }}</strong>
+            <p v-if="!historyFor(scene.key).length" class="state-text">
+              {{ t('generatedImage.historyEmpty') }}
+            </p>
+            <div v-else class="history-grid">
+              <article v-for="asset in historyFor(scene.key)" :key="asset.id" class="history-card">
+                <img
+                  :data-testid="`history-image-${scene.key}-${asset.id}`"
+                  :src="mediaAssetContentURL(projectId, asset.id)"
+                  :alt="t('generatedImage.history')"
+                />
+                <button
+                  class="secondary-button"
+                  type="button"
+                  :disabled="stateFor(scene.key).busy"
+                  @click="assignAsset(scene, asset.id)"
+                >
+                  {{ t('generatedImage.useHistory') }}
+                </button>
+              </article>
+            </div>
+          </section>
 
           <p v-if="jobLabel(stateFor(scene.key))" aria-live="polite" class="state-text">
             {{ jobLabel(stateFor(scene.key)) }}
@@ -498,7 +563,8 @@ textarea {
   font: inherit;
 }
 
-.scene-grid {
+.scene-grid,
+.history-block {
   display: grid;
   gap: 1rem;
 }
@@ -521,12 +587,25 @@ textarea {
   gap: 0.6rem;
 }
 
-.preview-block img {
+.preview-block img,
+.history-card img {
   width: min(100%, 42rem);
   max-height: 28rem;
   object-fit: contain;
   border-radius: 0.6rem;
   background: #111;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.history-card {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
 }
 
 .action-row {
@@ -541,7 +620,8 @@ textarea {
 }
 
 @media (max-width: 640px) {
-  .generation-settings {
+  .generation-settings,
+  .history-grid {
     grid-template-columns: 1fr;
   }
 
