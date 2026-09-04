@@ -98,6 +98,34 @@ describe('GeneratedImageWorkspaceView', () => {
     vi.spyOn(mediaApi, 'listSceneMediaBindings').mockResolvedValue([
       { scene_key: 'scene-1', role: 'primary_visual' },
     ])
+    vi.spyOn(mediaApi, 'listMediaAssets').mockResolvedValue({
+      assets: [
+        {
+          id: 'asset-history',
+          project_id: 'proj-123',
+          kind: 'image',
+          origin: 'generated_image',
+          mime_type: 'image/png',
+          byte_size: 120,
+          sha256: 'history',
+          metadata: { scene_plan_version: 2, scene_key: 'scene-1', job_id: 'job-history' },
+          created_at: '2026-09-03T00:00:00Z',
+          updated_at: '2026-09-03T00:00:00Z',
+        },
+        {
+          id: 'asset-other-scene',
+          project_id: 'proj-123',
+          kind: 'image',
+          origin: 'generated_image',
+          mime_type: 'image/png',
+          byte_size: 120,
+          sha256: 'other',
+          metadata: { scene_plan_version: 2, scene_key: 'scene-other', job_id: 'job-other' },
+          created_at: '2026-09-03T00:00:00Z',
+          updated_at: '2026-09-03T00:00:00Z',
+        },
+      ],
+    })
   })
 
   it('submits the scene-local edited prompt and previews the exact succeeded asset', async () => {
@@ -169,5 +197,14 @@ describe('GeneratedImageWorkspaceView', () => {
     expect(wrapper.get('[data-testid="generated-image-scene-1"]').attributes('src')).toContain(
       'asset-existing',
     )
+  })
+
+  it('shows regeneration history only for the exact approved plan scene', async () => {
+    await router.isReady()
+    const wrapper = mount(GeneratedImageWorkspaceView, { global: { plugins: [router, i18n] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="history-image-scene-1-asset-history"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="history-image-scene-1-asset-other-scene"]').exists()).toBe(false)
   })
 })
