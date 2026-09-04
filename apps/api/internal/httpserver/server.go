@@ -7,13 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
-	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/s3storage"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
@@ -22,29 +20,8 @@ const requestIDHeader = "X-Request-ID"
 
 var readinessProbeTimeout = 2 * time.Second
 
-var readinessDatabaseProbe = func(ctx context.Context, databaseURL string) error {
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
-	return pool.Ping(ctx)
-}
-
-var readinessStorageProbe = func(ctx context.Context, cfg config.MediaStorageConfig) error {
-	storage, err := s3storage.New(s3storage.Config{
-		Endpoint:        cfg.Endpoint,
-		Region:          cfg.Region,
-		Bucket:          cfg.Bucket,
-		AccessKeyID:     cfg.AccessKeyID,
-		SecretAccessKey: cfg.SecretAccessKey,
-		UsePathStyle:    cfg.UsePathStyle,
-		Timeout:         cfg.Timeout,
-	})
-	if err != nil {
-		return err
-	}
-	return storage.Ready(ctx)
+type readinessProbe interface {
+	Ready(context.Context) error
 }
 
 type statusResponse struct {
@@ -103,8 +80,18 @@ func New(
 	mediaServices ...MediaServices,
 ) *http.Server {
 	mux := http.NewServeMux()
+	var databaseProbe readinessProbe
+	if probe, ok := projectService.(readinessProbe); ok {
+		databaseProbe = probe
+	}
+	var storageProbe readinessProbe
+	if len(mediaServices) > 0 {
+		if probe, ok := mediaServices[0].Assets.(readinessProbe); ok {
+			storageProbe = probe
+		}
+	}
 	mux.HandleFunc("GET /api/v1/healthz", healthHandler)
-	mux.HandleFunc("GET /api/v1/readyz", readinessHandler(cfg))
+	mux.HandleFunc("GET /api/v1/readyz", readinessHandler(cfg, databaseProbe, storageProbe))
 	if projectService != nil && actorResolver != nil {
 		handler := projectHandler{service: projectService, actorResolver: actorResolver}
 		mux.HandleFunc("POST /api/v1/projects", handler.create)
@@ -217,28 +204,28 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	writeProjectJSON(w, http.StatusOK, statusResponse{Status: "ok"})
 }
 
-func readinessHandler(cfg config.Config) http.HandlerFunc {
+func readinessHandler(cfg config.Config, databaseProbe readinessProbe, storageProbe readinessProbe) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.DatabaseURL != "" {
-			probeCtx, cancel := context.WithTimeout(r.Context(), readinessProbeTimeout)
-			err := readinessDatabaseProbe(probeCtx, cfg.DatabaseURL)
-			cancel()
-			if err != nil {
+			if databaseProbe == nil || !runReadinessProbe(r.Context(), databaseProbe) {
 				writeProjectJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "unready"})
 				return
 			}
 		}
 		if cfg.MediaStorage.Configured() {
-			probeCtx, cancel := context.WithTimeout(r.Context(), readinessProbeTimeout)
-			err := readinessStorageProbe(probeCtx, cfg.MediaStorage)
-			cancel()
-			if err != nil {
+			if storageProbe == nil || !runReadinessProbe(r.Context(), storageProbe) {
 				writeProjectJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "unready"})
 				return
 			}
 		}
 		writeProjectJSON(w, http.StatusOK, statusResponse{Status: "ready", Environment: cfg.Environment})
 	}
+}
+
+func runReadinessProbe(parent context.Context, probe readinessProbe) bool {
+	probeCtx, cancel := context.WithTimeout(parent, readinessProbeTimeout)
+	defer cancel()
+	return probe.Ready(probeCtx) == nil
 }
 
 type responseStatusWriter struct {
