@@ -1,7 +1,7 @@
 # TASK-039 — Production readiness & HTTP request observability
 
-Status: BACKLOG
-Priority: P2
+Status: READY
+Priority: P1 production release gate
 Base branch: `develop`
 Canonical branch: `feature/TASK-039-readiness-observability`
 Issue: #80
@@ -65,10 +65,15 @@ Dedupe was performed against current open/closed issues, PRs and repository docs
 ## Dependencies
 - Technical foundation / HTTP server baseline: DONE.
 - Database and media-storage foundations: DONE.
-- No dependency on TASK-030/TASK-031 behavior; WIP capacity is the only current activation constraint.
+- TASK-032: DONE via PR #89 / `develop` `7b3569bd09d8a35ad7a57363eaccfbf4eb6d545c`.
+- TASK-030 remains the only active implementation stream; TASK-039 is independent of its feature behavior.
 
-## Activation gate
-Remain BACKLOG until PM/TL reconciles current implementation WIP capacity or deployment-readiness becomes the immediate release gate. Promote to READY only after a fresh duplicate/branch check confirms no implementation owner already exists.
+## Activation evidence
+- TASK-032 completion released one bounded implementation WIP slot.
+- Fresh PR dedupe found only historical planning PR #81 for TASK-039; no implementation PR owns this outcome.
+- Fresh branch dedupe found no canonical implementation branch `feature/TASK-039-readiness-observability`; only historical PM planning branch `pm/TASK-039-readiness-observability` exists.
+- Current protected integration source at activation is `develop` `7b3569bd09d8a35ad7a57363eaccfbf4eb6d545c`.
+- Issue #80 is reconciled to `READY / UNCLAIMED`.
 
 ## Delivery
-Developer owns implementation on `feature/TASK-039-readiness-observability` and opens a PR into `develop`. Developer must not self-merge or self-mark DONE.
+Developer claims by creating `feature/TASK-039-readiness-observability` from exact latest protected `develop` if it is still absent, implements there, and opens a PR into `develop`. Existing canonical branch/PR means already claimed. Developer must not self-merge or self-mark DONE.
