@@ -1,6 +1,6 @@
 # TASK-046 — Critical Creator-Flow End-to-End Acceptance Harness
 
-Status: BACKLOG
+Status: READY
 Priority: P1
 Milestone: Production Readiness
 Issue: #100
@@ -56,8 +56,16 @@ SynVideo has a deterministic browser-level acceptance harness proving a small se
 - Feature tasks contribute browser scenarios only when their contracts/implementations are accepted.
 - The harness must respect current auth, project isolation and MediaAsset persistence boundaries.
 
-## Activation gate
-Remain BACKLOG after planning freeze. Before READY, PM/TL must re-check exact `develop`, dedupe any new E2E infrastructure/branches/PRs, confirm the chosen runner/bootstrap still fits the current web/API stack, select the initial smoke flow against already-accepted behavior, and reconcile CI runtime/capacity. Developer owns `feature/TASK-046-e2e-acceptance-harness` only after READY activation.
+## Activation evidence — 2026-09-05
+- protected `develop` rechecked at `efdcb88a67b04a749e1fc1bb3fa94b5b5d4ceb4b`;
+- no open implementation PR owns this outcome and no canonical `feature/TASK-046-e2e-acceptance-harness` implementation branch is active;
+- repository search still finds no Playwright/Cypress/E2E harness competing with this task;
+- current web stack remains Vue 3 + Vite + TypeScript/Vitest, compatible with the contract's Playwright default candidate; exact implementation version remains Developer-owned and must be pinned in the implementation PR;
+- initial smoke path is frozen to already-accepted behavior only: supported test identity → browser application boot → real project/scene persisted mutation through UI/API → full reload → same persisted state recovered truthfully; no unfinished feature is required;
+- ordinary E2E must use isolated PostgreSQL/S3-compatible infrastructure and deterministic external-provider fakes; no live paid calls;
+- E2E CI may start non-required while runtime/flakiness evidence is gathered; existing required checks must remain intact.
+
+TASK-046 is therefore READY for Developer claim on `feature/TASK-046-e2e-acceptance-harness` from latest protected `develop`. PM/TL does not implement the harness.
 
 ## TDD focus
 Bootstrap failure/success, test identity boundary, persistence across reload, isolation/cleanup, deterministic external-provider fakes, failure-artifact redaction and CI invocation.
