@@ -72,7 +72,9 @@ docker compose -p "$COMPOSE_PROJECT_NAME" -f infra/docker-compose.yml up -d --wa
   exec go run ./cmd/api
 ) > >(redact > "$ARTIFACT_DIR/api.log") 2>&1 &
 API_PID=$!
-wait_http http://127.0.0.1:8080/readyz API
+# Use the API's real readiness route so the harness verifies DB/storage readiness,
+# not merely that the process has opened its listen socket.
+wait_http http://127.0.0.1:8080/api/v1/readyz API
 
 npm run dev:web -- --host 127.0.0.1 --port 4173 > >(redact > "$ARTIFACT_DIR/web.log") 2>&1 &
 WEB_PID=$!
