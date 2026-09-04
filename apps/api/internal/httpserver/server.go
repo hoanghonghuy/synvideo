@@ -195,8 +195,13 @@ func New(
 	}
 
 	return &http.Server{
-		Addr:    cfg.Addr,
-		Handler: requestLogger(logger, mux),
+		Addr:              cfg.Addr,
+		Handler:           requestLogger(logger, limitJSONRequestBody(defaultMaxJSONBodyBytes, mux)),
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		ReadTimeout:       0,
+		WriteTimeout:      0,
+		IdleTimeout:       defaultIdleTimeout,
+		MaxHeaderBytes:    defaultMaxHeaderBytes,
 	}
 }
 
