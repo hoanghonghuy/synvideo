@@ -110,7 +110,7 @@ func TestExecutorBoundsLeaseLossForNonCooperativeHandler(t *testing.T) {
 		close(entered)
 		<-release
 		close(finished)
-		return nil, jobs.NewTerminalJobError("ERR_LATE", errors.New("late terminal failure"))
+		return nil, jobs.NewTerminalError("ERR_LATE", errors.New("late terminal failure"))
 	})); err != nil {
 		t.Fatalf("register: %v", err)
 	}
