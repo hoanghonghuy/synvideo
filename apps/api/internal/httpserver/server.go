@@ -4,16 +4,48 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/s3storage"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 )
+
+const requestIDHeader = "X-Request-ID"
+
+var readinessProbeTimeout = 2 * time.Second
+
+var readinessDatabaseProbe = func(ctx context.Context, databaseURL string) error {
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	return pool.Ping(ctx)
+}
+
+var readinessStorageProbe = func(ctx context.Context, cfg config.MediaStorageConfig) error {
+	storage, err := s3storage.New(s3storage.Config{
+		Endpoint:        cfg.Endpoint,
+		Region:          cfg.Region,
+		Bucket:          cfg.Bucket,
+		AccessKeyID:     cfg.AccessKeyID,
+		SecretAccessKey: cfg.SecretAccessKey,
+		UsePathStyle:    cfg.UsePathStyle,
+		Timeout:         cfg.Timeout,
+	})
+	if err != nil {
+		return err
+	}
+	return storage.Ready(ctx)
+}
 
 type statusResponse struct {
 	Status      string `json:"status"`
@@ -186,12 +218,51 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func readinessHandler(cfg config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeProjectJSON(w, http.StatusOK, statusResponse{
-			Status:      "ready",
-			Environment: cfg.Environment,
-		})
+	return func(w http.ResponseWriter, r *http.Request) {
+		if cfg.DatabaseURL != "" {
+			probeCtx, cancel := context.WithTimeout(r.Context(), readinessProbeTimeout)
+			err := readinessDatabaseProbe(probeCtx, cfg.DatabaseURL)
+			cancel()
+			if err != nil {
+				writeProjectJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "unready"})
+				return
+			}
+		}
+		if cfg.MediaStorage.Configured() {
+			probeCtx, cancel := context.WithTimeout(r.Context(), readinessProbeTimeout)
+			err := readinessStorageProbe(probeCtx, cfg.MediaStorage)
+			cancel()
+			if err != nil {
+				writeProjectJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "unready"})
+				return
+			}
+		}
+		writeProjectJSON(w, http.StatusOK, statusResponse{Status: "ready", Environment: cfg.Environment})
 	}
+}
+
+type responseStatusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *responseStatusWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *responseStatusWriter) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *responseStatusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
@@ -200,7 +271,44 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Info("api request", "method", r.Method, "path", r.URL.Path)
-		next.ServeHTTP(w, r)
+		requestID := safeRequestID(r.Header.Get(requestIDHeader))
+		w.Header().Set(requestIDHeader, requestID)
+		wrapped := &responseStatusWriter{ResponseWriter: w}
+		started := time.Now()
+
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.Error("api request panic", "method", r.Method, "route", safeRoute(r), "request_id", requestID)
+				if wrapped.status == 0 {
+					http.Error(wrapped, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				}
+			}
+			if wrapped.status == 0 {
+				wrapped.status = http.StatusOK
+			}
+			logger.Info("api request completed",
+				"method", r.Method,
+				"route", safeRoute(r),
+				"status", wrapped.status,
+				"duration_ms", time.Since(started).Milliseconds(),
+				"request_id", requestID,
+			)
+		}()
+
+		next.ServeHTTP(wrapped, r)
 	})
+}
+
+func safeRequestID(candidate string) string {
+	if parsed, err := uuid.Parse(candidate); err == nil {
+		return parsed.String()
+	}
+	return uuid.NewString()
+}
+
+func safeRoute(r *http.Request) string {
+	if r.Pattern != "" {
+		return r.Pattern
+	}
+	return "unmatched"
 }
