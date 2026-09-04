@@ -38,9 +38,15 @@ func (s *Service) GetOwnerVideoGenerationOptions(ctx context.Context, ownerID uu
 		}
 		models := make([]VideoGenerationOptionModel, 0)
 		for _, model := range providerDef.Models {
-			if enabled[model.ModelID] && s.catalog.ModelSupportsCapability(providerDef.ProviderID, model.ModelID, CapabilityVideo) {
-				models = append(models, VideoGenerationOptionModel{ID: model.ModelID, DisplayName: model.DisplayName})
+			if !enabled[model.ModelID] || !s.catalog.ModelSupportsCapability(providerDef.ProviderID, model.ModelID, CapabilityVideo) {
+				continue
 			}
+			option := VideoGenerationOptionModel{ID: model.ModelID, DisplayName: model.DisplayName}
+			if providerDef.ProviderID == providers.ProviderID("runway") && model.ModelID == providers.ModelID("gen4.5") {
+				option.MinDurationSeconds = runwayvideo.MinDurationSeconds
+				option.MaxDurationSeconds = runwayvideo.MaxDurationSeconds
+			}
+			models = append(models, option)
 		}
 		if len(models) > 0 {
 			result = append(result, VideoGenerationOptionProvider{ID: providerDef.ProviderID, DisplayName: providerDef.DisplayName, Models: models})
