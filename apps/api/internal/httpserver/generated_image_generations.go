@@ -29,6 +29,7 @@ type createGeneratedImageRequest struct {
 	RequestID           string `json:"request_id"`
 	ProviderID          string `json:"provider_id"`
 	ModelID             string `json:"model_id"`
+	Prompt              string `json:"prompt,omitempty"`
 	AssignPrimaryVisual bool   `json:"assign_primary_visual"`
 }
 
@@ -86,7 +87,7 @@ func (h generatedImageGenerationHandler) create(w http.ResponseWriter, r *http.R
 		writeAPIError(w, project.ValidationError{Fields: fields})
 		return
 	}
-	view, err := h.service.CreateGeneration(r.Context(), principal, projectID, version, sceneKey, generatedimagejob.CreateGenerationInput{RequestID: requestID, ProviderID: req.ProviderID, ModelID: req.ModelID, AssignPrimaryVisual: req.AssignPrimaryVisual})
+	view, err := h.service.CreateGeneration(r.Context(), principal, projectID, version, sceneKey, generatedimagejob.CreateGenerationInput{RequestID: requestID, ProviderID: req.ProviderID, ModelID: req.ModelID, Prompt: req.Prompt, AssignPrimaryVisual: req.AssignPrimaryVisual})
 	if err != nil {
 		writeGeneratedImageAPIError(w, err)
 		return
