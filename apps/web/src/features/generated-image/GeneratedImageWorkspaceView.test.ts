@@ -207,4 +207,69 @@ describe('GeneratedImageWorkspaceView', () => {
     expect(wrapper.find('[data-testid="history-image-scene-1-asset-history"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="history-image-scene-1-asset-other-scene"]').exists()).toBe(false)
   })
+
+  it('preserves an assignment-failed generated asset in history across deliberate regeneration', async () => {
+    const failedAsset = {
+      id: 'asset-assignment-failed',
+      project_id: 'proj-123',
+      kind: 'image' as const,
+      origin: 'generated_image' as const,
+      mime_type: 'image/png',
+      byte_size: 120,
+      sha256: 'assignment-failed',
+      metadata: { scene_plan_version: 2, scene_key: 'scene-1', job_id: 'job-assignment-failed' },
+      created_at: '2026-09-04T00:00:00Z',
+      updated_at: '2026-09-04T00:00:00Z',
+    }
+    vi.spyOn(mediaApi, 'listMediaAssets')
+      .mockResolvedValueOnce({ assets: [] })
+      .mockResolvedValue({ assets: [failedAsset] })
+    vi.spyOn(imageApi, 'createSceneImageGeneration')
+      .mockResolvedValueOnce({
+        id: '11111111-1111-4111-8111-111111111111',
+        state: 'failed',
+        attempt: 1,
+        max_attempts: 3,
+        media_asset_id: failedAsset.id,
+        assigned_primary_visual: false,
+        error_code: 'assignmentFailed',
+        created_at: '2026-09-04T00:00:00Z',
+        updated_at: '2026-09-04T00:00:01Z',
+      })
+      .mockResolvedValueOnce({
+        id: '11111111-1111-4111-8111-111111111111',
+        state: 'queued',
+        attempt: 0,
+        max_attempts: 3,
+        assigned_primary_visual: false,
+        created_at: '2026-09-04T00:01:00Z',
+        updated_at: '2026-09-04T00:01:00Z',
+      })
+    vi.spyOn(imageApi, 'getSceneImageGeneration').mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111',
+      state: 'queued',
+      attempt: 0,
+      max_attempts: 3,
+      assigned_primary_visual: false,
+      created_at: '2026-09-04T00:01:00Z',
+      updated_at: '2026-09-04T00:01:00Z',
+    })
+
+    await router.isReady()
+    const wrapper = mount(GeneratedImageWorkspaceView, { global: { plugins: [router, i18n] } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="generate-image-scene-1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="generated-image-scene-1"]').attributes('src')).toContain(
+      failedAsset.id,
+    )
+    expect(wrapper.find(`[data-testid="history-image-scene-1-${failedAsset.id}"]`).exists()).toBe(true)
+
+    await wrapper.get('[data-testid="generate-image-scene-1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="history-image-scene-1-${failedAsset.id}"]`).exists()).toBe(true)
+  })
 })
