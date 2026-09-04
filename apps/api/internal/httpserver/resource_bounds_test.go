@@ -55,6 +55,27 @@ func TestJSONBodyLimitRejectsOversizedRequestBeforeHandler(t *testing.T) {
 	}
 }
 
+func TestJSONBodyLimitCannotBeBypassedByMissingContentType(t *testing.T) {
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := limitJSONRequestBody(8, next)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/projects/p", bytes.NewBufferString(`{"title":"too large"}`))
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if called {
+		t.Fatal("downstream handler was called for oversized body without Content-Type")
+	}
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
 func TestJSONBodyLimitLeavesMediaUploadSemanticsAlone(t *testing.T) {
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
