@@ -230,6 +230,7 @@ async function submitPending(scene: Scene, rawPending: PendingGeneration) {
       prompt: pending.prompt,
       assign_primary_visual: pending.assignPrimaryVisual,
     })
+    if (state.submitted?.requestId !== pending.requestId) return
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       await refreshJob(scene)
@@ -237,10 +238,11 @@ async function submitPending(scene: Scene, rawPending: PendingGeneration) {
       await refreshHistory()
     }
   } catch (error) {
+    if (state.submitted?.requestId !== pending.requestId) return
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
   } finally {
-    state.busy = false
+    if (state.submitted?.requestId === pending.requestId) state.busy = false
   }
 }
 
@@ -249,6 +251,7 @@ async function recoverScene(scene: Scene, pending: PendingGeneration) {
   state.busy = true
   try {
     const job = await getSceneImageGeneration(projectId.value, pending.requestId)
+    if (state.submitted?.requestId !== pending.requestId) return
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       schedulePoll(scene)
@@ -256,10 +259,11 @@ async function recoverScene(scene: Scene, pending: PendingGeneration) {
       await refreshHistory()
     }
   } catch (error) {
+    if (state.submitted?.requestId !== pending.requestId) return
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
   } finally {
-    state.busy = false
+    if (state.submitted?.requestId === pending.requestId) state.busy = false
   }
 }
 
@@ -269,6 +273,7 @@ async function refreshJob(scene: Scene) {
   if (!requestId) return
   try {
     const job = await getSceneImageGeneration(projectId.value, requestId)
+    if (state.submitted?.requestId !== requestId) return
     applyJob(scene.key, job)
     if (job.state === 'queued' || job.state === 'running') {
       schedulePoll(scene)
@@ -276,6 +281,7 @@ async function refreshJob(scene: Scene) {
       await refreshHistory()
     }
   } catch (error) {
+    if (state.submitted?.requestId !== requestId) return
     state.jobState = 'recoverable'
     state.errorCode = apiErrorCode(error)
   }
