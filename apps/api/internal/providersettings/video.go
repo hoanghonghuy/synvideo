@@ -94,8 +94,8 @@ func (s *Service) ResolveVideoGenerator(ctx context.Context, ownerID uuid.UUID, 
 		return nil, providers.ErrUnsupportedCapability
 	}
 	adapter, err := runwayvideo.New(runwayvideo.Config{
-		ProviderID:        providerDef.ProviderID,
-		BaseURL:           providerDef.BaseURL,
+		ProviderID: providerDef.ProviderID,
+		BaseURL:    providerDef.BaseURL,
 		CredentialSource: runwayvideo.SecretSourceFunc(func(context.Context) (string, error) {
 			return apiKey, nil
 		}),
