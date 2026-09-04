@@ -7,6 +7,7 @@ import ScriptView from '@/features/script/ScriptView.vue'
 import ScenePlanView from '@/features/scene-plan/ScenePlanView.vue'
 import MediaWorkspaceView from '@/features/media/MediaWorkspaceView.vue'
 import SceneNarrationWorkspaceView from '@/features/scene-narration/SceneNarrationWorkspaceView.vue'
+import SceneVideoWorkspaceView from '@/features/scene-video/SceneVideoWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
@@ -76,6 +77,11 @@ export const router = createRouter({
       path: '/projects/:id/narration',
       name: 'scene-narration',
       component: SceneNarrationWorkspaceView,
+    },
+    {
+      path: '/projects/:id/scene-video',
+      name: 'scene-video',
+      component: SceneVideoWorkspaceView,
     },
     {
       path: '/settings/ai-providers',

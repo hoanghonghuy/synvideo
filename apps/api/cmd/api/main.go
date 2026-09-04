@@ -30,6 +30,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarrationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplan"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneplangenerationjob"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenevideojob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scriptgenerationjob"
 )
@@ -65,6 +66,14 @@ func loadProviderCatalog(cfg config.Config) (*providersettings.Catalog, error) {
 				{ModelID: "claude-3-5-sonnet", DisplayName: "Claude 3.5 Sonnet", ExternalModelID: "anthropic/claude-3.5-sonnet", Capabilities: []providersettings.Capability{providersettings.CapabilityText}},
 			},
 		},
+		{
+			ProviderID:  "runway",
+			DisplayName: "Runway",
+			BaseURL:     "https://api.dev.runwayml.com",
+			Models: []providersettings.ModelDefinition{
+				{ModelID: "gen4.5", DisplayName: "Runway Gen-4.5", ExternalModelID: "gen4.5", Capabilities: []providersettings.Capability{providersettings.CapabilityVideo}},
+			},
+		},
 	})
 }
 
@@ -90,6 +99,7 @@ func main() {
 	var scriptGenerationService *scriptgenerationjob.Service
 	var scenePlanGenerationService *sceneplangenerationjob.Service
 	var generatedImageGenerationService *generatedimagejob.Service
+	var generatedVideoGenerationService *scenevideojob.Service
 	var sceneNarrationJobService *scenenarrationjob.Service
 	var mediaAssetService *mediaasset.Service
 	var sceneMediaService *scenemedia.Service
@@ -115,6 +125,7 @@ func main() {
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
 		narrationBindingRepo := postgres.NewSceneNarrationBindingRepository(pool)
+		videoOperationRepo := postgres.NewSceneVideoOperationRepository(pool)
 
 		var cipher providersettings.Cipher
 		if cfg.CredentialEncryptionKey != "" {
@@ -164,6 +175,7 @@ func main() {
 			mediaAssetService = mediaasset.NewService(projectRepo, mediaAssetRepo, storage)
 			sceneMediaService = scenemedia.NewService(scenePlanRepo, mediaAssetRepo, bindingRepo)
 			generatedImageGenerationService = generatedimagejob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
+			generatedVideoGenerationService = scenevideojob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 			sceneNarrationService = scenenarration.NewService(narrationBindingRepo, scenePlanRepo, mediaAssetRepo)
 			sceneNarrationJobService = scenenarrationjob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 		}
@@ -190,6 +202,13 @@ func main() {
 			generatedImageJobHandler := generatedimagejob.NewHandler(providerSettingsService, generatedAssetStore, sceneMediaService)
 			if err := jobsRegistry.Register(generatedimagejob.JobKind, generatedImageJobHandler); err != nil {
 				logger.Error("register generated image job handler failed", "error", err)
+				os.Exit(1)
+			}
+
+			generatedVideoAssetStore := scenevideojob.NewAssetStore(mediaAssetService, mediaAssetRepo)
+			generatedVideoJobHandler := scenevideojob.NewHandler(providerSettingsService, videoOperationRepo, generatedVideoAssetStore, sceneMediaService)
+			if err := jobsRegistry.Register(scenevideojob.JobKind, generatedVideoJobHandler); err != nil {
+				logger.Error("register generated video job handler failed", "error", err)
 				os.Exit(1)
 			}
 		}
@@ -221,6 +240,7 @@ func main() {
 			Assets:          mediaAssetService,
 			Bindings:        sceneMediaService,
 			GeneratedImages: generatedImageGenerationService,
+			GeneratedVideos: generatedVideoGenerationService,
 			Narrations:      sceneNarrationService,
 			GeneratedAudio:  sceneNarrationJobService,
 		})
