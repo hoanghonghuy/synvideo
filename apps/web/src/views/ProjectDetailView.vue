@@ -5,10 +5,11 @@ import { useI18n } from 'vue-i18n'
 
 import { ApiError, getProject, updateProject, type Project, type UpdateProjectPayload } from '@/api/projects'
 import ProjectForm from '@/components/ProjectForm.vue'
+import generatedImageMessages from '@/features/generated-image/messages'
 
 const { t, d } = useI18n()
+const { t: tGeneratedImage } = useI18n({ useScope: 'local', messages: generatedImageMessages })
 const route = useRoute()
-
 
 const project = ref<Project | null>(null)
 const loading = ref(true)
@@ -124,6 +125,12 @@ async function submit(payload: UpdateProjectPayload) {
           :to="`/projects/${project.id}/media`"
         >
           {{ t('navigation.media') }}
+        </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/images`"
+        >
+          {{ tGeneratedImage('generatedImage.title') }}
         </RouterLink>
         <RouterLink
           class="text-link"
