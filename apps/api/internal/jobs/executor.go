@@ -63,9 +63,10 @@ func (r *Registry) Kinds() []string {
 }
 
 type ExecutorConfig struct {
-	LeaseDuration  time.Duration
-	PollInterval   time.Duration
-	DefaultBackoff time.Duration
+	LeaseDuration     time.Duration
+	PollInterval      time.Duration
+	DefaultBackoff    time.Duration
+	CancellationGrace time.Duration
 }
 
 type Executor struct {
@@ -88,6 +89,9 @@ func NewExecutor(repo Repository, registry *Registry, cfg ExecutorConfig) *Execu
 	}
 	if cfg.DefaultBackoff <= 0 {
 		cfg.DefaultBackoff = 10 * time.Second
+	}
+	if cfg.CancellationGrace <= 0 {
+		cfg.CancellationGrace = 2 * time.Second
 	}
 	return &Executor{
 		repo:     repo,
@@ -136,7 +140,6 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
-	// Context was canceled; do not corrupt state or mark failed, leave lease to expire and be reclaimed
 	if ctx.Err() != nil {
 		return true, ctx.Err()
 	}
@@ -175,7 +178,6 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
-	// Unclassified generic error
 	code := "ERR_JOB_FAILED"
 	if job.Attempt < job.MaxAttempts {
 		nextAvail := time.Now().UTC().Add(e.config.DefaultBackoff)
@@ -200,8 +202,28 @@ func (e *Executor) runHandler(ctx context.Context, handler Handler, job Job, lea
 	if renewInterval <= 0 {
 		renewInterval = time.Nanosecond
 	}
+	grace := e.config.CancellationGrace
+	if grace >= renewInterval {
+		grace = renewInterval / 2
+	}
+	if grace < 0 {
+		grace = 0
+	}
+
 	renewTicker := time.NewTicker(renewInterval)
 	defer renewTicker.Stop()
+
+	waitAfterCancel := func() {
+		if grace == 0 {
+			return
+		}
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-resultCh:
+		case <-timer.C:
+		}
+	}
 
 	for {
 		select {
@@ -209,7 +231,7 @@ func (e *Executor) runHandler(ctx context.Context, handler Handler, job Job, lea
 			return result.result, result.err, nil
 		case <-ctx.Done():
 			cancelHandler()
-			<-resultCh
+			waitAfterCancel()
 			return nil, ctx.Err(), nil
 		case <-renewTicker.C:
 			renewCtx, cancelRenew := context.WithTimeout(context.Background(), renewInterval)
@@ -217,7 +239,7 @@ func (e *Executor) runHandler(ctx context.Context, handler Handler, job Job, lea
 			cancelRenew()
 			if err != nil {
 				cancelHandler()
-				<-resultCh
+				waitAfterCancel()
 				return nil, nil, err
 			}
 		}
@@ -239,7 +261,6 @@ func (e *Executor) Start(ctx context.Context) error {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						return err
 					}
-					// Log/continue on transient error
 					break
 				}
 				if !executed {
