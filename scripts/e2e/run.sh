@@ -80,5 +80,9 @@ wait_http http://127.0.0.1:4173/projects Web
 
 # Keep the existing repository lockfile untouched while pinning the acceptance runner.
 npm install --no-save --package-lock=false @playwright/test@1.55.0
-npx playwright install chromium
+if [ "${CI:-}" = "true" ]; then
+  npx playwright install --with-deps chromium
+else
+  npx playwright install chromium
+fi
 npx playwright test --config e2e/playwright.config.ts
