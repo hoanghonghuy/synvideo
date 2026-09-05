@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getCaptions, rebuildCaptions, updateCaptions } from './api'
+import { getCaptions, rebuildCaptions, updateCaptions, type CaptionView } from './api'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
-const view = {
+const view: CaptionView = {
   id: 'caption-1',
   project_id: 'project/one',
   scene_plan_version: 2,
