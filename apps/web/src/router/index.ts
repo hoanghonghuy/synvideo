@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import CaptionWorkspaceView from '@/features/captions/CaptionWorkspaceView.vue'
 import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
 import GeneratedImageWorkspaceView from '@/features/generated-image/GeneratedImageWorkspaceView.vue'
@@ -77,6 +78,11 @@ export const router = createRouter({
       path: '/projects/:id/narration',
       name: 'scene-narration',
       component: SceneNarrationWorkspaceView,
+    },
+    {
+      path: '/projects/:id/captions',
+      name: 'captions',
+      component: CaptionWorkspaceView,
     },
     {
       path: '/projects/:id/scene-video',
