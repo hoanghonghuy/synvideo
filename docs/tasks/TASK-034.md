@@ -1,6 +1,6 @@
 # TASK-034 — Captions & Scene Timing V1
 
-Status: BACKLOG
+Status: READY
 Priority: P1
 Milestone: F1 Creative Workflow
 Canonical branch when activated: `feature/TASK-034-captions-timing`
@@ -59,7 +59,7 @@ Creator can derive timed captions from the exact current narration/audio lineage
 - TASK-037 consumes composition-ready caption data for subtitle rendering/export.
 
 ## Activation gate
-Remain BACKLOG after contract freeze while current implementation WIP is occupied by TASK-030/TASK-032. Immediately before READY, PM/TL must re-check exact `develop`, duplicate branches/PRs/issues, verify TASK-031 semantics have not drifted, and reconcile WIP capacity. Move issue #69 to READY only after those checks.
+Activation revalidated on protected `develop` after TASK-046 completion: no canonical `feature/TASK-034-captions-timing` branch or active TASK-034 implementation PR exists, TASK-031 remains DONE with accepted narration/audio lineage and measured-duration semantics, and bounded implementation capacity is available. Developer may claim the canonical branch from latest protected `develop`; runtime implementation belongs to Developer and must follow TDD plus the frozen `CAPTIONS_TIMING_V1` contract.
 
 ## TDD focus
 Lineage staleness, duration/timing validation, overlap policy, manual-edit preservation, explicit rebuild, optimistic concurrency, project isolation, immutable snapshot behavior and frontend truthfulness.
