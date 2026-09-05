@@ -131,6 +131,34 @@ func TestUpdateRejectsStaleWriterWithoutCreatingRevision(t *testing.T) {
 	}
 }
 
+func TestUpdatePreservesDocumentAndSegmentIdentity(t *testing.T) {
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	bindingID := uuid.New()
+	assetID := uuid.New()
+	repo := &captionRepoFake{latest: testDocument(ownerID, projectID, bindingID, assetID, 2)}
+	documentID := repo.latest.ID
+	segmentID := repo.latest.Segments[0].ID
+	service := testService(repo, ownerID, projectID, bindingID, assetID, 4.2)
+
+	segments := append([]Segment(nil), repo.latest.Segments...)
+	segments[0].Text = "Edited caption"
+	view, err := service.Update(context.Background(), project.Principal{OwnerID: ownerID}, projectID, 1, "scene-1", UpdateInput{
+		ExpectedRevision: 2,
+		Segments:         segments,
+		Style:            repo.latest.Style,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ID != documentID || view.Revision != 3 {
+		t.Fatalf("expected stable document %s at revision 3, got id=%s revision=%d", documentID, view.ID, view.Revision)
+	}
+	if len(view.Segments) != 1 || view.Segments[0].ID != segmentID {
+		t.Fatalf("ordinary edit changed segment identity: %#v", view.Segments)
+	}
+}
+
 func TestRebuildCreatesNewRevisionBoundToCurrentNarration(t *testing.T) {
 	ownerID := uuid.New()
 	projectID := uuid.New()
@@ -139,6 +167,7 @@ func TestRebuildCreatesNewRevisionBoundToCurrentNarration(t *testing.T) {
 	newBindingID := uuid.New()
 	newAssetID := uuid.New()
 	repo := &captionRepoFake{latest: testDocument(ownerID, projectID, oldBindingID, oldAssetID, 2)}
+	documentID := repo.latest.ID
 	service := testService(repo, ownerID, projectID, newBindingID, newAssetID, 5.25)
 
 	view, err := service.Rebuild(context.Background(), project.Principal{OwnerID: ownerID}, projectID, 1, "scene-1", 2)
@@ -147,6 +176,9 @@ func TestRebuildCreatesNewRevisionBoundToCurrentNarration(t *testing.T) {
 	}
 	if view.State != StateCurrent || view.Revision != 3 {
 		t.Fatalf("expected current revision 3, got state=%s revision=%d", view.State, view.Revision)
+	}
+	if view.ID != documentID {
+		t.Fatalf("rebuild changed stable document identity: want %s, got %s", documentID, view.ID)
 	}
 	if view.SourceBindingID != newBindingID || view.SourceAssetID != newAssetID || view.SourceDurationMS != 5_250 {
 		t.Fatalf("rebuild did not bind exact current source: %#v", view.Document)
@@ -158,17 +190,17 @@ func TestRebuildCreatesNewRevisionBoundToCurrentNarration(t *testing.T) {
 
 func testDocument(ownerID, projectID, bindingID, assetID uuid.UUID, revision int) Document {
 	return Document{
-		ID:                 uuid.New(),
-		OwnerID:            ownerID,
-		ProjectID:          projectID,
-		ScenePlanVersion:   1,
-		SceneKey:           "scene-1",
-		Revision:           revision,
-		SourceBindingID:    bindingID,
-		SourceAssetID:      assetID,
-		SourceDurationMS:   4_200,
-		Segments:           []Segment{{ID: uuid.New(), Text: "Old caption", StartMS: 0, EndMS: 4_200}},
-		Style:              DefaultStyle(),
+		ID:               uuid.New(),
+		OwnerID:          ownerID,
+		ProjectID:        projectID,
+		ScenePlanVersion: 1,
+		SceneKey:         "scene-1",
+		Revision:         revision,
+		SourceBindingID:  bindingID,
+		SourceAssetID:    assetID,
+		SourceDurationMS: 4_200,
+		Segments:         []Segment{{ID: uuid.New(), Text: "Old caption", StartMS: 0, EndMS: 4_200}},
+		Style:            DefaultStyle(),
 	}
 }
 
