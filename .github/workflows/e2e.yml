@@ -1,0 +1,35 @@
+name: E2E Acceptance
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  e2e:
+    name: E2E Acceptance (non-required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+      - run: npm ci
+      - name: Run isolated creator smoke path
+        env:
+          CI: "true"
+          SYNVIDEO_E2E_RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash scripts/e2e/run.sh
+      - name: Upload redacted E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/artifacts
+          if-no-files-found: ignore
+          retention-days: 7

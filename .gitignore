@@ -5,6 +5,9 @@ node_modules/
 apps/web/dist/
 apps/web/coverage/
 
+# Browser E2E output
+e2e/artifacts/
+
 # Go build/test output
 apps/api/bin/
 *.test
