@@ -30,6 +30,7 @@ var (
 )
 
 type ValidationError struct{ Fields map[string]string }
+
 func (e ValidationError) Error() string { return "caption validation failed" }
 
 type Segment struct {
@@ -160,12 +161,24 @@ func NormalizeStyle(style Style) (Style, error) {
 		style = DefaultStyle()
 	}
 	fields := map[string]string{}
-	if !oneOf(style.Alignment, "left", "center", "right") { fields["style.alignment"] = "invalid" }
-	if !oneOf(style.Position, "top", "middle", "bottom") { fields["style.position"] = "invalid" }
-	if !oneOf(style.Size, "small", "medium", "large") { fields["style.size"] = "invalid" }
-	if !oneOf(style.Weight, "normal", "semibold", "bold") { fields["style.weight"] = "invalid" }
-	if utf8.RuneCountInString(style.FontFamilyToken) > 100 { fields["style.font_family_token"] = "max_length" }
-	if len(fields) > 0 { return Style{}, ValidationError{Fields: fields} }
+	if !oneOf(style.Alignment, "left", "center", "right") {
+		fields["style.alignment"] = "invalid"
+	}
+	if !oneOf(style.Position, "top", "middle", "bottom") {
+		fields["style.position"] = "invalid"
+	}
+	if !oneOf(style.Size, "small", "medium", "large") {
+		fields["style.size"] = "invalid"
+	}
+	if !oneOf(style.Weight, "normal", "semibold", "bold") {
+		fields["style.weight"] = "invalid"
+	}
+	if utf8.RuneCountInString(style.FontFamilyToken) > 100 {
+		fields["style.font_family_token"] = "max_length"
+	}
+	if len(fields) > 0 {
+		return Style{}, ValidationError{Fields: fields}
+	}
 	return style, nil
 }
 
@@ -180,15 +193,17 @@ func StateForSource(doc Document, current Source) State {
 }
 
 func NewSnapshot(doc Document, state State) (Snapshot, error) {
-	if state != StateCurrent { return Snapshot{}, ErrStale }
+	if state != StateCurrent {
+		return Snapshot{}, ErrStale
+	}
 	return Snapshot{
-		DocumentID: doc.ID,
-		Revision: doc.Revision,
-		SourceBindingID: doc.SourceBindingID,
-		SourceAssetID: doc.SourceAssetID,
+		DocumentID:       doc.ID,
+		Revision:         doc.Revision,
+		SourceBindingID:  doc.SourceBindingID,
+		SourceAssetID:    doc.SourceAssetID,
 		SourceDurationMS: doc.SourceDurationMS,
-		Segments: append([]Segment(nil), doc.Segments...),
-		Style: doc.Style,
+		Segments:         append([]Segment(nil), doc.Segments...),
+		Style:            doc.Style,
 	}, nil
 }
 
@@ -199,14 +214,24 @@ func InitialSegments(text string, durationMS int64) ([]Segment, error) {
 }
 
 func oneOf(value string, allowed ...string) bool {
-	for _, candidate := range allowed { if value == candidate { return true } }
+	for _, candidate := range allowed {
+		if value == candidate {
+			return true
+		}
+	}
 	return false
 }
 
 func itoa(value int) string {
-	if value == 0 { return "0" }
+	if value == 0 {
+		return "0"
+	}
 	buf := [20]byte{}
 	i := len(buf)
-	for value > 0 { i--; buf[i] = byte('0' + value%10); value /= 10 }
+	for value > 0 {
+		i--
+		buf[i] = byte('0' + value%10)
+		value /= 10
+	}
 	return string(buf[i:])
 }
