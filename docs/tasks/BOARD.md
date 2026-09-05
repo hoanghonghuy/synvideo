@@ -40,31 +40,28 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-027 | Provider-neutral TTS + OpenAI speech adapter | DONE | Accepted. |
 | TASK-028 | Secure multi-capability provider runtime/settings | DONE | Accepted PR #58. |
 | TASK-029 | Durable generated-image acquisition + MediaAsset ingestion | DONE | Issue #60 closed; PR #63 squash `2dbba467...`. |
-| TASK-030 | Per-scene AI Image Generation Workspace | READY | Issue #65; canonical branch `feature/TASK-030-image-generation-workspace`. |
-| TASK-031 | Scene Narration & Voice V1 | READY | Issue #66; canonical branch `feature/TASK-031-scene-narration-voice`. |
-| TASK-032 | Per-scene AI Video Generation V1 | BACKLOG | Issue #67; fresh provider research required before READY. |
-| TASK-033 | Stock Media Search & Acquisition V1 | BACKLOG | Issue #68; provider/license contract required before READY. |
-| TASK-034 | Captions & Scene Timing V1 | BACKLOG | Issue #69; depends on TASK-031. |
-| TASK-035 | Background Music & Audio Mix V1 | BACKLOG | Issue #70; depends on narration-aware audio semantics. |
-| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; depends on stable media/audio/caption/music inputs. |
+| TASK-030 | Per-scene AI Image Generation Workspace | DONE | Issue #65 closed; implementation accepted via PR #108. |
+| TASK-031 | Scene Narration & Voice V1 | DONE | Issue #66 closed; implementation accepted via PR #77. |
+| TASK-032 | Per-scene AI Video Generation V1 | DONE | Issue #67 closed; implementation accepted via PR #89. |
+| TASK-033 | Stock Media Search & Acquisition V1 | READY | Issue #68; READY activation landed via PR #126; canonical implementation branch not yet claimed. |
+| TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
+| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; canonical branch is claimed but currently requires sync to latest `develop` before implementation. |
+| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; activation waits for accepted compatible TASK-033/TASK-035 implementation boundaries. |
 | TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
-## Active WAVE-F1-K authorization
-- TASK-030 and TASK-031 are the only newly authorized feature tasks.
-- They may be claimed independently using their exact canonical branch as an atomic lock from current `origin/develop`.
-- TASK-030 primarily owns the generated-image creator workspace surface.
-- TASK-031 owns dedicated narration/audio orchestration, binding and UI. Shared runtime/router/locale integration hotspots must remain minimal and explicitly reconciled.
-- Do not manufacture a third task merely to fill a slot.
+## Current F1 implementation supply
+- TASK-035 is claimed on `feature/TASK-035-background-music-mix`; Developer must sync the stale branch to latest protected `develop` before adding implementation work.
+- TASK-033 is independently `READY / CLAIMABLE`; Developer may create `feature/TASK-033-stock-media` from latest protected `develop` under its frozen task/contract.
+- TASK-036 is the prepared NEXT BACKLOG item, but must not be activated until compatible TASK-033 stock-media and TASK-035 audio-mix implementation boundaries are accepted.
+- Do not manufacture another feature task merely to fill a slot while this supply remains valid.
 
 ## Subsequent sequence
-1. TASK-032 video after fresh provider revalidation.
-2. TASK-033 stock after provider/license contract.
-3. TASK-034 captions + TASK-035 music after narration semantics stabilize.
-4. TASK-036 editor after component semantics are stable.
-5. TASK-037 render from immutable composition snapshots.
-6. TASK-038 Channel Hub from accepted render artifacts.
-7. Production hardening/E2E and richer intake follow product audit rather than micro-task generation.
+1. Finish TASK-035 audio mix and TASK-033 stock-media implementation independently within bounded WIP.
+2. Revalidate and activate TASK-036 editor once those component boundaries are accepted and compatible.
+3. TASK-037 render from immutable composition snapshots.
+4. TASK-038 Channel Hub from accepted render artifacts.
+5. Production hardening/E2E and richer intake follow product audit rather than micro-task generation.
 
 ## Architecture gates
 - Provider capabilities remain provider-neutral; vendor types stay in adapters.
