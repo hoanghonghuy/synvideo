@@ -1,6 +1,6 @@
 # TASK-033 — Stock Media Search & Acquisition V1
 
-Status: BACKLOG
+Status: READY
 Priority: P1
 Milestone: F1 Creative Workflow
 Issue: #68
@@ -55,15 +55,15 @@ Creator can search a supported stock image/video source for a scene, preview tru
 - Multiple providers in V1 unless a second adapter is separately justified.
 
 ## Provider revalidation note
-As of 2026-09-04, Pexels publicly exposes image/video search APIs and states its media is free for personal/commercial use under the Pexels license, while its API guidance asks applications to credit photographers when possible and higher API limits may depend on acceptable attribution. Current terms also restrict using/compiling content to replicate a competing service and prohibit unauthorized large-scale extraction/ML dataset use. Treat Pexels as a candidate, not a frozen implementation dependency, until READY-time API approval/terms review confirms SynVideo's explicit per-user search/acquire workflow is permitted.
+READY-time revalidation completed on 2026-09-05 against current official Pexels API/help documentation. Pexels remains a suitable first-adapter candidate, not a domain dependency: it exposes image/video search with bounded pagination, default limits remain 200 requests/hour and 20,000/month, and higher/unlimited limits may be granted free to eligible applications. Pexels requires/strongly expects attribution to Pexels and contributors for API integrations and prohibits copying its core stock-platform functionality or enabling standalone sale/redistribution of substantially unmodified content. SynVideo therefore must keep provider details behind the adapter boundary, show/preserve truthful creator/source/attribution metadata, avoid catalog mirroring/bulk ingestion, and treat rate-limit/removal conditions explicitly.
 
 ## Dependencies / relations
-- MediaAsset and Scene Media Binding foundations own durable asset identity, project isolation and assignment history.
+- Current protected `develop` still contains the MediaAsset and Scene Media Binding foundations that own durable asset identity, project isolation and assignment history; no incompatible foundation drift was found during READY revalidation.
 - TASK-030/TASK-032 own AI-generated media workflows; TASK-033 owns third-party stock discovery/acquisition and must not conflate provenance/licensing semantics with generated media.
 - TASK-036 consumes selected scene visual MediaAssets, regardless of stock/generated origin.
 
 ## Activation gate
-Remain BACKLOG after planning freeze. Immediately before READY, PM/TL must re-check exact `develop`, duplicate branches/PRs/issues, revalidate the chosen first provider's current API approval/limits/license/attribution/redistribution rules, confirm MediaAsset/binding semantics have not drifted, and reconcile bounded implementation WIP. Move issue #68 to READY only after those checks.
+READY revalidated on protected `develop` `fcd6d010a0cb2588fa4b71b6d305089ba8e28fb5` on 2026-09-05. Fresh dedupe found no canonical `feature/TASK-033-stock-media` branch and no active TASK-033 implementation PR; only historical planning branch `pm/TASK-033-stock-media-contract-freeze` exists. Pexels current API/eligibility/attribution constraints were revalidated from official documentation. MediaAsset + Scene Media Binding foundations remain present on current `develop`. TASK-034 is active in PR #124 and TASK-035 has been claimed on its canonical branch, so activating TASK-033 replenishes the next claimable queue rather than creating duplicate work. Developer may claim `feature/TASK-033-stock-media` only after this governance activation lands through required CI.
 
 ## TDD focus
 Result normalization, bounded pagination, attribution/provenance mapping, project isolation, acquisition recovery, remote-expiry independence, MediaAsset creation/deduplication, removed-source behavior and assignment/history.
