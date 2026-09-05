@@ -65,17 +65,17 @@ func (s *Service) Derive(ctx context.Context, principal project.Principal, proje
 		return View{}, err
 	}
 	doc, err := s.repo.CreateInitial(ctx, Document{
-		ID:                 uuid.New(),
-		OwnerID:            principal.OwnerID,
-		ProjectID:          projectID,
-		ScenePlanVersion:   planVersion,
-		SceneKey:           sceneKey,
-		Revision:           1,
-		SourceBindingID:    source.BindingID,
-		SourceAssetID:      source.AssetID,
-		SourceDurationMS:   source.DurationMS,
-		Segments:           segments,
-		Style:              DefaultStyle(),
+		ID:               uuid.New(),
+		OwnerID:          principal.OwnerID,
+		ProjectID:        projectID,
+		ScenePlanVersion: planVersion,
+		SceneKey:         sceneKey,
+		Revision:         1,
+		SourceBindingID:  source.BindingID,
+		SourceAssetID:    source.AssetID,
+		SourceDurationMS: source.DurationMS,
+		Segments:         segments,
+		Style:            DefaultStyle(),
 	})
 	if err != nil {
 		return View{}, err
@@ -128,7 +128,6 @@ func (s *Service) Update(ctx context.Context, principal project.Principal, proje
 	if err != nil {
 		return View{}, err
 	}
-	latest.ID = uuid.New()
 	latest.Revision++
 	latest.Segments = segments
 	latest.Style = style
@@ -171,17 +170,17 @@ func (s *Service) Rebuild(ctx context.Context, principal project.Principal, proj
 		return View{}, err
 	}
 	doc, err := s.repo.CreateRevision(ctx, Document{
-		ID:                 uuid.New(),
-		OwnerID:            principal.OwnerID,
-		ProjectID:          projectID,
-		ScenePlanVersion:   planVersion,
-		SceneKey:           sceneKey,
-		Revision:           expectedRevision + 1,
-		SourceBindingID:    source.BindingID,
-		SourceAssetID:      source.AssetID,
-		SourceDurationMS:   source.DurationMS,
-		Segments:           segments,
-		Style:              latest.Style,
+		ID:               latest.ID,
+		OwnerID:          principal.OwnerID,
+		ProjectID:        projectID,
+		ScenePlanVersion: planVersion,
+		SceneKey:         sceneKey,
+		Revision:         expectedRevision + 1,
+		SourceBindingID:  source.BindingID,
+		SourceAssetID:    source.AssetID,
+		SourceDurationMS: source.DurationMS,
+		Segments:         segments,
+		Style:            latest.Style,
 	}, expectedRevision)
 	if err != nil {
 		return View{}, err
