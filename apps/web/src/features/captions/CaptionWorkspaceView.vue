@@ -129,7 +129,7 @@ async function rebuild() {
 }
 
 function addSegment() {
-  const previous = segments.value.at(-1)
+  const previous = segments.value.length > 0 ? segments.value[segments.value.length - 1] : undefined
   const start = previous?.end_ms ?? 0
   const end = Math.min(current.value?.source_duration_ms ?? start + 1000, start + 1000)
   segments.value.push({ id: crypto.randomUUID(), text: '', start_ms: start, end_ms: Math.max(start + 1, end) })
@@ -235,7 +235,7 @@ onMounted(() => {
         <h2>Revision history</h2>
         <p v-if="history.length === 0">Chưa có history.</p>
         <ol v-else class="history-list">
-          <li v-for="item in history" :key="item.id">
+          <li v-for="item in history" :key="`${item.id}:${item.revision}`">
             Revision {{ item.revision }} · {{ item.source_duration_ms }} ms · source {{ item.source_asset_id.slice(0, 8) }}…
           </li>
         </ol>
