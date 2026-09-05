@@ -23,64 +23,124 @@ type CaptionService interface {
 }
 
 type captionHandler struct {
-	service CaptionService
+	service       CaptionService
 	actorResolver actor.Resolver
 }
 
-type rebuildCaptionRequest struct { ExpectedRevision int `json:"expected_revision"` }
+type rebuildCaptionRequest struct {
+	ExpectedRevision int `json:"expected_revision"`
+}
 
 func (h captionHandler) derive(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	view, err := h.service.Derive(r.Context(), principal, projectID, version, sceneKey)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusCreated, view)
 }
 
 func (h captionHandler) get(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	view, err := h.service.Get(r.Context(), principal, projectID, version, sceneKey)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h captionHandler) update(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	var request captions.UpdateInput
-	if !decodeJSON(w, r, &request) { return }
+	if !decodeJSON(w, r, &request) {
+		return
+	}
 	view, err := h.service.Update(r.Context(), principal, projectID, version, sceneKey, request)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h captionHandler) rebuild(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	var request rebuildCaptionRequest
-	if !decodeJSON(w, r, &request) { return }
+	if !decodeJSON(w, r, &request) {
+		return
+	}
 	view, err := h.service.Rebuild(r.Context(), principal, projectID, version, sceneKey, request.ExpectedRevision)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h captionHandler) snapshot(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	snapshot, err := h.service.Snapshot(r.Context(), principal, projectID, version, sceneKey)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, snapshot)
 }
 
 func (h captionHandler) history(w http.ResponseWriter, r *http.Request) {
-	principal, projectID, version, sceneKey, ok := h.identifiers(w, r); if !ok { return }
+	principal, projectID, version, sceneKey, ok := h.identifiers(w, r)
+	if !ok {
+		return
+	}
 	history, err := h.service.History(r.Context(), principal, projectID, version, sceneKey)
-	if err != nil { writeCaptionAPIError(w, err); return }
+	if err != nil {
+		writeCaptionAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, history)
 }
 
 func (h captionHandler) identifiers(w http.ResponseWriter, r *http.Request) (project.Principal, uuid.UUID, int, string, bool) {
-	if h.actorResolver == nil { writeCaptionAPIError(w, captions.ErrUnauthenticated); return project.Principal{}, uuid.Nil, 0, "", false }
-	principal, err := h.actorResolver.Resolve(r); if err != nil { writeCaptionAPIError(w, captions.ErrUnauthenticated); return project.Principal{}, uuid.Nil, 0, "", false }
-	projectID, ok := parseProjectID(w, r); if !ok { return project.Principal{}, uuid.Nil, 0, "", false }
-	version, err := strconv.Atoi(r.PathValue("version")); if err != nil || version < 1 { writeCaptionAPIError(w, captions.ErrInvalidInput); return project.Principal{}, uuid.Nil, 0, "", false }
-	sceneKey := r.PathValue("scene_key"); if sceneKey == "" { writeCaptionAPIError(w, captions.ErrInvalidInput); return project.Principal{}, uuid.Nil, 0, "", false }
+	if h.actorResolver == nil {
+		writeCaptionAPIError(w, captions.ErrUnauthenticated)
+		return project.Principal{}, uuid.Nil, 0, "", false
+	}
+	principal, err := h.actorResolver.Resolve(r)
+	if err != nil {
+		writeCaptionAPIError(w, captions.ErrUnauthenticated)
+		return project.Principal{}, uuid.Nil, 0, "", false
+	}
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
+		return project.Principal{}, uuid.Nil, 0, "", false
+	}
+	version, err := strconv.Atoi(r.PathValue("version"))
+	if err != nil || version < 1 {
+		writeCaptionAPIError(w, captions.ErrInvalidInput)
+		return project.Principal{}, uuid.Nil, 0, "", false
+	}
+	sceneKey := r.PathValue("scene_key")
+	if sceneKey == "" {
+		writeCaptionAPIError(w, captions.ErrInvalidInput)
+		return project.Principal{}, uuid.Nil, 0, "", false
+	}
 	return principal, projectID, version, sceneKey, true
 }
 
