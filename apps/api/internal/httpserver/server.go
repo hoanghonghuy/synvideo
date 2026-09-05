@@ -62,6 +62,7 @@ type MediaServices struct {
 	GeneratedVideos GeneratedVideoGenerationService
 	Narrations      SceneNarrationService
 	GeneratedAudio  SceneNarrationGenerationService
+	Captions        CaptionService
 }
 
 func New(
@@ -191,6 +192,16 @@ func New(
 			handler := sceneNarrationGenerationHandler{service: services.GeneratedAudio, actorResolver: actorResolver}
 			mux.HandleFunc("POST /api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/narration-generations", handler.create)
 			mux.HandleFunc("GET /api/v1/projects/{id}/narration-generations/{job_id}", handler.get)
+		}
+		if services.Captions != nil && actorResolver != nil {
+			handler := captionHandler{service: services.Captions, actorResolver: actorResolver}
+			base := "/api/v1/projects/{id}/scene-plans/{version}/scenes/{scene_key}/captions"
+			mux.HandleFunc("POST "+base+"/derive", handler.derive)
+			mux.HandleFunc("GET "+base, handler.get)
+			mux.HandleFunc("PUT "+base, handler.update)
+			mux.HandleFunc("POST "+base+"/rebuild", handler.rebuild)
+			mux.HandleFunc("GET "+base+"/history", handler.history)
+			mux.HandleFunc("GET "+base+"/snapshot", handler.snapshot)
 		}
 	}
 
