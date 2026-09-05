@@ -10,7 +10,7 @@ import (
 func TestValidateSegmentsRejectsInvalidTimingAndOverlap(t *testing.T) {
 	duration := int64(10_000)
 	tests := []struct {
-		name string
+		name     string
 		segments []Segment
 	}{
 		{"negative", []Segment{{ID: uuid.New(), Text: "a", StartMS: -1, EndMS: 100}}},
@@ -45,8 +45,8 @@ func TestNormalizeSegmentsSortsDeterministicallyAndPreservesIDs(t *testing.T) {
 
 func TestStateForSourceDetectsNarrationLineageChange(t *testing.T) {
 	doc := Document{
-		SourceBindingID: uuid.New(),
-		SourceAssetID: uuid.New(),
+		SourceBindingID:  uuid.New(),
+		SourceAssetID:    uuid.New(),
 		SourceDurationMS: 4_000,
 	}
 	if got := StateForSource(doc, Source{BindingID: doc.SourceBindingID, AssetID: doc.SourceAssetID, DurationMS: doc.SourceDurationMS}); got != StateCurrent {
@@ -58,7 +58,14 @@ func TestStateForSourceDetectsNarrationLineageChange(t *testing.T) {
 }
 
 func TestSnapshotRejectsStaleDocumentAndCopiesContent(t *testing.T) {
-	doc := Document{ID: uuid.New(), Revision: 2, SourceBindingID: uuid.New(), SourceAssetID: uuid.New(), SourceDurationMS: 2_000, Segments: []Segment{{ID: uuid.New(), Text: "hello", StartMS: 0, EndMS: 2_000}}}
+	doc := Document{
+		ID:               uuid.New(),
+		Revision:         2,
+		SourceBindingID:  uuid.New(),
+		SourceAssetID:    uuid.New(),
+		SourceDurationMS: 2_000,
+		Segments:         []Segment{{ID: uuid.New(), Text: "hello", StartMS: 0, EndMS: 2_000}},
+	}
 	if _, err := NewSnapshot(doc, StateStale); !errors.Is(err, ErrStale) {
 		t.Fatalf("expected stale error, got %v", err)
 	}
