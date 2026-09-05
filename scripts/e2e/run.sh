@@ -76,7 +76,10 @@ API_PID=$!
 # not merely that the process has opened its listen socket.
 wait_http http://127.0.0.1:8080/api/v1/readyz API
 
-npm run dev:web -- --host 127.0.0.1 --port 4173 > >(redact > "$ARTIFACT_DIR/web.log") 2>&1 &
+# Forward Vite's host/port flags through the workspace-level npm script explicitly.
+# Calling the root dev:web script adds a second npm run layer and can consume these
+# flags instead of passing them to Vite, leaving the server on its default port.
+npm --workspace apps/web run dev -- --host 127.0.0.1 --port 4173 > >(redact > "$ARTIFACT_DIR/web.log") 2>&1 &
 WEB_PID=$!
 wait_http http://127.0.0.1:4173/projects Web
 
