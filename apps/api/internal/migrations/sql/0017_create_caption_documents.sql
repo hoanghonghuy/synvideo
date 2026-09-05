@@ -1,5 +1,5 @@
 CREATE TABLE caption_documents (
-    id uuid PRIMARY KEY,
+    id uuid NOT NULL,
     owner_id uuid NOT NULL,
     project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     scene_plan_version integer NOT NULL CHECK (scene_plan_version > 0),
@@ -11,6 +11,7 @@ CREATE TABLE caption_documents (
     segments jsonb NOT NULL,
     style jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT caption_documents_primary PRIMARY KEY (id, revision),
     CONSTRAINT caption_documents_scene_revision_unique UNIQUE (owner_id, project_id, scene_plan_version, scene_key, revision),
     CONSTRAINT caption_documents_segments_array CHECK (jsonb_typeof(segments) = 'array'),
     CONSTRAINT caption_documents_style_object CHECK (jsonb_typeof(style) = 'object')
