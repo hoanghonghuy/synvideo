@@ -138,6 +138,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           {{ t('navigation.sceneNarration') }}
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/captions`"
+        >
+          Captions &amp; timing
+        </RouterLink>
       </p>
 
       <div

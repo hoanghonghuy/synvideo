@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/captions"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/config"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativebrief"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/creativeproposal"
@@ -104,6 +105,7 @@ func main() {
 	var mediaAssetService *mediaasset.Service
 	var sceneMediaService *scenemedia.Service
 	var sceneNarrationService *scenenarration.Service
+	var captionService *captions.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -125,6 +127,7 @@ func main() {
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
 		narrationBindingRepo := postgres.NewSceneNarrationBindingRepository(pool)
+		captionRepo := postgres.NewCaptionRepository(pool)
 		videoOperationRepo := postgres.NewSceneVideoOperationRepository(pool)
 
 		var cipher providersettings.Cipher
@@ -149,6 +152,7 @@ func main() {
 		creativeProposalService = creativeproposal.NewService(proposalRepo)
 		scriptService = script.NewService(scriptRepo)
 		scenePlanService = sceneplan.NewService(scenePlanRepo)
+		captionService = captions.NewService(captionRepo, scenePlanRepo, narrationBindingRepo, mediaAssetRepo)
 
 		var storage *s3storage.Storage
 		if cfg.MediaStorage.Configured() {
@@ -243,6 +247,7 @@ func main() {
 			GeneratedVideos: generatedVideoGenerationService,
 			Narrations:      sceneNarrationService,
 			GeneratedAudio:  sceneNarrationJobService,
+			Captions:        captionService,
 		})
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
