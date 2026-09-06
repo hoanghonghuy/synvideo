@@ -50,10 +50,10 @@ func TestSearchResultRequiresTruthfulProvenance(t *testing.T) {
 }
 
 func TestProviderErrorRecoveryClassification(t *testing.T) {
-	if !ProviderError{Kind: ProviderErrorRateLimited}.Recoverable() {
+	if !(ProviderError{Kind: ProviderErrorRateLimited}).Recoverable() {
 		t.Fatal("rate-limited provider error must be recoverable")
 	}
-	if ProviderError{Kind: ProviderErrorRemoved}.Recoverable() {
+	if (ProviderError{Kind: ProviderErrorRemoved}).Recoverable() {
 		t.Fatal("removed source item must not be classified as retryable")
 	}
 }
