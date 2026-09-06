@@ -8,6 +8,7 @@ import GeneratedImageWorkspaceView from '@/features/generated-image/GeneratedIma
 import ScriptView from '@/features/script/ScriptView.vue'
 import ScenePlanView from '@/features/scene-plan/ScenePlanView.vue'
 import MediaWorkspaceView from '@/features/media/MediaWorkspaceView.vue'
+import StockMediaWorkspaceView from '@/features/media/StockMediaWorkspaceView.vue'
 import SceneNarrationWorkspaceView from '@/features/scene-narration/SceneNarrationWorkspaceView.vue'
 import SceneVideoWorkspaceView from '@/features/scene-video/SceneVideoWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
@@ -69,6 +70,11 @@ export const router = createRouter({
       path: '/projects/:id/media',
       name: 'media-workspace',
       component: MediaWorkspaceView,
+    },
+    {
+      path: '/projects/:id/media/stock',
+      name: 'stock-media-workspace',
+      component: StockMediaWorkspaceView,
     },
     {
       path: '/projects/:id/images',

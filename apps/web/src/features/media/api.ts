@@ -10,6 +10,9 @@ export type MediaAssetOrigin =
   | 'generated_audio'
   | 'system'
 
+export type StockMediaKind = 'image' | 'video'
+export type StockMediaOrientation = '' | 'landscape' | 'portrait' | 'square'
+
 export interface MediaAsset {
   id: string
   project_id: string
@@ -43,6 +46,41 @@ export interface SceneMediaEntry {
   asset?: MediaAsset
 }
 
+export interface StockMediaResult {
+  provider_key: string
+  provider_result_id: string
+  kind: StockMediaKind
+  preview_url: string
+  source_page_url: string
+  creator_name: string
+  creator_url: string
+  license_summary: string
+  license_reference: string
+  attribution_text: string
+  acquirable: boolean
+}
+
+export interface StockMediaSearchPage {
+  results: StockMediaResult[] | null
+  page: number
+  per_page: number
+  has_next_page: boolean
+}
+
+export interface StockMediaAcquisition {
+  asset: MediaAsset
+  reused: boolean
+}
+
+export interface StockMediaSearchInput {
+  provider: string
+  query: string
+  kind: StockMediaKind
+  orientation?: StockMediaOrientation
+  page?: number
+  perPage?: number
+}
+
 export interface UploadOptions {
   signal?: AbortSignal
   onProgress?: (percentage: number) => void
@@ -57,6 +95,37 @@ export function listMediaAssets(projectId: string): Promise<{ assets: MediaAsset
 export function deleteMediaAsset(projectId: string, assetId: string): Promise<void> {
   return request<void>(`${API_PREFIX}/projects/${projectId}/media-assets/${assetId}`, {
     method: 'DELETE',
+  })
+}
+
+export function searchStockMedia(
+  projectId: string,
+  input: StockMediaSearchInput,
+): Promise<StockMediaSearchPage> {
+  const params = new URLSearchParams({
+    provider: input.provider,
+    q: input.query,
+    kind: input.kind,
+    page: String(input.page ?? 1),
+    per_page: String(input.perPage ?? 20),
+  })
+  if (input.orientation) params.set('orientation', input.orientation)
+  return request<StockMediaSearchPage>(
+    `${API_PREFIX}/projects/${projectId}/stock-media/search?${params.toString()}`,
+  )
+}
+
+export function acquireStockMedia(
+  projectId: string,
+  result: Pick<StockMediaResult, 'provider_key' | 'provider_result_id' | 'kind'>,
+): Promise<StockMediaAcquisition> {
+  return request<StockMediaAcquisition>(`${API_PREFIX}/projects/${projectId}/stock-media/acquisitions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      provider_key: result.provider_key,
+      provider_result_id: result.provider_result_id,
+      kind: result.kind,
+    }),
   })
 }
 
