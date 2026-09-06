@@ -8,8 +8,12 @@ import (
 )
 
 func WithSceneEditorRoutes(logger *slog.Logger, base http.Handler, service SceneEditorService, resolver actor.Resolver) http.Handler {
-	if service == nil { return base }
-	if base == nil { base = http.NotFoundHandler() }
+	if service == nil {
+		return base
+	}
+	if base == nil {
+		base = http.NotFoundHandler()
+	}
 	handler := sceneEditorHandler{service: service, actorResolver: resolver}
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/projects/{id}/scene-editor", requestLogger(logger, http.HandlerFunc(handler.create)))

@@ -44,89 +44,150 @@ type sceneEditorReconcilePreviewRequest struct {
 
 func (h sceneEditorHandler) create(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneeditor.CreateInput
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Create(r.Context(), principal.OwnerID, projectID, input.ScenePlanVersion, input.Scenes, input.AudioMix)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusCreated, view)
 }
 
 func (h sceneEditorHandler) get(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	view, err := h.service.Get(r.Context(), principal.OwnerID, projectID)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) update(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneeditor.UpdateInput
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Update(r.Context(), principal.OwnerID, projectID, input)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) reorder(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, sceneID, ok := h.sceneIdentifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneEditorReorderRequest
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Reorder(r.Context(), principal.OwnerID, projectID, sceneID, input.To, input.ExpectedRevision)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) duplicate(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, sceneID, ok := h.sceneIdentifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneEditorRevisionRequest
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Duplicate(r.Context(), principal.OwnerID, projectID, sceneID, input.ExpectedRevision)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) remove(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, sceneID, ok := h.sceneIdentifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneEditorRevisionRequest
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Remove(r.Context(), principal.OwnerID, projectID, sceneID, input.ExpectedRevision)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) previewReconcile(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneEditorReconcilePreviewRequest
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	preview, err := h.service.PreviewReconcile(r.Context(), principal.OwnerID, projectID, input.Candidate)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, preview)
 }
 
 func (h sceneEditorHandler) reconcile(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneeditor.ReconcileInput
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	view, err := h.service.Reconcile(r.Context(), principal.OwnerID, projectID, input)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusOK, view)
 }
 
 func (h sceneEditorHandler) snapshot(w http.ResponseWriter, r *http.Request) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var input sceneEditorRevisionRequest
-	if !decodeJSON(w, r, &input) { return }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
 	snapshot, err := h.service.Snapshot(r.Context(), principal.OwnerID, projectID, input.ExpectedRevision)
-	if err != nil { writeSceneEditorAPIError(w, err); return }
+	if err != nil {
+		writeSceneEditorAPIError(w, err)
+		return
+	}
 	writeProjectJSON(w, http.StatusCreated, snapshot)
 }
 
@@ -141,13 +202,17 @@ func (h sceneEditorHandler) identifiers(w http.ResponseWriter, r *http.Request) 
 		return project.Principal{}, uuid.Nil, false
 	}
 	projectID, ok := parseProjectID(w, r)
-	if !ok { return project.Principal{}, uuid.Nil, false }
+	if !ok {
+		return project.Principal{}, uuid.Nil, false
+	}
 	return principal, projectID, true
 }
 
 func (h sceneEditorHandler) sceneIdentifiers(w http.ResponseWriter, r *http.Request) (project.Principal, uuid.UUID, uuid.UUID, bool) {
 	principal, projectID, ok := h.identifiers(w, r)
-	if !ok { return project.Principal{}, uuid.Nil, uuid.Nil, false }
+	if !ok {
+		return project.Principal{}, uuid.Nil, uuid.Nil, false
+	}
 	sceneID, err := uuid.Parse(r.PathValue("scene_id"))
 	if err != nil || sceneID == uuid.Nil {
 		writeSceneEditorAPIError(w, sceneeditor.ErrInvalidInput)
