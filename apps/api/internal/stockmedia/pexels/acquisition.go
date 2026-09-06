@@ -13,35 +13,75 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/stockmedia"
 )
 
-func (a *Adapter) OpenForAcquisition(ctx context.Context, resultID string, kind stockmedia.MediaKind) (stockmedia.RemoteAsset, error) {
+func (a *Adapter) ResolveForAcquisition(ctx context.Context, resultID string, kind stockmedia.MediaKind) (stockmedia.AcquisitionSource, error) {
 	resultID = strings.TrimSpace(resultID)
 	if resultID == "" || strings.ContainsAny(resultID, "/?#") {
-		return nil, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorInvalid, Provider: ProviderKey, Err: errors.New("invalid provider result id")}
+		return stockmedia.AcquisitionSource{}, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorInvalid, Provider: ProviderKey, Err: errors.New("invalid provider result id")}
 	}
 
 	switch kind {
 	case stockmedia.MediaKindImage:
 		var item photo
 		if err := a.getJSON(ctx, "/v1/photos/"+url.PathEscape(resultID), &item); err != nil {
-			return nil, err
+			return stockmedia.AcquisitionSource{}, err
 		}
 		link := strings.TrimSpace(item.Src.Original)
 		if link == "" {
-			return nil, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorRemoved, Provider: ProviderKey, Err: errors.New("original image is unavailable")}
+			return stockmedia.AcquisitionSource{}, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorRemoved, Provider: ProviderKey, Err: errors.New("original image is unavailable")}
 		}
-		return a.remote(link, "image/jpeg")
+		remote, err := a.remote(link, "image/jpeg")
+		if err != nil {
+			return stockmedia.AcquisitionSource{}, err
+		}
+		result := stockmedia.SearchResult{
+			ProviderKey:      ProviderKey,
+			ProviderResultID: resultID,
+			Kind:             stockmedia.MediaKindImage,
+			PreviewURL:       strings.TrimSpace(item.Src.Medium),
+			SourcePageURL:    strings.TrimSpace(item.URL),
+			CreatorName:      strings.TrimSpace(item.Photographer),
+			CreatorURL:       strings.TrimSpace(item.PhotographerURL),
+			LicenseSummary:   licenseSummary,
+			LicenseReference: licenseReference,
+			AttributionText:  attribution(item.Photographer),
+			Acquirable:       true,
+		}
+		if err := result.Validate(); err != nil {
+			return stockmedia.AcquisitionSource{}, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorTransient, Provider: ProviderKey, Err: err}
+		}
+		return stockmedia.AcquisitionSource{Result: result, Filename: "pexels-" + resultID + ".jpg", Remote: remote}, nil
 	case stockmedia.MediaKindVideo:
 		var item video
 		if err := a.getJSON(ctx, "/videos/videos/"+url.PathEscape(resultID), &item); err != nil {
-			return nil, err
+			return stockmedia.AcquisitionSource{}, err
 		}
 		file, ok := selectVideoFile(item.VideoFiles)
 		if !ok {
-			return nil, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorRemoved, Provider: ProviderKey, Err: errors.New("downloadable video is unavailable")}
+			return stockmedia.AcquisitionSource{}, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorRemoved, Provider: ProviderKey, Err: errors.New("downloadable video is unavailable")}
 		}
-		return a.remote(file.Link, file.FileType)
+		remote, err := a.remote(file.Link, file.FileType)
+		if err != nil {
+			return stockmedia.AcquisitionSource{}, err
+		}
+		result := stockmedia.SearchResult{
+			ProviderKey:      ProviderKey,
+			ProviderResultID: resultID,
+			Kind:             stockmedia.MediaKindVideo,
+			PreviewURL:       strings.TrimSpace(item.Image),
+			SourcePageURL:    strings.TrimSpace(item.URL),
+			CreatorName:      strings.TrimSpace(item.User.Name),
+			CreatorURL:       strings.TrimSpace(item.User.URL),
+			LicenseSummary:   licenseSummary,
+			LicenseReference: licenseReference,
+			AttributionText:  attribution(item.User.Name),
+			Acquirable:       true,
+		}
+		if err := result.Validate(); err != nil {
+			return stockmedia.AcquisitionSource{}, stockmedia.ProviderError{Kind: stockmedia.ProviderErrorTransient, Provider: ProviderKey, Err: err}
+		}
+		return stockmedia.AcquisitionSource{Result: result, Filename: "pexels-" + resultID + ".mp4", Remote: remote}, nil
 	default:
-		return nil, stockmedia.ErrUnsupportedKind
+		return stockmedia.AcquisitionSource{}, stockmedia.ErrUnsupportedKind
 	}
 }
 
@@ -64,8 +104,6 @@ func selectVideoFile(files []videoFile) (videoFile, bool) {
 	if len(candidates) == 0 {
 		return videoFile{}, false
 	}
-	// Deterministic V1 choice: prefer the largest provider-authorized file by
-	// pixel area, then the lower provider file ID as a stable tie-breaker.
 	sort.Slice(candidates, func(i, j int) bool {
 		areaI := candidates[i].Width * candidates[i].Height
 		areaJ := candidates[j].Width * candidates[j].Height
