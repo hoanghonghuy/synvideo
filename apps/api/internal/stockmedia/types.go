@@ -98,12 +98,12 @@ type SearchPage struct {
 type ProviderErrorKind string
 
 const (
-	ProviderErrorRateLimited   ProviderErrorKind = "rate_limited"
-	ProviderErrorRemoved       ProviderErrorKind = "source_unavailable"
-	ProviderErrorUnauthorized  ProviderErrorKind = "authorization_failed"
-	ProviderErrorTransient     ProviderErrorKind = "transient"
-	ProviderErrorInvalid       ProviderErrorKind = "invalid_request"
-	ProviderErrorAcquisition   ProviderErrorKind = "acquisition_failed"
+	ProviderErrorRateLimited  ProviderErrorKind = "rate_limited"
+	ProviderErrorRemoved      ProviderErrorKind = "source_unavailable"
+	ProviderErrorUnauthorized ProviderErrorKind = "authorization_failed"
+	ProviderErrorTransient    ProviderErrorKind = "transient"
+	ProviderErrorInvalid      ProviderErrorKind = "invalid_request"
+	ProviderErrorAcquisition  ProviderErrorKind = "acquisition_failed"
 )
 
 type ProviderError struct {
