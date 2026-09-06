@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 
 import { ApiError } from '@/api/projects'
@@ -41,6 +41,17 @@ const audioAssets = computed(() => assets.value.filter((asset) => asset.kind ===
 const selectedAsset = computed(() => audioAssets.value.find((asset) => asset.id === selectedMusicID.value))
 const previewURL = computed(() => selectedAsset.value ? mediaAssetContentURL(projectID.value, selectedAsset.value.id) : '')
 const stateClass = computed(() => `state-${(mix.value?.state ?? 'empty').toLowerCase()}`)
+
+watch(
+  () => config.ducking.enabled,
+  (enabled) => {
+    if (!enabled) {
+      config.ducking.reduction_db = 0
+      config.ducking.attack_ms = 0
+      config.ducking.release_ms = 0
+    }
+  },
+)
 
 function applyMix(value: AudioMixView) {
   mix.value = value
@@ -220,7 +231,7 @@ onMounted(load)
             <label>Attack (ms)<input v-model.number="config.ducking.attack_ms" type="number" min="0" max="10000" step="10" /></label>
             <label>Release (ms)<input v-model.number="config.ducking.release_ms" type="number" min="0" max="10000" step="10" /></label>
           </template>
-          <p v-else class="hint">Khi ducking tắt, backend yêu cầu các tham số ducking bằng 0 để tránh cấu hình ẩn.</p>
+          <p v-else class="hint">Ducking đã tắt; các tham số reduction/attack/release được đặt về 0 để payload khớp invariant backend.</p>
         </section>
 
         <section class="panel actions">
