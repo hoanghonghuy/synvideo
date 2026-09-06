@@ -52,6 +52,29 @@ func TestSearchImagesNormalizesTruthfulMetadata(t *testing.T) {
 	}
 }
 
+func TestSearchVideosNormalizesDownloadCapability(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/videos/search" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"page":1,"per_page":20,"total_results":1,"videos":[{"id":77,"url":"https://www.pexels.com/video/77/","image":"https://images.pexels.com/videos/77/preview.jpeg","user":{"name":"Lin","url":"https://www.pexels.com/@lin"},"video_files":[{"id":5,"quality":"hd","file_type":"video/mp4","link":"https://videos.pexels.com/video-files/77.mp4","width":1280,"height":720}]}]}`)
+	}))
+	defer server.Close()
+
+	adapter, err := New(Config{BaseURL: server.URL, APIKey: "secret", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := adapter.Search(context.Background(), stockmedia.SearchRequest{Query: "ocean", Kind: stockmedia.MediaKindVideo, Orientation: stockmedia.OrientationSquare, Page: 1, PerPage: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Results) != 1 || !page.Results[0].Acquirable || page.Results[0].ProviderResultID != "77" {
+		t.Fatalf("unexpected normalized video page: %#v", page)
+	}
+}
+
 func TestSearchClassifiesRateLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "30")
@@ -70,16 +93,5 @@ func TestSearchClassifiesRateLimit(t *testing.T) {
 	}
 	if providerErr.Kind != stockmedia.ProviderErrorRateLimited || providerErr.RetryAfter != "30" {
 		t.Fatalf("provider error = %#v", providerErr)
-	}
-}
-
-func TestSearchRejectsUnsupportedOrientationForVideo(t *testing.T) {
-	adapter, err := New(Config{BaseURL: "https://api.pexels.com", APIKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = adapter.Search(context.Background(), stockmedia.SearchRequest{Query: "ocean", Kind: stockmedia.MediaKindVideo, Orientation: stockmedia.OrientationSquare, Page: 1, PerPage: 20})
-	if err != stockmedia.ErrUnsupportedOrientation {
-		t.Fatalf("error = %v, want %v", err, stockmedia.ErrUnsupportedOrientation)
 	}
 }
