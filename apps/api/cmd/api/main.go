@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +35,8 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenevideojob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/script"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scriptgenerationjob"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/stockmedia"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/stockmedia/pexels"
 )
 
 func loadProviderCatalog(cfg config.Config) (*providersettings.Catalog, error) {
@@ -89,6 +92,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	actorResolver := actor.NewLocalResolver(cfg)
 
 	var server *http.Server
 	var projectService *project.Service
@@ -106,6 +110,7 @@ func main() {
 	var sceneMediaService *scenemedia.Service
 	var sceneNarrationService *scenenarration.Service
 	var captionService *captions.Service
+	var stockMediaService *stockmedia.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -177,6 +182,20 @@ func main() {
 				}
 			}
 			mediaAssetService = mediaasset.NewService(projectRepo, mediaAssetRepo, storage)
+			stockProviders := map[string]stockmedia.Provider{}
+			if apiKey := strings.TrimSpace(os.Getenv("SYNVIDEO_PEXELS_API_KEY")); apiKey != "" {
+				adapter, providerErr := pexels.New(pexels.Config{APIKey: apiKey})
+				if providerErr != nil {
+					logger.Error("stock media provider initialization failed", "provider", pexels.ProviderKey, "error", providerErr)
+					os.Exit(1)
+				}
+				stockProviders[pexels.ProviderKey] = adapter
+			}
+			stockMediaService, err = stockmedia.NewService(projectRepo, mediaAssetService, stockProviders, cfg.MediaStorage.MaxUploadBytes)
+			if err != nil {
+				logger.Error("stock media service initialization failed", "error", err)
+				os.Exit(1)
+			}
 			sceneMediaService = scenemedia.NewService(scenePlanRepo, mediaAssetRepo, bindingRepo)
 			generatedImageGenerationService = generatedimagejob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 			generatedVideoGenerationService = scenevideojob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
@@ -240,7 +259,7 @@ func main() {
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
 		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
 		scenePlanGenerationService = sceneplangenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, scriptRepo, proposalRepo)
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg), httpserver.MediaServices{
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, providerSettingsService, scriptGenerationService, scenePlanGenerationService, actorResolver, httpserver.MediaServices{
 			Assets:          mediaAssetService,
 			Bindings:        sceneMediaService,
 			GeneratedImages: generatedImageGenerationService,
@@ -249,8 +268,9 @@ func main() {
 			GeneratedAudio:  sceneNarrationJobService,
 			Captions:        captionService,
 		})
+		httpserver.AttachStockMediaRoutes(server, logger, stockMediaService, actorResolver)
 	} else {
-		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
+		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actorResolver)
 	}
 	errCh := make(chan error, 1)
 
