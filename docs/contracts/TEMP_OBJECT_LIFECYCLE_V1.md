@@ -38,14 +38,23 @@ Terminal failure after partial checkpointing must also enter the same bounded cl
 
 Already-missing objects count as idempotently removed.
 
-## Retention policy
-The exact production durations are configuration/policy values frozen at READY time. V1 requires:
-- an explicit minimum recovery window where needed;
-- an explicit maximum retention bound for cleanup-eligible intermediates;
-- no indefinite retention caused solely by repeated cleanup failures;
-- durable policy inputs suitable for multiple API/worker instances.
+## READY policy freeze
+Initial V1 policy values are frozen for implementation and remain environment-configurable:
+- recoverable checkpoints for retryable/active narration jobs are preserved for at least **24 hours** from the last durable job/checkpoint activity unless the durable job remains legitimately active/retryable longer;
+- completed, cancelled, superseded, terminal-failed or abandoned narration checkpoints become cleanup-eligible once no recovery invariant requires them and must not remain indefinitely; the initial maximum cleanup-eligible retention target is **72 hours**;
+- one reconciliation pass claims at most **100** eligible records;
+- one pass has a **30 second** wall-time budget;
+- one object delete attempt has a **5 second** operation timeout;
+- repeated cleanup failure remains durable/retryable and observable; it does not extend retention indefinitely as a correctness policy.
 
-Cloud-provider bucket lifecycle rules may be defense-in-depth but cannot be the only correctness source when cleanup eligibility depends on application job state.
+These are initial production-safe defaults, not API guarantees. Future topology evidence may tune configuration without weakening the lifecycle invariants.
+
+## Operational execution model
+V1 reuses the existing durable jobs infrastructure pattern rather than bucket scanning:
+- PostgreSQL-backed application state is the source of cleanup eligibility and durable claiming;
+- the application already has a lease-based, multi-instance-safe polling executor; cleanup may run as a dedicated bounded reconciliation worker/tick using the same durable claim/lease principles rather than being coupled to a single request path;
+- S3-compatible object storage remains the object deletion boundary; provider bucket lifecycle rules are defense-in-depth only;
+- no unbounded bucket namespace scan is permitted.
 
 ## Reconciliation / reaper
 A cleanup execution must be bounded by batch size and/or runtime. It must be safe to run repeatedly and concurrently across instances using a durable claim/selection strategy where duplicate work could matter.
@@ -56,8 +65,6 @@ For each eligible record/object it should:
 3. treat not-found as success;
 4. record/retain retryable cleanup state when storage fails;
 5. avoid deleting anything whose ownership/eligibility changed or cannot be established safely.
-
-The implementation must not require scanning an unbounded bucket namespace on every run.
 
 ## Isolation and security
 Cleanup is scoped by server-owned owner/project/job identity. A malformed/stale record must not permit prefix traversal or deletion across projects.
@@ -85,5 +92,5 @@ Corrupt or contradictory ownership/state must fail closed and surface an operati
 - concurrent cleanup workers do not violate eligibility or ownership;
 - diagnostics avoid private payloads.
 
-## READY-time validation
-Before implementation activation, PM/TL inventories all current durable temporary prefixes and rechecks the jobs state machine, cancellation/terminal semantics, production storage topology and operational scheduler/worker mechanism. Exact retention periods and batch policy are frozen then rather than hard-coded prematurely in planning.
+## READY-time validation result
+Revalidated against protected `develop` `35ac2a5af8b19e47347c13fb4e91738023f0bbdf`: the concrete V1 durable temporary-object class remains narration `internal_chunks`; TASK-042 cancellation/lease-loss safety is accepted; current jobs infrastructure provides durable claim/lease/poll execution; current implementation WIP is below the normal maximum of three. With the policy and execution model above frozen, TASK-047 is eligible for READY activation after this governance change is accepted on protected `develop`.
