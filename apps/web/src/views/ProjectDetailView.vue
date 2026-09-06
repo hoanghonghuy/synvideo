@@ -128,6 +128,12 @@ async function submit(payload: UpdateProjectPayload) {
         </RouterLink>
         <RouterLink
           class="text-link"
+          :to="`/projects/${project.id}/media/stock`"
+        >
+          Stock Media
+        </RouterLink>
+        <RouterLink
+          class="text-link"
           :to="`/projects/${project.id}/images`"
         >
           {{ tGeneratedImage('generatedImage.title') }}
