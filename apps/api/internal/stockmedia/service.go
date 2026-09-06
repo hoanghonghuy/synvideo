@@ -45,9 +45,6 @@ func NewService(projects ProjectAccess, assets DurableAssetStore, providers map[
 		}
 		cloned[key] = provider
 	}
-	if len(cloned) == 0 {
-		return nil, ErrProviderUnavailable
-	}
 	return &Service{projects: projects, assets: assets, providers: cloned, maxAssetBytes: maxAssetBytes}, nil
 }
 
@@ -120,10 +117,6 @@ func (s *Service) Acquire(ctx context.Context, principal project.Principal, proj
 		return Acquisition{Asset: created}, nil
 	}
 
-	// A concurrent retry can win the unique stock identity after this request
-	// uploaded its candidate. MediaAsset.Store compensates its losing object on
-	// persistence failure, so resolve the durable winner rather than create a
-	// second logical acquisition.
 	if errors.Is(err, mediaasset.ErrPersistenceFailed) {
 		if existing, lookupErr := s.assets.FindStockOrigin(ctx, principal, projectID, providerKey, resultID, assetKind); lookupErr == nil {
 			return Acquisition{Asset: existing, Reused: true}, nil
