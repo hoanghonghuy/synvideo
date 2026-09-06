@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,7 +76,7 @@ func (h stockMediaHandler) acquire(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var trailing any
-	if err := decoder.Decode(&trailing); err == nil {
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		writeStockMediaAPIError(w, stockmedia.ErrInvalidSelection)
 		return
 	}
