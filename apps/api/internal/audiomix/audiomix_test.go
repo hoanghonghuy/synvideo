@@ -13,7 +13,7 @@ func validFixture(t *testing.T) (uuid.UUID, uuid.UUID, MusicSource, NarrationSou
 	ownerID := uuid.New()
 	projectID := uuid.New()
 	music := MusicSource{AssetID: uuid.New(), ProjectID: projectID, DurationMS: 90_000, Available: true, Audio: true}
-	narration := NarrationSource{BindingID: uuid.New(), AssetID: uuid.New(), DurationMS: 60_000}
+	narration := NarrationSource{LineageID: uuid.New(), ScenePlanVersion: 3, DurationMS: 60_000}
 	config := Config{LoopPolicy: LoopToTarget, MusicGainDB: -12, NarrationGainDB: 0, Ducking: Ducking{Enabled: true, ReductionDB: 9, AttackMS: 120, ReleaseMS: 350}}
 	return ownerID, projectID, music, narration, config
 }
@@ -28,7 +28,7 @@ func TestNewDocumentBindsAuthoritativeSources(t *testing.T) {
 	if doc.Revision != 1 || doc.MusicAssetID != music.AssetID || doc.MusicDurationMS != music.DurationMS {
 		t.Fatalf("music binding not frozen: %+v", doc)
 	}
-	if doc.NarrationBindingID != narration.BindingID || doc.NarrationAssetID != narration.AssetID || doc.NarrationDurationMS != narration.DurationMS {
+	if doc.NarrationLineageID != narration.LineageID || doc.ScenePlanVersion != narration.ScenePlanVersion || doc.NarrationDurationMS != narration.DurationMS {
 		t.Fatalf("narration lineage not frozen: %+v", doc)
 	}
 }
@@ -85,12 +85,12 @@ func TestNarrationReplacementMarksMixStaleWithoutRebinding(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	replacement := narration
-	replacement.BindingID = uuid.New()
-	replacement.AssetID = uuid.New()
+	replacement.LineageID = uuid.New()
+	replacement.ScenePlanVersion++
 	if state := StateForSources(doc, music, replacement); state != StateStale {
 		t.Fatalf("state = %s, want STALE", state)
 	}
-	if doc.NarrationBindingID == replacement.BindingID || doc.NarrationAssetID == replacement.AssetID {
+	if doc.NarrationLineageID == replacement.LineageID || doc.ScenePlanVersion == replacement.ScenePlanVersion {
 		t.Fatal("document was silently rebound")
 	}
 }
@@ -117,7 +117,7 @@ func TestSnapshotRequiresCurrentAndCopiesFrozenLineage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSnapshot: %v", err)
 	}
-	if snapshot.DocumentID != doc.ID || snapshot.Revision != doc.Revision || snapshot.MusicAssetID != doc.MusicAssetID || snapshot.NarrationBindingID != doc.NarrationBindingID {
+	if snapshot.DocumentID != doc.ID || snapshot.Revision != doc.Revision || snapshot.MusicAssetID != doc.MusicAssetID || snapshot.NarrationLineageID != doc.NarrationLineageID || snapshot.ScenePlanVersion != doc.ScenePlanVersion {
 		t.Fatalf("snapshot does not preserve frozen identity: %+v", snapshot)
 	}
 	if _, err := NewSnapshot(doc, StateStale); !errors.Is(err, ErrStale) {
