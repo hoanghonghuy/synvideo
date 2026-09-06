@@ -198,7 +198,7 @@ func main() {
 			}
 			sceneMediaService = scenemedia.NewService(scenePlanRepo, mediaAssetRepo, bindingRepo)
 			generatedImageGenerationService = generatedimagejob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
-			generatedVideoGenerationService = scenevideojob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
+			generatedVideoGenerationService = scenevideojob.NewService(providerSettingsService, videoOperationRepo, generatedAssetStore, sceneMediaService)
 			sceneNarrationService = scenenarration.NewService(narrationBindingRepo, scenePlanRepo, mediaAssetRepo)
 			sceneNarrationJobService = scenenarrationjob.NewService(providerSettingsService, jobsRepo, projectRepo, scenePlanRepo)
 		}
