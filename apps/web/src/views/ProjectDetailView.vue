@@ -144,6 +144,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           Captions &amp; timing
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/audio-mix`"
+        >
+          Background music &amp; audio mix
+        </RouterLink>
       </p>
 
       <div
