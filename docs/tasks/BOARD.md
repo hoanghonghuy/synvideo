@@ -52,14 +52,14 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 
 ## Current F1 implementation supply
 - TASK-036 is active/claimed on canonical `feature/TASK-036-scene-editor-v1` through draft PR #134. PM/TL exact-head fingerprint at this board refresh: `fc8c80852852612298f51c1d5a063c664a45607f`; E2E Acceptance #104 SUCCESS; CI #601 FAILURE at Backend `go vet ./...`. Developer action boundaries and frozen Scene Editor decisions are canonical on issue #71 / PR #134.
-- There is currently no independent CLAIMABLE READY task while TASK-036 is active. Do not fabricate READY state around real dependency/activation gates.
-- TASK-037 is NEXT BACKLOG. Keep it BACKLOG until TASK-036 produces the accepted immutable composition snapshot and its own READY-time renderer/toolchain/deployment/safety decisions are frozen.
+- TASK-037 remains F1 NEXT BACKLOG and is dependency-gated by accepted TASK-036.
+- To avoid Developer starvation while TASK-036 is waiting, independent P1 production-hardening TASK-047 has completed READY-time revalidation and policy freeze on governance branch `pm/TASK-047-activate-temp-object-lifecycle`. It becomes claimable only after that governance change is accepted on protected `develop` and issue #102 is moved to READY last.
 
 ## Subsequent sequence
 1. Complete and accept TASK-036 Scene Editor through its canonical branch/PR.
 2. Revalidate TASK-037 Render & Export against the concrete immutable composition snapshot, production safety dependencies, deployment resources and renderer/toolchain/license choices; activate only after those gates are satisfied.
 3. TASK-038 Channel Hub from accepted render artifacts.
-4. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
+4. Independent production-hardening work may proceed within normal WIP when its own activation gates are satisfied; TASK-047 is the current replenishment candidate.
 
 ## Architecture gates
 - Provider capabilities remain provider-neutral; vendor types stay in adapters.
