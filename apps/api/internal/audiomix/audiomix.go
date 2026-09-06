@@ -31,13 +31,15 @@ const (
 )
 
 var (
-	ErrNotFound        = errors.New("audio mix not found")
-	ErrUnauthenticated = errors.New("audio mix principal is required")
-	ErrInvalidInput    = errors.New("audio mix input is invalid")
-	ErrConflict        = errors.New("audio mix revision conflict")
-	ErrStale           = errors.New("audio mix is stale")
-	ErrBroken          = errors.New("audio mix is broken")
-	ErrPersistence     = errors.New("audio mix persistence failed")
+	ErrNotFound         = errors.New("audio mix not found")
+	ErrUnauthenticated  = errors.New("audio mix principal is required")
+	ErrInvalidInput     = errors.New("audio mix input is invalid")
+	ErrConflict         = errors.New("audio mix revision conflict")
+	ErrStale            = errors.New("audio mix is stale")
+	ErrBroken           = errors.New("audio mix is broken")
+	ErrMusicMissing     = errors.New("audio mix music source is missing")
+	ErrNarrationMissing = errors.New("audio mix narration lineage is missing")
+	ErrPersistence      = errors.New("audio mix persistence failed")
 )
 
 type ValidationError struct{ Fields map[string]string }
@@ -61,9 +63,9 @@ type Config struct {
 }
 
 type NarrationSource struct {
-	BindingID  uuid.UUID
-	AssetID    uuid.UUID
-	DurationMS int64
+	LineageID        uuid.UUID
+	ScenePlanVersion int
+	DurationMS       int64
 }
 
 type MusicSource struct {
@@ -79,10 +81,10 @@ type Document struct {
 	OwnerID             uuid.UUID `json:"-"`
 	ProjectID           uuid.UUID `json:"project_id"`
 	Revision            int       `json:"revision"`
+	ScenePlanVersion    int       `json:"scene_plan_version"`
 	MusicAssetID        uuid.UUID `json:"music_asset_id"`
 	MusicDurationMS     int64     `json:"music_duration_ms"`
-	NarrationBindingID  uuid.UUID `json:"narration_binding_id"`
-	NarrationAssetID    uuid.UUID `json:"narration_asset_id"`
+	NarrationLineageID  uuid.UUID `json:"narration_lineage_id"`
 	NarrationDurationMS int64     `json:"narration_duration_ms"`
 	Config              Config    `json:"config"`
 	CreatedAt           time.Time `json:"created_at"`
@@ -98,10 +100,10 @@ type Snapshot struct {
 	DocumentID          uuid.UUID `json:"document_id"`
 	Revision            int       `json:"revision"`
 	ProjectID           uuid.UUID `json:"project_id"`
+	ScenePlanVersion    int       `json:"scene_plan_version"`
 	MusicAssetID        uuid.UUID `json:"music_asset_id"`
 	MusicDurationMS     int64     `json:"music_duration_ms"`
-	NarrationBindingID  uuid.UUID `json:"narration_binding_id"`
-	NarrationAssetID    uuid.UUID `json:"narration_asset_id"`
+	NarrationLineageID  uuid.UUID `json:"narration_lineage_id"`
 	NarrationDurationMS int64     `json:"narration_duration_ms"`
 	Config              Config    `json:"config"`
 }
@@ -168,11 +170,11 @@ func ValidateBinding(projectID uuid.UUID, music MusicSource, narration Narration
 	if music.ProjectID != projectID {
 		fields["music_asset_id"] = "same_project_required"
 	}
-	if narration.BindingID == uuid.Nil {
-		fields["narration_binding_id"] = "required"
+	if narration.LineageID == uuid.Nil {
+		fields["narration_lineage_id"] = "required"
 	}
-	if narration.AssetID == uuid.Nil {
-		fields["narration_asset_id"] = "required"
+	if narration.ScenePlanVersion < 1 {
+		fields["scene_plan_version"] = "positive"
 	}
 	if narration.DurationMS <= 0 {
 		fields["narration_duration_ms"] = "positive"
@@ -202,10 +204,10 @@ func NewDocument(id, ownerID, projectID uuid.UUID, music MusicSource, narration 
 		OwnerID:             ownerID,
 		ProjectID:           projectID,
 		Revision:            1,
+		ScenePlanVersion:    narration.ScenePlanVersion,
 		MusicAssetID:        music.AssetID,
 		MusicDurationMS:     music.DurationMS,
-		NarrationBindingID:  narration.BindingID,
-		NarrationAssetID:    narration.AssetID,
+		NarrationLineageID:  narration.LineageID,
 		NarrationDurationMS: narration.DurationMS,
 		Config:              config,
 		CreatedAt:           now,
@@ -217,10 +219,10 @@ func StateForSources(doc Document, music MusicSource, narration NarrationSource)
 	if !music.Available || !music.Audio || music.AssetID != doc.MusicAssetID || music.ProjectID != doc.ProjectID || music.DurationMS != doc.MusicDurationMS {
 		return StateBroken
 	}
-	if narration.BindingID == uuid.Nil || narration.AssetID == uuid.Nil || narration.DurationMS <= 0 {
+	if narration.LineageID == uuid.Nil || narration.ScenePlanVersion < 1 || narration.DurationMS <= 0 {
 		return StateStale
 	}
-	if narration.BindingID != doc.NarrationBindingID || narration.AssetID != doc.NarrationAssetID || narration.DurationMS != doc.NarrationDurationMS {
+	if narration.LineageID != doc.NarrationLineageID || narration.ScenePlanVersion != doc.ScenePlanVersion || narration.DurationMS != doc.NarrationDurationMS {
 		return StateStale
 	}
 	return StateCurrent
@@ -237,10 +239,10 @@ func NewSnapshot(doc Document, state State) (Snapshot, error) {
 		DocumentID:          doc.ID,
 		Revision:            doc.Revision,
 		ProjectID:           doc.ProjectID,
+		ScenePlanVersion:    doc.ScenePlanVersion,
 		MusicAssetID:        doc.MusicAssetID,
 		MusicDurationMS:     doc.MusicDurationMS,
-		NarrationBindingID:  doc.NarrationBindingID,
-		NarrationAssetID:    doc.NarrationAssetID,
+		NarrationLineageID:  doc.NarrationLineageID,
 		NarrationDurationMS: doc.NarrationDurationMS,
 		Config:              doc.Config,
 	}, nil
