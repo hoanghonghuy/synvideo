@@ -46,18 +46,17 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-033 | Stock Media Search & Acquisition V1 | DONE | Issue #68 closed; implementation accepted via PR #130 / squash `85ca3877...`. |
 | TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
 | TASK-035 | Background Music & Audio Mix V1 | DONE | Issue #70 closed; implementation accepted via PR #129 / squash `0eb43d88...`. |
-| TASK-036 | Scene Editor V1 | READY | Issue #71; PM-authorized and claimable on canonical `feature/TASK-036-scene-editor-v1` from current protected `develop`. |
-| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; contract frozen; waits for a concrete accepted TASK-036 immutable composition snapshot plus renderer/deployment/safety activation decisions. |
+| TASK-036 | Scene Editor V1 | IN_PROGRESS | Issue #71; claimed on canonical `feature/TASK-036-scene-editor-v1` with draft PR #134. Exact inspected head `fc8c8085...`; E2E #104 green, CI #601 red at Backend `go vet`; PM/TL blockers/decisions canonicalized on #71/#134. |
+| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; NEXT BACKLOG, contract frozen; waits for a concrete accepted TASK-036 immutable composition snapshot plus renderer/deployment/safety activation decisions. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
 ## Current F1 implementation supply
-- TASK-036 is the current PM-authorized claimable READY task. Developer may claim canonical `feature/TASK-036-scene-editor-v1` from current protected `develop` and implement against `docs/contracts/SCENE_EDITOR_COMPOSITION_V1.md`.
-- TASK-035 is DONE and accepted through PR #129: exact reviewed head `9433a5cb22a446399567ada9ac5ca285bc10c87c`, CI #580 + E2E Acceptance #84 green, squash `0eb43d88dc46fbbaac09c778b7f4b9b4439d2dde`.
-- Fresh activation dedupe found no canonical TASK-036 branch or implementation PR before READY was set on issue #71.
+- TASK-036 is active/claimed on canonical `feature/TASK-036-scene-editor-v1` through draft PR #134. PM/TL exact-head fingerprint at this board refresh: `fc8c80852852612298f51c1d5a063c664a45607f`; E2E Acceptance #104 SUCCESS; CI #601 FAILURE at Backend `go vet ./...`. Developer action boundaries and frozen Scene Editor decisions are canonical on issue #71 / PR #134.
+- There is currently no independent CLAIMABLE READY task while TASK-036 is active. Do not fabricate READY state around real dependency/activation gates.
 - TASK-037 is NEXT BACKLOG. Keep it BACKLOG until TASK-036 produces the accepted immutable composition snapshot and its own READY-time renderer/toolchain/deployment/safety decisions are frozen.
 
 ## Subsequent sequence
-1. Implement and accept TASK-036 Scene Editor through its canonical branch/PR.
+1. Complete and accept TASK-036 Scene Editor through its canonical branch/PR.
 2. Revalidate TASK-037 Render & Export against the concrete immutable composition snapshot, production safety dependencies, deployment resources and renderer/toolchain/license choices; activate only after those gates are satisfied.
 3. TASK-038 Channel Hub from accepted render artifacts.
 4. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
