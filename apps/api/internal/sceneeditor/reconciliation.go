@@ -1,6 +1,8 @@
 package sceneeditor
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -29,10 +31,10 @@ type ReconcileCandidate struct {
 }
 
 type ReconcileChange struct {
-	CompositionSceneID uuid.UUID       `json:"composition_scene_id"`
-	SceneKey           string          `json:"scene_key"`
+	CompositionSceneID uuid.UUID         `json:"composition_scene_id"`
+	SceneKey           string            `json:"scene_key"`
 	Reasons            []ReconcileReason `json:"reasons"`
-	PreservesEdits     bool            `json:"preserves_edits"`
+	PreservesEdits     bool              `json:"preserves_edits"`
 }
 
 type ReconcilePreview struct {
@@ -61,10 +63,10 @@ func PreviewReconciliation(doc Document, candidate ReconcileCandidate) (Reconcil
 	}
 
 	preview := ReconcilePreview{
-		FromRevision: doc.Revision,
+		FromRevision:         doc.Revision,
 		FromScenePlanVersion: doc.ScenePlanVersion,
-		ToScenePlanVersion: candidate.ScenePlanVersion,
-		AudioMixChanged: !sameAudioMix(doc.AudioMix, candidate.AudioMix),
+		ToScenePlanVersion:   candidate.ScenePlanVersion,
+		AudioMixChanged:      !sameAudioMix(doc.AudioMix, candidate.AudioMix),
 	}
 	for _, scene := range doc.Scenes {
 		change := ReconcileChange{CompositionSceneID: scene.ID, SceneKey: scene.SceneKey, PreservesEdits: true}
@@ -129,39 +131,53 @@ func ApplyReconciliation(doc Document, candidate ReconcileCandidate, expectedRev
 }
 
 func cloneVisual(in *VisualRef) *VisualRef {
-	if in == nil { return nil }
+	if in == nil {
+		return nil
+	}
 	out := *in
 	return &out
 }
 
 func cloneNarration(in *NarrationRef) *NarrationRef {
-	if in == nil { return nil }
+	if in == nil {
+		return nil
+	}
 	out := *in
 	return &out
 }
 
 func cloneCaption(in *CaptionRef) *CaptionRef {
-	if in == nil { return nil }
+	if in == nil {
+		return nil
+	}
 	out := *in
 	return &out
 }
 
 func sameVisual(a, b *VisualRef) bool {
-	if a == nil || b == nil { return a == nil && b == nil }
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
 	return *a == *b
 }
 
 func sameNarration(a, b *NarrationRef) bool {
-	if a == nil || b == nil { return a == nil && b == nil }
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
 	return *a == *b
 }
 
 func sameCaption(a, b *CaptionRef) bool {
-	if a == nil || b == nil { return a == nil && b == nil }
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
 	return *a == *b
 }
 
 func sameAudioMix(a, b *AudioMixRef) bool {
-	if a == nil || b == nil { return a == nil && b == nil }
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
 	return *a == *b
 }
