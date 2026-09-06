@@ -32,23 +32,23 @@ func TestAudioMixRepositoryPostgresIntegration(t *testing.T) {
 
 	audioBytes := makeIntegrationWAV(16000, 1, make([]byte, 32000))
 	music, err := assetService.Store(ctx, project.Principal{OwnerID: ownerID}, proj.ID, mediaasset.CreateInput{
-		Kind:       mediaasset.KindAudio,
-		Origin:     mediaasset.OriginUpload,
-		MimeType:   "audio/wav",
-		Reader:     bytes.NewReader(audioBytes),
-		MaxBytes:   10 << 20,
-		Metadata:   []byte(`{"duration_seconds":90}`),
+		Kind:     mediaasset.KindAudio,
+		Origin:   mediaasset.OriginUpload,
+		MimeType: "audio/wav",
+		Reader:   bytes.NewReader(audioBytes),
+		MaxBytes: 10 << 20,
+		Metadata: []byte(`{"duration_seconds":90}`),
 	})
 	if err != nil {
 		t.Fatalf("store music asset: %v", err)
 	}
 
 	nonAudio, err := assetService.Store(ctx, project.Principal{OwnerID: ownerID}, proj.ID, mediaasset.CreateInput{
-		Kind:       mediaasset.KindImage,
-		Origin:     mediaasset.OriginUpload,
-		MimeType:   "image/png",
-		Reader:     bytes.NewReader([]byte("not-a-real-image-but-valid-storage-bytes")),
-		MaxBytes:   10 << 20,
+		Kind:     mediaasset.KindImage,
+		Origin:   mediaasset.OriginUpload,
+		MimeType: "image/png",
+		Reader:   bytes.NewReader([]byte("not-a-real-image-but-valid-storage-bytes")),
+		MaxBytes: 10 << 20,
 	})
 	if err != nil {
 		t.Fatalf("store non-audio asset: %v", err)
