@@ -1,10 +1,10 @@
 # TASK-047 — Durable Temporary-Object Lifecycle & Orphan Cleanup
 
-Status: ACTIVATION_PENDING
+Status: READY
 Priority: P1
 Milestone: Production Readiness
 Issue: #102
-Canonical branch when activated: `feature/TASK-047-temp-object-lifecycle`
+Canonical branch: `feature/TASK-047-temp-object-lifecycle`
 Contract: `docs/contracts/TEMP_OBJECT_LIFECYCLE_V1.md`
 
 ## Product outcome
@@ -71,14 +71,17 @@ Initial V1 environment-configurable defaults:
 - TASK-037 and future generation features should reuse this lifecycle for durable intermediates.
 
 ## Activation evidence — 2026-09-07
-- exact protected `develop`: `35ac2a5af8b19e47347c13fb4e91738023f0bbdf`;
+- activation governance PR #136 was accepted on protected `develop`;
+- activation exact head `bdc29880149619ed49ec0d76f05166b450d5e12b` passed CI #605 and E2E Acceptance #106;
+- activation squash merge/current protected `develop` at READY transition: `11a11d730caaf6600a0196054ad4ee509781bffb`;
 - concrete V1 temp-object inventory remains narration `internal_chunks`;
 - current jobs executor provides PostgreSQL-backed claim/lease/poll semantics with bounded cancellation;
-- no implementation PR for TASK-047 exists; prior PR #103 is planning-only;
-- current board has one active implementation task (TASK-036) against normal max WIP 3, so an independent P1 slot is available;
-- activation policy values and execution model are frozen in `TEMP_OBJECT_LIFECYCLE_V1`.
+- no implementation PR for TASK-047 existed at activation time;
+- implementation WIP was below normal max 3, so an independent P1 slot was available;
+- activation policy values and execution model are frozen in `TEMP_OBJECT_LIFECYCLE_V1`;
+- authoritative issue #102 was moved to `READY / CLAIMABLE` only after the governance merge.
 
-After this governance change is accepted on protected `develop`, issue #102 may move to `READY / CLAIMABLE`; Developer then owns `feature/TASK-047-temp-object-lifecycle`.
+Developer is authorized to claim TASK-047 from protected `develop` and use canonical implementation branch `feature/TASK-047-temp-object-lifecycle`. Normal implementation flow and merge gates apply.
 
 ## TDD focus
 Partial checkpoint + terminal failure, successful finalization + delete failure, retryable job preservation, expired/abandoned cleanup, idempotent missing objects, bounded batches, concurrent cleanup claim safety, and cross-project isolation.
