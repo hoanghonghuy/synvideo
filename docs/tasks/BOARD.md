@@ -43,25 +43,25 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-030 | Per-scene AI Image Generation Workspace | DONE | Issue #65 closed; implementation accepted via PR #108. |
 | TASK-031 | Scene Narration & Voice V1 | DONE | Issue #66 closed; implementation accepted via PR #77. |
 | TASK-032 | Per-scene AI Video Generation V1 | DONE | Issue #67 closed; implementation accepted via PR #89. |
-| TASK-033 | Stock Media Search & Acquisition V1 | READY | Issue #68; READY activation landed via PR #126; canonical implementation branch not yet claimed. |
+| TASK-033 | Stock Media Search & Acquisition V1 | DONE | Issue #68 closed; implementation accepted via PR #130 / squash `85ca3877...`. |
 | TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
-| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; canonical branch is claimed but currently requires sync to latest `develop` before implementation. |
-| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; activation waits for accepted compatible TASK-033/TASK-035 implementation boundaries. |
+| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; draft PR #129 is active; current exact head needs a `gofmt` CI fix and remaining full-scope implementation before review-ready. |
+| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; TASK-033 is accepted and activation now waits only for an accepted compatible TASK-035 audio-mix boundary. |
 | TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
 ## Current F1 implementation supply
-- TASK-035 is claimed on `feature/TASK-035-background-music-mix`; Developer must sync the stale branch to latest protected `develop` before adding implementation work.
-- TASK-033 is independently `READY / CLAIMABLE`; Developer may create `feature/TASK-033-stock-media` from latest protected `develop` under its frozen task/contract.
-- TASK-036 is the prepared NEXT BACKLOG item, but must not be activated until compatible TASK-033 stock-media and TASK-035 audio-mix implementation boundaries are accepted.
-- Do not manufacture another feature task merely to fill a slot while this supply remains valid.
+- TASK-035 is active on canonical `feature/TASK-035-background-music-mix` through draft PR #129. Developer must fix the current Backend `gofmt` gate, reconcile with latest protected `develop`, and complete the remaining API/frontend/integration scope before review-ready.
+- TASK-033 is DONE and accepted through PR #130 / squash `85ca3877dfcbb716c8dc870f2397617bce26bcc1`.
+- TASK-036 is the prepared NEXT BACKLOG item. Its stock-media dependency is now accepted; do not activate it until TASK-035 supplies a concrete accepted compatible audio-mix implementation boundary.
+- There is currently no additional F1 feature task that can be truthfully marked READY without bypassing a dependency. Do not manufacture READY work merely to fill a slot; independent production-hardening backlog remains governed by its own activation gates.
 
 ## Subsequent sequence
-1. Finish TASK-035 audio mix and TASK-033 stock-media implementation independently within bounded WIP.
-2. Revalidate and activate TASK-036 editor once those component boundaries are accepted and compatible.
+1. Finish and accept TASK-035 audio mix through its canonical PR.
+2. Immediately revalidate and activate TASK-036 editor once the accepted audio-mix boundary is available.
 3. TASK-037 render from immutable composition snapshots.
 4. TASK-038 Channel Hub from accepted render artifacts.
-5. Production hardening/E2E and richer intake follow product audit rather than micro-task generation.
+5. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
 
 ## Architecture gates
 - Provider capabilities remain provider-neutral; vendor types stay in adapters.
