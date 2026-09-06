@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError } from '@/api/projects'
 import StockMediaPanel from './StockMediaPanel.vue'
 import { acquireStockMedia, searchStockMedia, type MediaAsset, type StockMediaResult } from './api'
 
@@ -72,19 +73,15 @@ describe('StockMediaPanel', () => {
   })
 
   it('shows an explicit provider-unavailable state without silent fallback', async () => {
-    const error = Object.assign(new Error('unavailable'), {
-      name: 'ApiError',
-      code: 'STOCK_MEDIA_PROVIDER_UNAVAILABLE',
-      status: 503,
-      fields: {},
-    })
-    vi.mocked(searchStockMedia).mockRejectedValue(error)
+    vi.mocked(searchStockMedia).mockRejectedValue(
+      new ApiError(503, 'STOCK_MEDIA_PROVIDER_UNAVAILABLE', 'Provider unavailable.'),
+    )
 
     const wrapper = mount(StockMediaPanel, { props: { projectId: 'project-1' } })
     await wrapper.get('[data-testid="stock-query"]').setValue('city')
     await wrapper.get('form').trigger('submit')
     await vi.waitFor(() => expect(searchStockMedia).toHaveBeenCalledTimes(1))
 
-    expect(wrapper.get('[data-testid="stock-search-error"]').text()).toContain('Không thể hoàn tất')
+    expect(wrapper.get('[data-testid="stock-search-error"]').text()).toContain('Pexels chưa được cấu hình')
   })
 })
