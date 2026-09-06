@@ -11,13 +11,13 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/stockmedia"
 )
 
-func TestOpenForAcquisitionResolvesFreshProviderURL(t *testing.T) {
+func TestResolveForAcquisitionRefreshesURLAndProvenance(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/photos/123":
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"id":123,"src":{"original":%q}}`, server.URL+"/content/photo.jpg")
+			fmt.Fprintf(w, `{"id":123,"url":"https://www.pexels.com/photo/123/","photographer":"Ada","photographer_url":"https://www.pexels.com/@ada","src":{"medium":"https://images.example/preview.jpg","original":%q}}`, server.URL+"/content/photo.jpg")
 		case "/content/photo.jpg":
 			w.Header().Set("Content-Type", "image/jpeg")
 			fmt.Fprint(w, "image-bytes")
@@ -31,14 +31,17 @@ func TestOpenForAcquisitionResolvesFreshProviderURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote, err := adapter.OpenForAcquisition(context.Background(), "123", stockmedia.MediaKindImage)
+	source, err := adapter.ResolveForAcquisition(context.Background(), "123", stockmedia.MediaKindImage)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if remote.ContentType() != "image/jpeg" {
-		t.Fatalf("content type = %q", remote.ContentType())
+	if source.Result.ProviderResultID != "123" || source.Result.CreatorName != "Ada" || source.Result.SourcePageURL == "" {
+		t.Fatalf("provenance = %#v", source.Result)
 	}
-	reader, err := remote.Open(context.Background())
+	if source.Remote.ContentType() != "image/jpeg" {
+		t.Fatalf("content type = %q", source.Remote.ContentType())
+	}
+	reader, err := source.Remote.Open(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +55,7 @@ func TestOpenForAcquisitionResolvesFreshProviderURL(t *testing.T) {
 	}
 }
 
-func TestOpenForAcquisitionDoesNotSubstituteRemovedItem(t *testing.T) {
+func TestResolveForAcquisitionDoesNotSubstituteRemovedItem(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))
@@ -61,7 +64,7 @@ func TestOpenForAcquisitionDoesNotSubstituteRemovedItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = adapter.OpenForAcquisition(context.Background(), "404", stockmedia.MediaKindImage)
+	_, err = adapter.ResolveForAcquisition(context.Background(), "404", stockmedia.MediaKindImage)
 	providerErr, ok := err.(stockmedia.ProviderError)
 	if !ok || providerErr.Kind != stockmedia.ProviderErrorRemoved {
 		t.Fatalf("error = %#v", err)
