@@ -1,6 +1,6 @@
 # TASK-047 — Durable Temporary-Object Lifecycle & Orphan Cleanup
 
-Status: BACKLOG
+Status: ACTIVATION_PENDING
 Priority: P1
 Milestone: Production Readiness
 Issue: #102
@@ -24,6 +24,16 @@ Normal MediaAsset deletion is already tombstone/retry protected and is not the s
 - Keep cleanup project/job scoped using server-controlled prefixes and stable ownership metadata.
 - Define privacy-safe cleanup diagnostics/metrics.
 - Provide a reusable contract for future render/generation intermediates rather than feature-specific garbage-collection rules.
+
+## Frozen activation policy
+Initial V1 environment-configurable defaults:
+- minimum recovery window: 24h for active/retryable narration checkpoints unless durable job state legitimately requires longer;
+- maximum cleanup-eligible retention target: 72h;
+- reconciliation batch: max 100 records per pass;
+- reconciliation wall time: max 30s per pass;
+- object delete timeout: 5s per attempt;
+- PostgreSQL-backed durable state/claiming is authoritative; S3-compatible bucket lifecycle is defense-in-depth only;
+- execution reuses the existing durable jobs lease/poll pattern as a bounded reconciliation worker/tick; no unbounded bucket scan.
 
 ## Required behavior
 1. Temporary objects required by a currently active/retryable logical job are never removed before the defined recovery window closes.
@@ -54,13 +64,21 @@ Normal MediaAsset deletion is already tombstone/retry protected and is not the s
 
 ## Dependencies / relations
 - TASK-031 is DONE and supplies the first durable temporary-object use case.
+- TASK-042 is DONE and supplies bounded cancellation/lease-loss behavior.
 - Durable job state from existing jobs infrastructure is the source of truth for recovery eligibility.
 - TASK-039 may surface cleanup diagnostics.
 - TASK-044 remains responsible for backup/restore and post-restore consistency.
 - TASK-037 and future generation features should reuse this lifecycle for durable intermediates.
 
-## Activation gate
-Remain BACKLOG after planning freeze. Before READY, PM/TL must re-check exact `develop`, dedupe new retention/cleanup work, inventory every current durable temporary prefix, reconcile the current jobs state machine and production storage topology, freeze initial retention/batch policy, and confirm implementation WIP capacity. Developer owns implementation only after READY activation.
+## Activation evidence — 2026-09-07
+- exact protected `develop`: `35ac2a5af8b19e47347c13fb4e91738023f0bbdf`;
+- concrete V1 temp-object inventory remains narration `internal_chunks`;
+- current jobs executor provides PostgreSQL-backed claim/lease/poll semantics with bounded cancellation;
+- no implementation PR for TASK-047 exists; prior PR #103 is planning-only;
+- current board has one active implementation task (TASK-036) against normal max WIP 3, so an independent P1 slot is available;
+- activation policy values and execution model are frozen in `TEMP_OBJECT_LIFECYCLE_V1`.
+
+After this governance change is accepted on protected `develop`, issue #102 may move to `READY / CLAIMABLE`; Developer then owns `feature/TASK-047-temp-object-lifecycle`.
 
 ## TDD focus
 Partial checkpoint + terminal failure, successful finalization + delete failure, retryable job preservation, expired/abandoned cleanup, idempotent missing objects, bounded batches, concurrent cleanup claim safety, and cross-project isolation.
