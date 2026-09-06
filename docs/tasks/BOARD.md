@@ -45,23 +45,22 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-032 | Per-scene AI Video Generation V1 | DONE | Issue #67 closed; implementation accepted via PR #89. |
 | TASK-033 | Stock Media Search & Acquisition V1 | DONE | Issue #68 closed; implementation accepted via PR #130 / squash `85ca3877...`. |
 | TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
-| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; draft PR #129 is active; current exact head needs a `gofmt` CI fix and remaining full-scope implementation before review-ready. |
-| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; TASK-033 is accepted and activation now waits only for an accepted compatible TASK-035 audio-mix boundary. |
-| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
+| TASK-035 | Background Music & Audio Mix V1 | DONE | Issue #70 closed; implementation accepted via PR #129 / squash `0eb43d88...`. |
+| TASK-036 | Scene Editor V1 | READY | Issue #71; PM-authorized and claimable on canonical `feature/TASK-036-scene-editor-v1` from current protected `develop`. |
+| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; contract frozen; waits for a concrete accepted TASK-036 immutable composition snapshot plus renderer/deployment/safety activation decisions. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
 ## Current F1 implementation supply
-- TASK-035 is active on canonical `feature/TASK-035-background-music-mix` through draft PR #129. Developer must fix the current Backend `gofmt` gate, reconcile with latest protected `develop`, and complete the remaining API/frontend/integration scope before review-ready.
-- TASK-033 is DONE and accepted through PR #130 / squash `85ca3877dfcbb716c8dc870f2397617bce26bcc1`.
-- TASK-036 is the prepared NEXT BACKLOG item. Its stock-media dependency is now accepted; do not activate it until TASK-035 supplies a concrete accepted compatible audio-mix implementation boundary.
-- There is currently no additional F1 feature task that can be truthfully marked READY without bypassing a dependency. Do not manufacture READY work merely to fill a slot; independent production-hardening backlog remains governed by its own activation gates.
+- TASK-036 is the current PM-authorized claimable READY task. Developer may claim canonical `feature/TASK-036-scene-editor-v1` from current protected `develop` and implement against `docs/contracts/SCENE_EDITOR_COMPOSITION_V1.md`.
+- TASK-035 is DONE and accepted through PR #129: exact reviewed head `9433a5cb22a446399567ada9ac5ca285bc10c87c`, CI #580 + E2E Acceptance #84 green, squash `0eb43d88dc46fbbaac09c778b7f4b9b4439d2dde`.
+- Fresh activation dedupe found no canonical TASK-036 branch or implementation PR before READY was set on issue #71.
+- TASK-037 is NEXT BACKLOG. Keep it BACKLOG until TASK-036 produces the accepted immutable composition snapshot and its own READY-time renderer/toolchain/deployment/safety decisions are frozen.
 
 ## Subsequent sequence
-1. Finish and accept TASK-035 audio mix through its canonical PR.
-2. Immediately revalidate and activate TASK-036 editor once the accepted audio-mix boundary is available.
-3. TASK-037 render from immutable composition snapshots.
-4. TASK-038 Channel Hub from accepted render artifacts.
-5. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
+1. Implement and accept TASK-036 Scene Editor through its canonical branch/PR.
+2. Revalidate TASK-037 Render & Export against the concrete immutable composition snapshot, production safety dependencies, deployment resources and renderer/toolchain/license choices; activate only after those gates are satisfied.
+3. TASK-038 Channel Hub from accepted render artifacts.
+4. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
 
 ## Architecture gates
 - Provider capabilities remain provider-neutral; vendor types stay in adapters.
