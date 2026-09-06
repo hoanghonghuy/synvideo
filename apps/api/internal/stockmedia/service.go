@@ -63,8 +63,8 @@ type AcquireInput struct {
 }
 
 type Acquisition struct {
-	Asset  mediaasset.MediaAsset
-	Reused bool
+	Asset  mediaasset.MediaAsset `json:"asset"`
+	Reused bool                  `json:"reused"`
 }
 
 func (s *Service) Acquire(ctx context.Context, principal project.Principal, projectID uuid.UUID, input AcquireInput) (Acquisition, error) {
