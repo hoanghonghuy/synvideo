@@ -62,17 +62,17 @@ func (r SearchRequest) Validate() error {
 }
 
 type SearchResult struct {
-	ProviderKey      string
-	ProviderResultID string
-	Kind             MediaKind
-	PreviewURL       string
-	SourcePageURL    string
-	CreatorName      string
-	CreatorURL       string
-	LicenseSummary   string
-	LicenseReference string
-	AttributionText  string
-	Acquirable       bool
+	ProviderKey      string    `json:"provider_key"`
+	ProviderResultID string    `json:"provider_result_id"`
+	Kind             MediaKind `json:"kind"`
+	PreviewURL       string    `json:"preview_url"`
+	SourcePageURL    string    `json:"source_page_url"`
+	CreatorName      string    `json:"creator_name"`
+	CreatorURL       string    `json:"creator_url"`
+	LicenseSummary   string    `json:"license_summary"`
+	LicenseReference string    `json:"license_reference"`
+	AttributionText  string    `json:"attribution_text"`
+	Acquirable       bool      `json:"acquirable"`
 }
 
 func (r SearchResult) Validate() error {
@@ -82,17 +82,17 @@ func (r SearchResult) Validate() error {
 	if r.Kind != MediaKindImage && r.Kind != MediaKindVideo {
 		return ErrInvalidResult
 	}
-	if strings.TrimSpace(r.PreviewURL) == "" || strings.TrimSpace(r.LicenseSummary) == "" {
+	if strings.TrimSpace(r.PreviewURL) == "" || strings.TrimSpace(r.SourcePageURL) == "" || strings.TrimSpace(r.LicenseSummary) == "" || strings.TrimSpace(r.AttributionText) == "" {
 		return ErrInvalidResult
 	}
 	return nil
 }
 
 type SearchPage struct {
-	Results     []SearchResult
-	Page        int
-	PerPage     int
-	HasNextPage bool
+	Results     []SearchResult `json:"results"`
+	Page        int            `json:"page"`
+	PerPage     int            `json:"per_page"`
+	HasNextPage bool           `json:"has_next_page"`
 }
 
 type ProviderErrorKind string
