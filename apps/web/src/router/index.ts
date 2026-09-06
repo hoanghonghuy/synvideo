@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import AudioMixWorkspaceView from '@/features/audio-mix/AudioMixWorkspaceView.vue'
 import CaptionWorkspaceView from '@/features/captions/CaptionWorkspaceView.vue'
 import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
@@ -83,6 +84,11 @@ export const router = createRouter({
       path: '/projects/:id/captions',
       name: 'captions',
       component: CaptionWorkspaceView,
+    },
+    {
+      path: '/projects/:id/audio-mix',
+      name: 'audio-mix',
+      component: AudioMixWorkspaceView,
     },
     {
       path: '/projects/:id/scene-video',
