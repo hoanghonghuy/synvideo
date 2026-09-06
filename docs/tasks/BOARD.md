@@ -45,15 +45,15 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-032 | Per-scene AI Video Generation V1 | DONE | Issue #67 closed; implementation accepted via PR #89. |
 | TASK-033 | Stock Media Search & Acquisition V1 | DONE | Issue #68 closed; implementation accepted via PR #130 / squash `85ca3877...`. |
 | TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
-| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; draft PR #129 is active; current exact head needs a `gofmt` CI fix and remaining full-scope implementation before review-ready. |
-| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; TASK-033 is accepted and activation now waits only for an accepted compatible TASK-035 audio-mix boundary. |
+| TASK-035 | Background Music & Audio Mix V1 | REVIEW | Issue #70; PR #129 exact head `6afe782...` is review-complete with CI #578 + E2E #82 green, but merge is locally blocked until the canonical branch reconciles with current protected `develop` and obtains fresh required checks. |
+| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; activation waits only for accepted TASK-035 audio-mix boundary. |
 | TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
 ## Current F1 implementation supply
-- TASK-035 is active on canonical `feature/TASK-035-background-music-mix` through draft PR #129. Developer must fix the current Backend `gofmt` gate, reconcile with latest protected `develop`, and complete the remaining API/frontend/integration scope before review-ready.
+- TASK-035 is review-complete on canonical `feature/TASK-035-background-music-mix` through PR #129 at exact head `6afe78267cc4df3d0aa09ea784b9e8049fcf060d`. CI #578 and E2E Acceptance #82 are green. A guarded squash-merge was rejected by protected `develop` after docs-only PR #131 advanced the base to `113153c98d333da2b5030a4fb6c095782921d3f7`; Developer must reconcile the canonical branch to current `develop`, push a new head, and let fresh required checks run. No feature rework is requested unless reconciliation exposes a regression.
 - TASK-033 is DONE and accepted through PR #130 / squash `85ca3877dfcbb716c8dc870f2397617bce26bcc1`.
-- TASK-036 is the prepared NEXT BACKLOG item. Its stock-media dependency is now accepted; do not activate it until TASK-035 supplies a concrete accepted compatible audio-mix implementation boundary.
+- TASK-036 is the prepared NEXT BACKLOG item. Its sole remaining dependency is accepted TASK-035; activate immediately after TASK-035 lands, subject to fresh dedupe/WIP revalidation.
 - There is currently no additional F1 feature task that can be truthfully marked READY without bypassing a dependency. Do not manufacture READY work merely to fill a slot; independent production-hardening backlog remains governed by its own activation gates.
 
 ## Subsequent sequence
