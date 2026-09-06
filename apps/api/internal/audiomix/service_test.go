@@ -25,7 +25,6 @@ func (r *memoryRepository) GetLatest(_ context.Context, ownerID, projectID uuid.
 	}
 	return Document{}, ErrNotFound
 }
-
 func (r *memoryRepository) GetRevision(_ context.Context, ownerID, projectID uuid.UUID, revision int) (Document, error) {
 	for _, doc := range r.docs {
 		if doc.OwnerID == ownerID && doc.ProjectID == projectID && doc.Revision == revision {
@@ -34,7 +33,6 @@ func (r *memoryRepository) GetRevision(_ context.Context, ownerID, projectID uui
 	}
 	return Document{}, ErrNotFound
 }
-
 func (r *memoryRepository) ListHistory(_ context.Context, ownerID, projectID uuid.UUID) ([]Document, error) {
 	var result []Document
 	for _, doc := range r.docs {
@@ -44,7 +42,6 @@ func (r *memoryRepository) ListHistory(_ context.Context, ownerID, projectID uui
 	}
 	return result, nil
 }
-
 func (r *memoryRepository) CreateInitial(_ context.Context, doc Document) (Document, error) {
 	if _, err := r.GetLatest(context.Background(), doc.OwnerID, doc.ProjectID); err == nil {
 		return Document{}, ErrConflict
@@ -52,7 +49,6 @@ func (r *memoryRepository) CreateInitial(_ context.Context, doc Document) (Docum
 	r.docs = append(r.docs, doc)
 	return doc, nil
 }
-
 func (r *memoryRepository) CreateRevision(_ context.Context, doc Document, expectedRevision int) (Document, error) {
 	latest, err := r.GetLatest(context.Background(), doc.OwnerID, doc.ProjectID)
 	if err != nil {
@@ -71,13 +67,17 @@ func (r planRepository) ListVersions(context.Context, uuid.UUID, uuid.UUID) ([]s
 	return append([]sceneplan.Plan(nil), r.plans...), nil
 }
 
-type narrationRepository struct{ byPlan map[int][]scenenarration.Binding }
+type narrationRepository struct {
+	byPlan map[int][]scenenarration.Binding
+}
 
 func (r *narrationRepository) ListActiveForPlan(_ context.Context, _ uuid.UUID, _ uuid.UUID, planVersion int) ([]scenenarration.Binding, error) {
 	return append([]scenenarration.Binding(nil), r.byPlan[planVersion]...), nil
 }
 
-type assetRepository struct{ assets map[uuid.UUID]mediaasset.MediaAsset }
+type assetRepository struct {
+	assets map[uuid.UUID]mediaasset.MediaAsset
+}
 
 func (r *assetRepository) Get(_ context.Context, ownerID, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
 	asset, ok := r.assets[assetID]
@@ -168,6 +168,7 @@ func TestServiceNarrationReplacementMarksExistingMixStale(t *testing.T) {
 	f.assets.assets[replacementID] = audioAsset(f.ownerID, f.projectID, replacementID, 13)
 	f.bindings.byPlan[4][0].ID = uuid.New()
 	f.bindings.byPlan[4][0].AssetID = replacementID
+
 	view, err := f.service.Get(context.Background(), f.principal, f.projectID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
