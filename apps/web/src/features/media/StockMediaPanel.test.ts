@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/api/projects'
+import { i18n } from '@/locales'
 import StockMediaPanel from './StockMediaPanel.vue'
 import { acquireStockMedia, searchStockMedia, type MediaAsset, type StockMediaResult } from './api'
 
@@ -42,6 +43,13 @@ const asset: MediaAsset = {
   updated_at: '2026-09-06T00:00:00Z',
 }
 
+function mountPanel() {
+  return mount(StockMediaPanel, {
+    props: { projectId: 'project-1' },
+    global: { plugins: [i18n] },
+  })
+}
+
 describe('StockMediaPanel', () => {
   beforeEach(() => {
     vi.mocked(searchStockMedia).mockReset()
@@ -57,7 +65,7 @@ describe('StockMediaPanel', () => {
     })
     vi.mocked(acquireStockMedia).mockResolvedValue({ asset, reused: false })
 
-    const wrapper = mount(StockMediaPanel, { props: { projectId: 'project-1' } })
+    const wrapper = mountPanel()
     await wrapper.get('[data-testid="stock-query"]').setValue('rainy city')
     await wrapper.get('form').trigger('submit')
     await vi.waitFor(() => expect(searchStockMedia).toHaveBeenCalledTimes(1))
@@ -77,7 +85,7 @@ describe('StockMediaPanel', () => {
       new ApiError(503, 'STOCK_MEDIA_PROVIDER_UNAVAILABLE', 'Provider unavailable.'),
     )
 
-    const wrapper = mount(StockMediaPanel, { props: { projectId: 'project-1' } })
+    const wrapper = mountPanel()
     await wrapper.get('[data-testid="stock-query"]').setValue('city')
     await wrapper.get('form').trigger('submit')
     await vi.waitFor(() => expect(searchStockMedia).toHaveBeenCalledTimes(1))
