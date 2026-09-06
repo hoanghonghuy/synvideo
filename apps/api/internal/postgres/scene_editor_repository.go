@@ -81,7 +81,7 @@ func (r *SceneEditorRepository) createRevision(ctx context.Context, doc sceneedi
 	}
 
 	var projectOwned bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND user_id=$2)`, doc.ProjectID, doc.OwnerID).Scan(&projectOwned); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND owner_id=$2)`, doc.ProjectID, doc.OwnerID).Scan(&projectOwned); err != nil {
 		return sceneeditor.Document{}, sceneEditorPersistence("validate scene editor project", err)
 	}
 	if !projectOwned {
