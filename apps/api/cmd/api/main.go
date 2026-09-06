@@ -249,6 +249,7 @@ func main() {
 			GeneratedAudio:  sceneNarrationJobService,
 			Captions:        captionService,
 		})
+		server.Handler = withAudioMixRoutes(logger, server.Handler, pool, actor.NewLocalResolver(cfg))
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actor.NewLocalResolver(cfg))
 	}
