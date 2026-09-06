@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/projects'
 import {
@@ -10,9 +11,11 @@ import {
   type StockMediaOrientation,
   type StockMediaResult,
 } from './api'
+import stockMessages from './stockMessages'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ acquired: [asset: MediaAsset] }>()
+const { t } = useI18n({ useScope: 'local', messages: stockMessages })
 
 const query = ref('')
 const kind = ref<StockMediaKind>('image')
@@ -25,6 +28,7 @@ const acquireError = ref('')
 const acquiredID = ref('')
 const page = ref(1)
 const hasNextPage = ref(false)
+const hasSearched = ref(false)
 
 const canSearch = computed(() => query.value.trim().length > 0 && !searching.value)
 
@@ -33,6 +37,7 @@ async function search(targetPage = 1) {
   searching.value = true
   searchError.value = ''
   acquireError.value = ''
+  hasSearched.value = true
   try {
     const response = await searchStockMedia(props.projectId, {
       provider: 'pexels',
@@ -74,76 +79,71 @@ function errorCode(error: unknown) {
 }
 
 function errorMessage(code: string) {
-  const messages: Record<string, string> = {
-    STOCK_MEDIA_PROVIDER_UNAVAILABLE: 'Pexels chưa được cấu hình trên máy chủ.',
-    STOCK_MEDIA_RATE_LIMITED: 'Pexels đang giới hạn yêu cầu. Vui lòng thử lại sau.',
-    STOCK_MEDIA_SOURCE_UNAVAILABLE: 'Media nguồn không còn khả dụng.',
-    STOCK_MEDIA_PROVIDER_AUTH_FAILED: 'Khóa Pexels trên máy chủ hiện không hợp lệ.',
-    STOCK_MEDIA_PROVIDER_FAILED: 'Pexels chưa thể hoàn tất yêu cầu.',
-    STOCK_MEDIA_TOO_LARGE: 'Media đã chọn vượt quá giới hạn lưu trữ của dự án.',
-    STOCK_MEDIA_STORAGE_FAILED: 'Không thể lưu media stock vào storage của dự án.',
-    STOCK_MEDIA_INVALID: 'Yêu cầu tìm kiếm media stock không hợp lệ.',
-    request_failed: 'Không thể kết nối máy chủ.',
-  }
-  return messages[code] ?? 'Không thể hoàn tất yêu cầu media stock.'
+  const key = `stock.errors.${code}`
+  const translated = t(key)
+  return translated === key ? t('stock.errors.fallback') : translated
+}
+
+function creator(result: StockMediaResult) {
+  return result.creator_name || t('stock.unknownCreator')
 }
 </script>
 
 <template>
-  <section class="stock-panel" data-testid="stock-media-panel">
+  <section class="stock-panel" data-testid="stock-media-panel" aria-labelledby="stock-media-title">
     <div class="stock-heading">
       <div>
-        <h2>Kho media stock</h2>
-        <p>Tìm ảnh/video từ Pexels, xem nguồn và giấy phép trước khi lưu vào dự án.</p>
+        <h2 id="stock-media-title">{{ t('stock.title') }}</h2>
+        <p>{{ t('stock.description') }}</p>
       </div>
       <span class="stock-provider">Pexels</span>
     </div>
 
     <form class="stock-search" @submit.prevent="search(1)">
       <label>
-        Từ khóa
-        <input v-model="query" type="search" placeholder="Ví dụ: rainy Tokyo street" data-testid="stock-query">
+        {{ t('stock.query') }}
+        <input v-model="query" type="search" :placeholder="t('stock.queryPlaceholder')" data-testid="stock-query">
       </label>
       <label>
-        Loại
+        {{ t('stock.kind') }}
         <select v-model="kind" data-testid="stock-kind">
-          <option value="image">Hình ảnh</option>
-          <option value="video">Video</option>
+          <option value="image">{{ t('stock.image') }}</option>
+          <option value="video">{{ t('stock.video') }}</option>
         </select>
       </label>
       <label>
-        Hướng
+        {{ t('stock.orientation') }}
         <select v-model="orientation">
-          <option value="">Bất kỳ</option>
-          <option value="landscape">Ngang</option>
-          <option value="portrait">Dọc</option>
-          <option value="square">Vuông</option>
+          <option value="">{{ t('stock.any') }}</option>
+          <option value="landscape">{{ t('stock.landscape') }}</option>
+          <option value="portrait">{{ t('stock.portrait') }}</option>
+          <option value="square">{{ t('stock.square') }}</option>
         </select>
       </label>
       <button class="primary-button" type="submit" :disabled="!canSearch">
-        {{ searching ? 'Đang tìm...' : 'Tìm media' }}
+        {{ searching ? t('stock.searching') : t('stock.search') }}
       </button>
     </form>
 
-    <div v-if="searchError" class="notice error" data-testid="stock-search-error">
+    <div v-if="searchError" class="notice error" data-testid="stock-search-error" role="alert">
       {{ errorMessage(searchError) }}
     </div>
-    <p v-else-if="!searching && results.length === 0 && page > 1" class="notice info">Không còn kết quả.</p>
-    <p v-else-if="!searching && results.length === 0 && query.trim()" class="field-help">Không tìm thấy kết quả phù hợp.</p>
+    <p v-else-if="hasSearched && !searching && results.length === 0 && page > 1" class="notice info">{{ t('stock.noMoreResults') }}</p>
+    <p v-else-if="hasSearched && !searching && results.length === 0" class="field-help">{{ t('stock.noResults') }}</p>
 
-    <div v-if="results.length" class="stock-grid">
+    <div v-if="results.length" class="stock-grid" aria-live="polite">
       <article v-for="result in results" :key="`${result.provider_key}:${result.provider_result_id}`" class="stock-card">
         <div class="stock-preview">
-          <img v-if="result.kind === 'image'" :src="result.preview_url" alt="Xem trước media stock">
-          <video v-else :poster="result.preview_url" muted controls preload="none" aria-label="Xem trước video stock" />
+          <img v-if="result.kind === 'image'" :src="result.preview_url" :alt="t('stock.previewAlt', { creator: creator(result) })">
+          <video v-else :poster="result.preview_url" muted controls preload="none" :aria-label="t('stock.videoPreview', { creator: creator(result) })" />
         </div>
         <div class="stock-meta">
-          <strong>{{ result.creator_name || 'Không rõ tác giả' }}</strong>
+          <strong>{{ creator(result) }}</strong>
           <span>{{ result.license_summary }}</span>
           <span>{{ result.attribution_text }}</span>
           <div class="stock-links">
-            <a :href="result.source_page_url" target="_blank" rel="noopener noreferrer">Nguồn</a>
-            <a v-if="result.license_reference" :href="result.license_reference" target="_blank" rel="noopener noreferrer">Giấy phép</a>
+            <a :href="result.source_page_url" target="_blank" rel="noopener noreferrer">{{ t('stock.source') }}</a>
+            <a v-if="result.license_reference" :href="result.license_reference" target="_blank" rel="noopener noreferrer">{{ t('stock.license') }}</a>
           </div>
           <button
             class="secondary-button"
@@ -152,20 +152,20 @@ function errorMessage(code: string) {
             :data-testid="`stock-acquire-${result.provider_result_id}`"
             @click="acquire(result)"
           >
-            {{ acquiringID === result.provider_result_id ? 'Đang lưu...' : 'Lưu vào dự án' }}
+            {{ acquiringID === result.provider_result_id ? t('stock.acquiring') : t('stock.acquire') }}
           </button>
-          <span v-if="acquiredID === result.provider_result_id" class="field-help">Đã lưu. Media này có thể gán cho scene bên dưới.</span>
+          <span v-if="acquiredID === result.provider_result_id" class="field-help" role="status">{{ t('stock.acquired') }}</span>
         </div>
       </article>
     </div>
 
-    <div v-if="acquireError" class="notice error" data-testid="stock-acquire-error">
+    <div v-if="acquireError" class="notice error" data-testid="stock-acquire-error" role="alert">
       {{ errorMessage(acquireError) }}
     </div>
     <div v-if="results.length" class="stock-pagination">
-      <button class="secondary-button" type="button" :disabled="searching || page <= 1" @click="search(page - 1)">Trang trước</button>
-      <span>Trang {{ page }}</span>
-      <button class="secondary-button" type="button" :disabled="searching || !hasNextPage" @click="search(page + 1)">Trang sau</button>
+      <button class="secondary-button" type="button" :disabled="searching || page <= 1" @click="search(page - 1)">{{ t('stock.previous') }}</button>
+      <span>{{ t('stock.page', { page }) }}</span>
+      <button class="secondary-button" type="button" :disabled="searching || !hasNextPage" @click="search(page + 1)">{{ t('stock.next') }}</button>
     </div>
   </section>
 </template>
