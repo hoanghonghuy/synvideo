@@ -47,24 +47,24 @@ export interface SceneMediaEntry {
 }
 
 export interface StockMediaResult {
-  ProviderKey: string
-  ProviderResultID: string
-  Kind: StockMediaKind
-  PreviewURL: string
-  SourcePageURL: string
-  CreatorName: string
-  CreatorURL: string
-  LicenseSummary: string
-  LicenseReference: string
-  AttributionText: string
-  Acquirable: boolean
+  provider_key: string
+  provider_result_id: string
+  kind: StockMediaKind
+  preview_url: string
+  source_page_url: string
+  creator_name: string
+  creator_url: string
+  license_summary: string
+  license_reference: string
+  attribution_text: string
+  acquirable: boolean
 }
 
 export interface StockMediaSearchPage {
-  Results: StockMediaResult[] | null
-  Page: number
-  PerPage: number
-  HasNextPage: boolean
+  results: StockMediaResult[] | null
+  page: number
+  per_page: number
+  has_next_page: boolean
 }
 
 export interface StockMediaAcquisition {
@@ -117,14 +117,14 @@ export function searchStockMedia(
 
 export function acquireStockMedia(
   projectId: string,
-  result: Pick<StockMediaResult, 'ProviderKey' | 'ProviderResultID' | 'Kind'>,
+  result: Pick<StockMediaResult, 'provider_key' | 'provider_result_id' | 'kind'>,
 ): Promise<StockMediaAcquisition> {
   return request<StockMediaAcquisition>(`${API_PREFIX}/projects/${projectId}/stock-media/acquisitions`, {
     method: 'POST',
     body: JSON.stringify({
-      provider_key: result.ProviderKey,
-      provider_result_id: result.ProviderResultID,
-      kind: result.Kind,
+      provider_key: result.provider_key,
+      provider_result_id: result.provider_result_id,
+      kind: result.kind,
     }),
   })
 }
