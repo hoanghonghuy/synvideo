@@ -4,7 +4,13 @@ import "context"
 
 type Provider interface {
 	Search(context.Context, SearchRequest) (SearchPage, error)
-	OpenForAcquisition(context.Context, string, MediaKind) (RemoteAsset, error)
+	ResolveForAcquisition(context.Context, string, MediaKind) (AcquisitionSource, error)
+}
+
+type AcquisitionSource struct {
+	Result   SearchResult
+	Filename string
+	Remote   RemoteAsset
 }
 
 type RemoteAsset interface {
