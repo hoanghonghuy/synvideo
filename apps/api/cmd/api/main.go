@@ -269,6 +269,7 @@ func main() {
 			Captions:        captionService,
 		})
 		httpserver.AttachStockMediaRoutes(server, logger, stockMediaService, actorResolver)
+		server.Handler = withAudioMixRoutes(logger, server.Handler, pool, actorResolver)
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actorResolver)
 	}
