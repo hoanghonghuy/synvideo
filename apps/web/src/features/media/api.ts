@@ -68,8 +68,8 @@ export interface StockMediaSearchPage {
 }
 
 export interface StockMediaAcquisition {
-  Asset: MediaAsset
-  Reused: boolean
+  asset: MediaAsset
+  reused: boolean
 }
 
 export interface StockMediaSearchInput {
