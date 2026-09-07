@@ -113,6 +113,7 @@ func main() {
 	var captionService *captions.Service
 	var stockMediaService *stockmedia.Service
 	var sceneEditorService *sceneeditor.Service
+	var renderExportService httpserver.RenderExportService
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -250,6 +251,13 @@ func main() {
 				os.Exit(1)
 			}
 		}
+		if storage != nil && mediaAssetService != nil && cfg.Environment != config.EnvironmentProduction {
+			renderExportService, err = configureLocalRender(ctx, pool, sceneEditorRepo, jobsRepo, jobsRepo, mediaAssetService, jobsRegistry)
+			if err != nil {
+				logger.Error("local render runtime initialization failed", "error", err)
+				os.Exit(1)
+			}
+		}
 
 		executor := jobs.NewExecutor(jobsRepo, jobsRegistry, jobs.ExecutorConfig{
 			LeaseDuration:  30 * time.Second,
@@ -294,6 +302,7 @@ func main() {
 		})
 		httpserver.AttachStockMediaRoutes(server, logger, stockMediaService, actorResolver)
 		server.Handler = httpserver.WithSceneEditorRoutes(logger, server.Handler, sceneEditorService, actorResolver)
+		server.Handler = httpserver.WithRenderExportRoutes(logger, server.Handler, renderExportService, actorResolver)
 		server.Handler = withAudioMixRoutes(logger, server.Handler, pool, actorResolver)
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actorResolver)

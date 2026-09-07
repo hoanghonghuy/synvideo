@@ -20,6 +20,15 @@ docs/        Product, engineering, decision and task records
 - npm 11 or 12
 - Go matching `apps/api/go.mod`
 - Docker with Docker Compose v2
+- FFmpeg and FFprobe available on `PATH`, with `libx264` video and `aac` audio encoders for the local MP4 render profile
+
+Verify the renderer prerequisite before starting the API:
+
+```sh
+ffmpeg -hide_banner -version
+ffmpeg -hide_banner -encoders | grep -E 'libx264|aac'
+ffprobe -hide_banner -version
+```
 
 ## Local Bootstrap
 
@@ -65,6 +74,8 @@ Development-only infrastructure defaults are documented in `.env.example`.
 Local object storage uses SeaweedFS `4.44` as a development-only S3-compatible endpoint on `http://localhost:8333`. Configure the media API with the `SYNVIDEO_MEDIA_STORAGE_*` variables in `.env.example`; legacy `SYNVIDEO_S3_*` aliases remain accepted for local compatibility. MinIO Community Edition is intentionally not used for this foundation because its public repository is no longer maintained; production storage remains provider-neutral and should be selected by a later task.
 
 Project routes use `SYNVIDEO_LOCAL_ACTOR_ID` only in `development` and `test`. Production rejects that local actor fallback so project data is not accidentally exposed before a real authentication task exists.
+
+When media storage is configured in `development` or `test`, the API probes the server-owned local FFmpeg profile during startup. Startup fails rather than silently accepting an unsupported renderer build. The local profile requires `libx264`, `aac`, `yuv420p`, and MP4; renderer executable/codec/filter flags are never accepted from public requests.
 
 When media storage is configured, the API exposes bounded upload/list/metadata/content/delete routes under `/api/v1/projects/{project_id}/media-assets` and approved scene primary-visual binding routes under `/api/v1/projects/{project_id}/scene-plans/{version}`. Content serving supports full downloads and one standard byte range for preview playback; storage credentials and object keys are never returned by the API.
 

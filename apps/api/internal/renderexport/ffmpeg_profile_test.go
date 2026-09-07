@@ -30,6 +30,7 @@ func TestProbeLocalFFmpegProfileFreezesSupportedSoftwareProfile(t *testing.T) {
 	runner := &commandRunnerStub{responses: []commandResponse{
 		{output: []byte("ffmpeg version 7.1.1 Copyright\nconfiguration: --enable-gpl --enable-libx264\n")},
 		{output: []byte("Encoders:\n V....D libx264              H.264 / AVC\n A..... aac                  AAC\n")},
+		{output: []byte("ffprobe version 7.1.1 Copyright\n")},
 	}}
 
 	profile, err := ProbeLocalFFmpegProfile(context.Background(), runner)
@@ -42,8 +43,8 @@ func TestProbeLocalFFmpegProfileFreezesSupportedSoftwareProfile(t *testing.T) {
 	if profile.VersionLine != "ffmpeg version 7.1.1 Copyright" {
 		t.Fatalf("version line = %q", profile.VersionLine)
 	}
-	if len(runner.calls) != 2 {
-		t.Fatalf("calls = %d, want 2", len(runner.calls))
+	if len(runner.calls) != 3 {
+		t.Fatalf("calls = %d, want 3", len(runner.calls))
 	}
 }
 
@@ -59,10 +60,24 @@ func TestProbeLocalFFmpegProfileFailsClosedWithoutRequiredEncoder(t *testing.T) 
 	}
 }
 
+func TestProbeLocalFFmpegProfileFailsClosedWithoutFFprobe(t *testing.T) {
+	runner := &commandRunnerStub{responses: []commandResponse{
+		{output: []byte("ffmpeg version 7.1.1\n")},
+		{output: []byte(" V....D libx264 H.264\n A..... aac AAC\n")},
+		{err: errors.New("ffprobe missing")},
+	}}
+
+	_, err := ProbeLocalFFmpegProfile(context.Background(), runner)
+	if !errors.Is(err, ErrUnsupportedFFmpeg) {
+		t.Fatalf("error = %v, want ErrUnsupportedFFmpeg", err)
+	}
+}
+
 func TestProbeLocalFFmpegProfileDoesNotExposeClientControlledArguments(t *testing.T) {
 	runner := &commandRunnerStub{responses: []commandResponse{
 		{output: []byte("ffmpeg version 7.1.1\n")},
 		{output: []byte(" V....D libx264 H.264\n A..... aac AAC\n")},
+		{output: []byte("ffprobe version 7.1.1\n")},
 	}}
 
 	_, err := ProbeLocalFFmpegProfile(context.Background(), runner)
@@ -72,6 +87,7 @@ func TestProbeLocalFFmpegProfileDoesNotExposeClientControlledArguments(t *testin
 	want := [][]string{
 		{FFmpegBinary, "-hide_banner", "-version"},
 		{FFmpegBinary, "-hide_banner", "-encoders"},
+		{FFprobeBinary, "-hide_banner", "-version"},
 	}
 	if len(runner.calls) != len(want) {
 		t.Fatalf("calls = %#v", runner.calls)

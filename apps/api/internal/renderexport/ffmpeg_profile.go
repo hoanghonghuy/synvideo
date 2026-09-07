@@ -78,6 +78,10 @@ func ProbeLocalFFmpegProfile(ctx context.Context, runner CommandRunner) (FFmpegP
 	if !hasEncoder(encodersOutput, "libx264") || !hasEncoder(encodersOutput, "aac") {
 		return FFmpegProfile{}, ErrUnsupportedFFmpeg
 	}
+	ffprobeOutput, err := runner.Run(probeCtx, FFprobeBinary, "-hide_banner", "-version")
+	if err != nil || firstNonEmptyLine(string(ffprobeOutput)) == "" {
+		return FFmpegProfile{}, fmt.Errorf("%w: ffprobe version probe failed", ErrUnsupportedFFmpeg)
+	}
 
 	versionLine := firstNonEmptyLine(string(versionOutput))
 	if versionLine == "" {
