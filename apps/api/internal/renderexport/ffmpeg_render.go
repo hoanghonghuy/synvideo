@@ -72,6 +72,13 @@ func RenderSingleVisualMP4(ctx context.Context, runner RenderProcessRunner, prof
 		runner = ExecRenderProcessRunner{}
 	}
 
+	cleanupOutput := true
+	defer func() {
+		if cleanupOutput {
+			_ = os.Remove(input.OutputPath)
+		}
+	}()
+
 	renderCtx, cancel := context.WithTimeout(ctx, LocalRenderTimeout)
 	defer cancel()
 
@@ -117,6 +124,15 @@ func RenderSingleVisualMP4(ctx context.Context, runner RenderProcessRunner, prof
 	if metadata.Width != input.Width || metadata.Height != input.Height || metadata.VideoCodec != "h264" || metadata.PixelFormat != profile.PixelFormat || !strings.Contains(metadata.Container, "mp4") {
 		return RenderMetadata{}, ErrInvalidRenderOutput
 	}
+	durationDelta := metadata.DurationMS - input.DurationMS
+	if durationDelta < 0 {
+		durationDelta = -durationDelta
+	}
+	durationToleranceMS := (2000 + int64(input.FrameRate) - 1) / int64(input.FrameRate)
+	if durationDelta > durationToleranceMS {
+		return RenderMetadata{}, ErrInvalidRenderOutput
+	}
+	cleanupOutput = false
 	return metadata, nil
 }
 
@@ -129,6 +145,9 @@ func validatePreparedLocalRenderInput(profile FFmpegProfile, input PreparedLocal
 	}
 	visualStat, err := os.Stat(input.VisualPath)
 	if err != nil || !visualStat.Mode().IsRegular() || visualStat.Size() <= 0 {
+		return ErrInvalidRenderInput
+	}
+	if _, err := os.Lstat(input.OutputPath); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return ErrInvalidRenderInput
 	}
 	if input.Width < 64 || input.Width > 3840 || input.Height < 64 || input.Height > 2160 || input.Width%2 != 0 || input.Height%2 != 0 {
