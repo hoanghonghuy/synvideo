@@ -1,7 +1,12 @@
 import type { SceneEditorScene, SceneEditorView } from './api'
 
 export interface SceneEditorFieldErrors {
-  [field: string]: string
+  duration_ms?: string
+  position_x?: string
+  position_y?: string
+  scale?: string
+  crop?: string
+  transition_duration_ms?: string
 }
 
 export function cloneEditorView(view: SceneEditorView): SceneEditorView {
