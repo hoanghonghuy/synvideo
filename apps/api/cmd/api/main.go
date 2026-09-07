@@ -276,7 +276,6 @@ func main() {
 						return
 					case <-ticker.C:
 					}
-				}
 			}()
 		}
 
