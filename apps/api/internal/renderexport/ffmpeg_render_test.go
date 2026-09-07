@@ -33,6 +33,17 @@ func (r *renderRunnerStub) Run(_ context.Context, name string, args ...string) (
 	return nil, nil, errors.New("unexpected binary")
 }
 
+type wrongDurationRunner struct {
+	renderRunnerStub
+}
+
+func (r *wrongDurationRunner) Run(ctx context.Context, name string, args ...string) ([]byte, []byte, error) {
+	if name == FFprobeBinary {
+		return []byte(`{"streams":[{"codec_name":"h264","width":320,"height":180,"pix_fmt":"yuv420p"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"9.000000"}}`), nil, nil
+	}
+	return r.renderRunnerStub.Run(ctx, name, args...)
+}
+
 func testLocalProfile() FFmpegProfile {
 	return FFmpegProfile{
 		ID:           LocalProfileID,
@@ -90,6 +101,10 @@ func TestRenderSingleVisualMP4FailsClosedOnUnsupportedOrUnsafeInput(t *testing.T
 	if err := os.WriteFile(visual, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	existingOutput := filepath.Join(dir, "existing.mp4")
+	if err := os.WriteFile(existingOutput, []byte("do-not-clobber"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	base := PreparedLocalRenderInput{
 		VisualPath: visual,
 		OutputPath: filepath.Join(dir, "out.mp4"),
@@ -106,6 +121,7 @@ func TestRenderSingleVisualMP4FailsClosedOnUnsupportedOrUnsafeInput(t *testing.T
 	}{
 		{name: "relative visual", input: func() PreparedLocalRenderInput { v := base; v.VisualPath = "visual.ppm"; return v }(), want: ErrInvalidRenderInput},
 		{name: "same path", input: func() PreparedLocalRenderInput { v := base; v.OutputPath = v.VisualPath; return v }(), want: ErrInvalidRenderInput},
+		{name: "existing output", input: func() PreparedLocalRenderInput { v := base; v.OutputPath = existingOutput; return v }(), want: ErrInvalidRenderInput},
 		{name: "odd canvas", input: func() PreparedLocalRenderInput { v := base; v.Width = 321; return v }(), want: ErrInvalidRenderInput},
 		{name: "unapproved fps", input: func() PreparedLocalRenderInput { v := base; v.FrameRate = 60; return v }(), want: ErrInvalidRenderInput},
 		{name: "duration over budget", input: func() PreparedLocalRenderInput {
@@ -122,6 +138,34 @@ func TestRenderSingleVisualMP4FailsClosedOnUnsupportedOrUnsafeInput(t *testing.T
 				t.Fatalf("error = %v, want %v", err, tt.want)
 			}
 		})
+	}
+	contents, err := os.ReadFile(existingOutput)
+	if err != nil || string(contents) != "do-not-clobber" {
+		t.Fatalf("existing output was altered: contents=%q err=%v", contents, err)
+	}
+}
+
+func TestRenderSingleVisualMP4RejectsWrongDurationAndCleansPartialOutput(t *testing.T) {
+	dir := t.TempDir()
+	visual := filepath.Join(dir, "visual.ppm")
+	output := filepath.Join(dir, "partial.mp4")
+	if err := os.WriteFile(visual, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := RenderSingleVisualMP4(context.Background(), &wrongDurationRunner{}, testLocalProfile(), PreparedLocalRenderInput{
+		VisualPath: visual,
+		OutputPath: output,
+		Width:      320,
+		Height:     180,
+		FrameRate:  24,
+		DurationMS: 500,
+		Fit:        sceneeditor.FitContain,
+	})
+	if !errors.Is(err, ErrInvalidRenderOutput) {
+		t.Fatalf("error = %v, want %v", err, ErrInvalidRenderOutput)
+	}
+	if _, statErr := os.Stat(output); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("partial output was not cleaned up: %v", statErr)
 	}
 }
 
