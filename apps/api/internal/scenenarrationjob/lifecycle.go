@@ -88,10 +88,7 @@ func (r *Reconciler) RunOnce(ctx context.Context) error {
 		expectedPrefix := fmt.Sprintf("projects/%s/internal_chunks/%s/", object.ProjectID, object.JobID)
 		if err := mediaasset.ValidateObjectStorageKey(object.ObjectKey); err != nil || !strings.HasPrefix(object.ObjectKey, expectedPrefix) {
 			retryErr := r.repo.RetryCleanup(passCtx, object.ID, object.ClaimToken, "invalid_object_identity", time.Now().UTC().Add(r.config.RetryDelay))
-			if err == nil {
-				err = errors.New("object key does not match durable project/job identity")
-			}
-			passErr = errors.Join(passErr, fmt.Errorf("reject unsafe temporary object identity: %w", err), retryErr)
+			passErr = errors.Join(passErr, errors.New("temporary object identity validation failed"), retryErr)
 			continue
 		}
 
@@ -100,11 +97,11 @@ func (r *Reconciler) RunOnce(ctx context.Context) error {
 		objectCancel()
 		if deleteErr != nil && !errors.Is(deleteErr, mediaasset.ErrObjectNotFound) {
 			retryErr := r.repo.RetryCleanup(passCtx, object.ID, object.ClaimToken, "object_delete_failed", time.Now().UTC().Add(r.config.RetryDelay))
-			passErr = errors.Join(passErr, fmt.Errorf("delete temporary object: %w", deleteErr), retryErr)
+			passErr = errors.Join(passErr, errors.New("temporary object delete failed"), retryErr)
 			continue
 		}
 		if err := r.repo.CompleteCleanup(passCtx, object.ID, object.ClaimToken); err != nil {
-			passErr = errors.Join(passErr, fmt.Errorf("complete temporary object cleanup: %w", err))
+			passErr = errors.Join(passErr, errors.New("temporary object cleanup completion failed"))
 		}
 	}
 	return passErr
