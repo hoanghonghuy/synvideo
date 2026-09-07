@@ -3,7 +3,7 @@ import { ApiError } from '@/api/projects'
 export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
 export type SceneEditorFit = 'contain' | 'cover'
 export type SceneEditorTransitionKind = 'cut' | 'fade' | 'crossfade'
-export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed'
 
 export interface SceneEditorVisualRef {
   asset_id: string
