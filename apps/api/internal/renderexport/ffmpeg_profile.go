@@ -11,11 +11,10 @@ import (
 )
 
 const (
-	FFmpegBinary         = "ffmpeg"
-	FFprobeBinary        = "ffprobe"
-	FFmpegLocalProfileID = "local_software_mp4_v1"
-	FFmpegProbeTimeout   = 5 * time.Second
-	FFmpegProbeLogMax    = 64 * 1024
+	FFmpegBinary       = "ffmpeg"
+	FFprobeBinary      = "ffprobe"
+	FFmpegProbeTimeout = 5 * time.Second
+	FFmpegProbeLogMax  = 64 * 1024
 )
 
 var ErrUnsupportedFFmpeg = errors.New("render export FFmpeg build does not support the local profile")
@@ -86,7 +85,7 @@ func ProbeLocalFFmpegProfile(ctx context.Context, runner CommandRunner) (FFmpegP
 	}
 
 	return FFmpegProfile{
-		ID:           FFmpegLocalProfileID,
+		ID:           LocalProfileID,
 		VideoEncoder: "libx264",
 		AudioEncoder: "aac",
 		PixelFormat:  "yuv420p",
