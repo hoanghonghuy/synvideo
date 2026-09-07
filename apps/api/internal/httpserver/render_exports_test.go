@@ -1,11 +1,11 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +53,11 @@ func TestRenderExportCreateReturnsDurableStatusView(t *testing.T) {
 		},
 	}
 	handler := renderExportHandler{service: service, actorResolver: renderResolverStub{principal: project.Principal{OwnerID: ownerID}}}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/render-exports", strings.NewReader(`{"snapshot_digest":"`+digest+`"}`))
+	body, err := json.Marshal(createRenderExportRequest{SnapshotDigest: digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/render-exports", bytes.NewReader(body))
 	req.SetPathValue("id", projectID.String())
 	w := httptest.NewRecorder()
 
