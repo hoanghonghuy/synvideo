@@ -6,6 +6,7 @@ import CreativeBriefView from '@/features/creative-brief/CreativeBriefView.vue'
 import CreativeProposalView from '@/features/creative-proposal/CreativeProposalView.vue'
 import GeneratedImageWorkspaceView from '@/features/generated-image/GeneratedImageWorkspaceView.vue'
 import ScriptView from '@/features/script/ScriptView.vue'
+import SceneEditorWorkspaceView from '@/features/scene-editor/SceneEditorWorkspaceView.vue'
 import ScenePlanView from '@/features/scene-plan/ScenePlanView.vue'
 import MediaWorkspaceView from '@/features/media/MediaWorkspaceView.vue'
 import StockMediaWorkspaceView from '@/features/media/StockMediaWorkspaceView.vue'
@@ -95,6 +96,11 @@ export const router = createRouter({
       path: '/projects/:id/audio-mix',
       name: 'audio-mix',
       component: AudioMixWorkspaceView,
+    },
+    {
+      path: '/projects/:id/scene-editor',
+      name: 'scene-editor',
+      component: SceneEditorWorkspaceView,
     },
     {
       path: '/projects/:id/scene-video',

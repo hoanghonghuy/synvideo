@@ -156,6 +156,12 @@ async function submit(payload: UpdateProjectPayload) {
         >
           Background music &amp; audio mix
         </RouterLink>
+        <RouterLink
+          class="text-link"
+          :to="`/projects/${project.id}/scene-editor`"
+        >
+          Scene Editor
+        </RouterLink>
       </p>
 
       <div

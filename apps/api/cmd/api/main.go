@@ -27,6 +27,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/proposalgenerationjob"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providersettings"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneeditor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenemedia"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarrationjob"
@@ -111,6 +112,7 @@ func main() {
 	var sceneNarrationService *scenenarration.Service
 	var captionService *captions.Service
 	var stockMediaService *stockmedia.Service
+	var sceneEditorService *sceneeditor.Service
 	if cfg.DatabaseURL != "" {
 		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -135,6 +137,9 @@ func main() {
 		narrationBindingRepo := postgres.NewSceneNarrationBindingRepository(pool)
 		captionRepo := postgres.NewCaptionRepository(pool)
 		videoOperationRepo := postgres.NewSceneVideoOperationRepository(pool)
+		sceneEditorRepo := postgres.NewSceneEditorRepository(pool)
+		sceneEditorResolver := postgres.NewSceneEditorDependencyResolver(pool)
+		sceneEditorService = sceneeditor.NewService(sceneEditorRepo, sceneEditorResolver, nil, nil)
 
 		var cipher providersettings.Cipher
 		if cfg.CredentialEncryptionKey != "" {
@@ -288,6 +293,7 @@ func main() {
 			Captions:        captionService,
 		})
 		httpserver.AttachStockMediaRoutes(server, logger, stockMediaService, actorResolver)
+		server.Handler = httpserver.WithSceneEditorRoutes(logger, server.Handler, sceneEditorService, actorResolver)
 		server.Handler = withAudioMixRoutes(logger, server.Handler, pool, actorResolver)
 	} else {
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actorResolver)
