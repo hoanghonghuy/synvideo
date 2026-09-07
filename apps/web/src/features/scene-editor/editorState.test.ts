@@ -47,6 +47,7 @@ describe('Scene Editor draft semantics', () => {
       caption: { document_id: 'c', revision: 1, lineage_id: 'l', last_end_ms: 1_100 },
       visual_treatment: {
         fit: 'cover',
+        crop: { x: 0.8, y: 0, width: 0.4, height: 1 },
         position_x: 1.1,
         position_y: -1.1,
         scale: 4.1,
@@ -60,6 +61,7 @@ describe('Scene Editor draft semantics', () => {
       position_x: expect.any(String),
       position_y: expect.any(String),
       scale: expect.any(String),
+      crop: expect.any(String),
       transition_duration_ms: expect.any(String),
     })
   })
@@ -88,18 +90,28 @@ describe('Scene Editor draft semantics', () => {
     expect(saved.scenes[0].visual_treatment.scale).toBe(1)
   })
 
-  it('describes the same persisted semantics used by the render snapshot', () => {
+  it('describes exact persisted semantics used by the render snapshot', () => {
     const editable = scene({
       visual: { asset_id: 'asset-1', binding_id: 'binding-1' },
       narration: { asset_id: 'audio-1', binding_id: 'narration-1', lineage_id: 'lineage-1', duration_ms: 1_200 },
       caption: { document_id: 'caption-1', revision: 2, lineage_id: 'lineage-1', last_end_ms: 1_500 },
-      visual_treatment: { fit: 'cover', position_x: 0.25, position_y: -0.1, scale: 1.2, mute_video: true },
+      visual_treatment: {
+        fit: 'cover',
+        crop: { x: 0.1, y: 0.2, width: 0.8, height: 0.6 },
+        position_x: 0.25,
+        position_y: -0.1,
+        scale: 1.2,
+        mute_video: true,
+      },
       transition_out: { kind: 'fade', duration_ms: 300 },
     })
-    expect(semanticSceneSummary(editable)).toContain('intro: 2000ms')
-    expect(semanticSceneSummary(editable)).toContain('cover, x 0.25, y -0.1, scale 1.2')
-    expect(semanticSceneSummary(editable)).toContain('narration 1200ms')
-    expect(semanticSceneSummary(editable)).toContain('captions through 1500ms')
-    expect(semanticSceneSummary(editable)).toContain('fade 300ms')
+    const summary = semanticSceneSummary(editable)
+    expect(summary).toContain('intro: 2000ms')
+    expect(summary).toContain('visual asset-1 via binding-1')
+    expect(summary).toContain('crop x 0.1, y 0.2, w 0.8, h 0.6')
+    expect(summary).toContain('x 0.25; y -0.1; scale 1.2; source audio muted')
+    expect(summary).toContain('narration audio-1 via narration-1')
+    expect(summary).toContain('captions caption-1 r2')
+    expect(summary).toContain('fade 300ms')
   })
 })
