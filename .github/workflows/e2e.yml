@@ -5,6 +5,10 @@ on:
     branches:
       - develop
 
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
     name: E2E Acceptance (non-required)
