@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { ApiError } from '@/api/projects'
 import {
+  createRenderExport,
   createSceneEditorSnapshot,
   duplicateScene,
+  getRenderExport,
   getSceneEditor,
+  mediaAssetContentURL,
   removeScene,
   reorderScene,
   updateSceneEditor,
+  type RenderExportJob,
   type SceneEditorScene,
   type SceneEditorView,
 } from './api'
@@ -21,20 +25,33 @@ import {
   semanticSceneSummary,
   validateEditableScene,
 } from './editorState'
+import {
+  isRenderExportTerminal,
+  persistRenderJobID,
+  RENDER_EXPORT_POLL_MS,
+  restoreRenderJobID,
+} from './renderExportState'
 
 const route = useRoute()
 const projectID = computed(() => String(route.params.id ?? ''))
 const composition = ref<SceneEditorView | null>(null)
 const draft = ref<SceneEditorView | null>(null)
+const renderJob = ref<RenderExportJob | null>(null)
 const loading = ref(true)
 const acting = ref(false)
 const conflict = ref(false)
 const error = ref('')
 const notice = ref('')
+let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
 const invalid = computed(() => hasEditorErrors(draft.value))
-const snapshotBlocked = computed(() => composition.value?.state !== 'CURRENT' || dirty.value || invalid.value || conflict.value)
+const renderBusy = computed(() => renderJob.value !== null && !isRenderExportTerminal(renderJob.value))
+const snapshotBlocked = computed(() => composition.value?.state !== 'CURRENT' || dirty.value || invalid.value || conflict.value || renderBusy.value)
+const renderDownloadURL = computed(() => {
+  const assetID = renderJob.value?.state === 'succeeded' ? renderJob.value.artifact?.media_asset_id : undefined
+  return assetID ? mediaAssetContentURL(projectID.value, assetID) : ''
+})
 const saveStatus = computed(() => {
   if (loading.value) return 'Loading'
   if (conflict.value) return 'Conflict — authoritative state changed'
@@ -45,6 +62,11 @@ const saveStatus = computed(() => {
 
 onMounted(() => {
   void load(true)
+  void restoreRenderExport()
+})
+
+onUnmounted(() => {
+  stopRenderPolling()
 })
 
 async function load(resetDraft: boolean) {
@@ -146,12 +168,55 @@ async function createSnapshot() {
   notice.value = ''
   try {
     const snapshot = await createSceneEditorSnapshot(projectID.value, composition.value.revision)
-    notice.value = `Immutable render snapshot ready: ${snapshot.digest.slice(0, 12)}… (revision ${snapshot.revision}).`
+    const job = await createRenderExport(projectID.value, snapshot.digest)
+    renderJob.value = job
+    persistRenderJobID(window.localStorage, projectID.value, job.id)
+    notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4 render.`
+    startRenderPolling()
   } catch (cause) {
     error.value = messageFor(cause)
   } finally {
     acting.value = false
   }
+}
+
+async function restoreRenderExport() {
+  if (!projectID.value || typeof window === 'undefined') return
+  const jobID = restoreRenderJobID(window.localStorage, projectID.value)
+  if (!jobID) return
+  await refreshRenderExport(jobID, false)
+}
+
+async function refreshRenderExport(jobID = renderJob.value?.id, reportError = true) {
+  if (!jobID) return
+  try {
+    const latest = await getRenderExport(projectID.value, jobID)
+    renderJob.value = latest
+    persistRenderJobID(window.localStorage, projectID.value, latest.id)
+    if (isRenderExportTerminal(latest)) stopRenderPolling()
+    else startRenderPolling()
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status === 404) {
+      renderJob.value = null
+      persistRenderJobID(window.localStorage, projectID.value, null)
+      stopRenderPolling()
+    } else if (reportError) {
+      error.value = `Render status refresh failed: ${messageFor(cause)}`
+    }
+  }
+}
+
+function startRenderPolling() {
+  if (!renderJob.value || isRenderExportTerminal(renderJob.value) || renderPollTimer !== null) return
+  renderPollTimer = setInterval(() => {
+    void refreshRenderExport(renderJob.value?.id, false)
+  }, RENDER_EXPORT_POLL_MS)
+}
+
+function stopRenderPolling() {
+  if (renderPollTimer === null) return
+  clearInterval(renderPollTimer)
+  renderPollTimer = null
 }
 
 async function act(operation: () => Promise<SceneEditorView>, success: string) {
@@ -226,7 +291,7 @@ function seconds(ms: number): string {
             <p class="eyebrow">Snapshot-equivalent semantics</p>
             <h2 id="preview-heading">Composition preview</h2>
           </div>
-          <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Create render snapshot</button>
+          <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Snapshot &amp; render MP4</button>
         </div>
         <ol class="preview-timeline">
           <li v-for="scene in draft.scenes" :key="`preview-${scene.id}`">
@@ -236,6 +301,20 @@ function seconds(ms: number): string {
         </ol>
         <p v-if="draft.audio_mix">Audio mix document {{ draft.audio_mix.document_id }} revision {{ draft.audio_mix.revision }}.</p>
         <p v-else>No project audio mix selected.</p>
+
+        <div v-if="renderJob" class="render-status" aria-live="polite">
+          <div>
+            <strong>Render {{ renderJob.state }}</strong>
+            <span>Attempt {{ renderJob.attempt }}/{{ renderJob.max_attempts }} · {{ renderJob.profile_id }}</span>
+          </div>
+          <p>Snapshot {{ renderJob.snapshot_digest.slice(0, 12) }}…</p>
+          <p v-if="renderJob.error_code" class="field-error" role="alert">Render failed: {{ renderJob.error_code }}</p>
+          <p v-if="renderJob.state === 'succeeded' && renderJob.artifact">
+            MP4 ready · {{ renderJob.artifact.width }}×{{ renderJob.artifact.height }} · {{ seconds(renderJob.artifact.duration_ms) }} · {{ renderJob.artifact.byte_size }} bytes
+          </p>
+          <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
+          <button v-else-if="!isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
+        </div>
       </section>
 
       <section aria-labelledby="scene-list-heading">
@@ -339,11 +418,13 @@ function seconds(ms: number): string {
 
 <style scoped>
 .scene-editor-page { display: grid; gap: 1.5rem; max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 4rem; }
-.page-header, .section-heading, .scene-card header, .status-panel > div { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; }
+.page-header, .section-heading, .scene-card header, .status-panel > div, .render-status > div { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; }
 .eyebrow, .scene-index { text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; font-weight: 700; }
 .notice, .status-panel, .scene-card, .preview-panel { border: 1px solid currentColor; border-radius: .75rem; padding: 1rem; }
 .notice.error, .status-panel[data-state='BROKEN'] { border-width: 2px; }
-.status-panel, .preview-panel { display: grid; gap: .75rem; }
+.status-panel, .preview-panel, .render-status { display: grid; gap: .75rem; }
+.render-status { border-top: 1px solid currentColor; padding-top: .9rem; }
+.render-status p { margin: 0; overflow-wrap: anywhere; }
 .status-panel strong { margin-right: .75rem; }
 .save-status[data-dirty='true'] { text-decoration: underline; text-decoration-thickness: 2px; }
 .save-actions, .scene-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
@@ -368,5 +449,5 @@ function seconds(ms: number): string {
 .action-hint { align-self: center; font-size: .85rem; }
 button { min-height: 2.75rem; padding: .55rem .8rem; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
-@media (max-width: 640px) { .page-header, .section-heading, .scene-card header, .status-panel > div { flex-direction: column; } }
+@media (max-width: 640px) { .page-header, .section-heading, .scene-card header, .status-panel > div, .render-status > div { flex-direction: column; } }
 </style>
