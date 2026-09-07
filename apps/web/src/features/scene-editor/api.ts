@@ -120,7 +120,10 @@ export async function getSceneEditor(projectID: string): Promise<SceneEditorView
   return request<SceneEditorView>(base(projectID))
 }
 
-export async function updateSceneEditor(projectID: string, input: { expected_revision: number; scenes: SceneEditorScene[]; audio_mix?: SceneEditorAudioMixRef }): Promise<SceneEditorView> {
+export async function updateSceneEditor(
+  projectID: string,
+  input: { expected_revision: number; scenes: SceneEditorScene[]; audio_mix: SceneEditorAudioMixRef | undefined },
+): Promise<SceneEditorView> {
   return request<SceneEditorView>(base(projectID), { method: 'PUT', body: JSON.stringify(input) })
 }
 
