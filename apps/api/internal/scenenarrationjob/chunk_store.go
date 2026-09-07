@@ -63,9 +63,12 @@ func (s *ObjectStorageChunkStore) DeleteChunks(ctx context.Context, projectID, j
 	if s.storage == nil {
 		return nil
 	}
+	var cleanupErr error
 	for i := 0; i < totalChunks; i++ {
 		key := s.chunkKey(projectID, jobID, i)
-		_ = s.storage.Delete(ctx, key)
+		if err := s.storage.Delete(ctx, key); err != nil && !errors.Is(err, mediaasset.ErrObjectNotFound) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete narration checkpoint %d: %w", i, err))
+		}
 	}
-	return nil
+	return cleanupErr
 }
