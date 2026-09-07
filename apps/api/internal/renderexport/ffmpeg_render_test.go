@@ -86,8 +86,12 @@ func TestRenderSingleVisualMP4UsesFixedServerOwnedArgumentsAndVerifiesOutput(t *
 
 func TestRenderSingleVisualMP4FailsClosedOnUnsupportedOrUnsafeInput(t *testing.T) {
 	dir := t.TempDir()
+	visual := filepath.Join(dir, "visual.ppm")
+	if err := os.WriteFile(visual, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	base := PreparedLocalRenderInput{
-		VisualPath: filepath.Join(dir, "visual.ppm"),
+		VisualPath: visual,
 		OutputPath: filepath.Join(dir, "out.mp4"),
 		Width:      320,
 		Height:     180,
