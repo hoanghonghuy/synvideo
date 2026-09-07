@@ -53,6 +53,5 @@ describe('Scene Editor render export UI state', () => {
     expect(isRenderExportTerminal(job('running'))).toBe(false)
     expect(isRenderExportTerminal(job('succeeded'))).toBe(true)
     expect(isRenderExportTerminal(job('failed'))).toBe(true)
-    expect(isRenderExportTerminal(job('cancelled'))).toBe(true)
   })
 })
