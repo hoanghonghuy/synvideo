@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,11 +39,11 @@ type TemporaryObjectRepository interface {
 }
 
 type ReconcilerConfig struct {
-	BatchSize      int
-	PassTimeout    time.Duration
-	ObjectTimeout  time.Duration
-	ClaimDuration  time.Duration
-	RetryDelay     time.Duration
+	BatchSize     int
+	PassTimeout   time.Duration
+	ObjectTimeout time.Duration
+	ClaimDuration time.Duration
+	RetryDelay    time.Duration
 }
 
 type Reconciler struct {
@@ -84,9 +85,13 @@ func (r *Reconciler) RunOnce(ctx context.Context) error {
 
 	var passErr error
 	for _, object := range objects {
-		if err := mediaasset.ValidateObjectStorageKey(object.ObjectKey); err != nil {
-			retryErr := r.repo.RetryCleanup(passCtx, object.ID, object.ClaimToken, "invalid_object_key", time.Now().UTC().Add(r.config.RetryDelay))
-			passErr = errors.Join(passErr, fmt.Errorf("reject unsafe temporary object key: %w", err), retryErr)
+		expectedPrefix := fmt.Sprintf("projects/%s/internal_chunks/%s/", object.ProjectID, object.JobID)
+		if err := mediaasset.ValidateObjectStorageKey(object.ObjectKey); err != nil || !strings.HasPrefix(object.ObjectKey, expectedPrefix) {
+			retryErr := r.repo.RetryCleanup(passCtx, object.ID, object.ClaimToken, "invalid_object_identity", time.Now().UTC().Add(r.config.RetryDelay))
+			if err == nil {
+				err = errors.New("object key does not match durable project/job identity")
+			}
+			passErr = errors.Join(passErr, fmt.Errorf("reject unsafe temporary object identity: %w", err), retryErr)
 			continue
 		}
 
