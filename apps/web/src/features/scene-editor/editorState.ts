@@ -14,16 +14,16 @@ export function cloneEditorView(view: SceneEditorView): SceneEditorView {
     ...view,
     scenes: view.scenes.map((scene) => ({
       ...scene,
-      visual: scene.visual ? { ...scene.visual } : undefined,
-      narration: scene.narration ? { ...scene.narration } : undefined,
-      caption: scene.caption ? { ...scene.caption } : undefined,
+      ...(scene.visual ? { visual: { ...scene.visual } } : {}),
+      ...(scene.narration ? { narration: { ...scene.narration } } : {}),
+      ...(scene.caption ? { caption: { ...scene.caption } } : {}),
       visual_treatment: {
         ...scene.visual_treatment,
-        crop: scene.visual_treatment.crop ? { ...scene.visual_treatment.crop } : undefined,
+        ...(scene.visual_treatment.crop ? { crop: { ...scene.visual_treatment.crop } } : {}),
       },
       transition_out: { ...scene.transition_out },
     })),
-    audio_mix: view.audio_mix ? { ...view.audio_mix } : undefined,
+    ...(view.audio_mix ? { audio_mix: { ...view.audio_mix } } : {}),
   }
 }
 
