@@ -22,7 +22,7 @@ type lifecycleRepo struct {
 	retryCode  string
 }
 
-func (r *lifecycleRepo) Track(context.Context, scenenarrationjob.TemporaryObject) error { return nil }
+func (r *lifecycleRepo) Track(context.Context, scenenarrationjob.TemporaryObject) error  { return nil }
 func (r *lifecycleRepo) MarkRemoved(context.Context, uuid.UUID, uuid.UUID, string) error { return nil }
 func (r *lifecycleRepo) ClaimCleanup(_ context.Context, limit int, _ time.Duration) ([]scenenarrationjob.TemporaryObject, error) {
 	r.claimLimit = limit
