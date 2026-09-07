@@ -66,6 +66,9 @@ func TestServiceUnauthenticated(t *testing.T) {
 	if _, err := svc.GetByVersion(context.Background(), unauth, projectID, 1); !errors.Is(err, script.ErrUnauthenticated) {
 		t.Fatalf("expected ErrUnauthenticated on GetByVersion, got %v", err)
 	}
+	if _, err := svc.ForkApprovedDraft(context.Background(), unauth, projectID, 1); !errors.Is(err, script.ErrUnauthenticated) {
+		t.Fatalf("expected ErrUnauthenticated on ForkApprovedDraft, got %v", err)
+	}
 	rev := 1
 	if _, err := svc.UpdateDraft(context.Background(), unauth, projectID, 1, script.PutInput{Revision: &rev}); !errors.Is(err, script.ErrUnauthenticated) {
 		t.Fatalf("expected ErrUnauthenticated on UpdateDraft, got %v", err)
@@ -110,5 +113,64 @@ func TestServiceSuccessDelegation(t *testing.T) {
 	}
 	if created.Version != 1 || created.Status != script.StatusDraft {
 		t.Fatalf("unexpected created script: %#v", created)
+	}
+}
+
+func TestForkApprovedDraftCopiesAuthoritativeContent(t *testing.T) {
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	principal := project.Principal{OwnerID: ownerID}
+	approved := script.Script{
+		ProjectID:             projectID,
+		Version:               4,
+		Revision:              2,
+		Status:                script.StatusApproved,
+		SourceProposalVersion: 3,
+		ContentLocale:         "vi",
+		Sections:              []script.Section{{Key: "intro", Heading: "Intro", Body: "Approved text"}},
+		Notes:                 "keep lineage",
+	}
+	var forkInput script.CreateDraftInput
+	fake := &fakeScriptRepository{
+		getByVersionFn: func(ctx context.Context, oID, pID uuid.UUID, version int) (script.Script, error) {
+			if oID != ownerID || pID != projectID || version != approved.Version {
+				t.Fatalf("unexpected source lookup: owner=%s project=%s version=%d", oID, pID, version)
+			}
+			return approved, nil
+		},
+		createDraftFn: func(ctx context.Context, oID, pID uuid.UUID, input script.CreateDraftInput) (script.Script, error) {
+			forkInput = input
+			return script.Script{ProjectID: pID, Version: 5, Revision: 1, Status: script.StatusDraft, Sections: input.Sections}, nil
+		},
+	}
+
+	forked, err := script.NewService(fake).ForkApprovedDraft(context.Background(), principal, projectID, approved.Version)
+	if err != nil {
+		t.Fatalf("fork approved draft: %v", err)
+	}
+	if forked.Version != 5 || forked.Status != script.StatusDraft {
+		t.Fatalf("unexpected fork result: %#v", forked)
+	}
+	if forkInput.SourceProposalVersion != approved.SourceProposalVersion || forkInput.ContentLocale != approved.ContentLocale {
+		t.Fatalf("fork lost authoritative lineage: %#v", forkInput)
+	}
+	if len(forkInput.Sections) != 1 || forkInput.Sections[0].Body != "Approved text" || forkInput.Notes != approved.Notes {
+		t.Fatalf("fork did not copy approved content: %#v", forkInput)
+	}
+}
+
+func TestForkApprovedDraftRejectsMutableSource(t *testing.T) {
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	principal := project.Principal{OwnerID: ownerID}
+	fake := &fakeScriptRepository{
+		getByVersionFn: func(context.Context, uuid.UUID, uuid.UUID, int) (script.Script, error) {
+			return script.Script{ProjectID: projectID, Version: 2, Status: script.StatusDraft}, nil
+		},
+	}
+
+	_, err := script.NewService(fake).ForkApprovedDraft(context.Background(), principal, projectID, 2)
+	if !errors.Is(err, script.ErrForkSourceNotApproved) {
+		t.Fatalf("expected ErrForkSourceNotApproved, got %v", err)
 	}
 }
