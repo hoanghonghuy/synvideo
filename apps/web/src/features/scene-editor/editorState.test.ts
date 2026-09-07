@@ -85,9 +85,9 @@ describe('Scene Editor draft semantics', () => {
     const saved = view()
     const draft = cloneEditorView(saved)
     expect(editorContentSignature(draft)).toBe(editorContentSignature(saved))
-    draft.scenes[0].visual_treatment.scale = 1.25
+    draft.scenes[0]!.visual_treatment.scale = 1.25
     expect(editorContentSignature(draft)).not.toBe(editorContentSignature(saved))
-    expect(saved.scenes[0].visual_treatment.scale).toBe(1)
+    expect(saved.scenes[0]!.visual_treatment.scale).toBe(1)
   })
 
   it('describes exact persisted semantics used by the render snapshot', () => {
