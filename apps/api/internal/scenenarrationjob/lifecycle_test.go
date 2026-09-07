@@ -15,11 +15,11 @@ import (
 )
 
 type lifecycleRepo struct {
-	claimed   []scenenarrationjob.TemporaryObject
+	claimed    []scenenarrationjob.TemporaryObject
 	claimLimit int
-	completed []uuid.UUID
-	retried   []uuid.UUID
-	retryCode string
+	completed  []uuid.UUID
+	retried    []uuid.UUID
+	retryCode  string
 }
 
 func (r *lifecycleRepo) Track(context.Context, scenenarrationjob.TemporaryObject) error { return nil }
@@ -66,7 +66,7 @@ func TestTemporaryObjectReconciler_CompletesMissingObjectIdempotently(t *testing
 	id := uuid.New()
 	repo := &lifecycleRepo{claimed: []scenenarrationjob.TemporaryObject{{
 		ID: id, ProjectID: projectID, JobID: jobID,
-		ObjectKey: "projects/" + projectID.String() + "/internal_chunks/" + jobID.String() + "/0",
+		ObjectKey:  "projects/" + projectID.String() + "/internal_chunks/" + jobID.String() + "/0",
 		ClaimToken: uuid.New(),
 	}}}
 	storage := &lifecycleStorage{deleteErr: mediaasset.ErrObjectNotFound}
@@ -92,7 +92,7 @@ func TestTemporaryObjectReconciler_RetriesDeleteFailure(t *testing.T) {
 	id := uuid.New()
 	repo := &lifecycleRepo{claimed: []scenenarrationjob.TemporaryObject{{
 		ID: id, ProjectID: projectID, JobID: jobID,
-		ObjectKey: "projects/" + projectID.String() + "/internal_chunks/" + jobID.String() + "/1",
+		ObjectKey:  "projects/" + projectID.String() + "/internal_chunks/" + jobID.String() + "/1",
 		ClaimToken: uuid.New(),
 	}}}
 	storage := &lifecycleStorage{deleteErr: errors.New("storage unavailable")}
@@ -116,7 +116,7 @@ func TestTemporaryObjectReconciler_RejectsCrossProjectIdentity(t *testing.T) {
 	id := uuid.New()
 	repo := &lifecycleRepo{claimed: []scenenarrationjob.TemporaryObject{{
 		ID: id, ProjectID: projectID, JobID: jobID,
-		ObjectKey: "projects/" + otherProjectID.String() + "/internal_chunks/" + jobID.String() + "/0",
+		ObjectKey:  "projects/" + otherProjectID.String() + "/internal_chunks/" + jobID.String() + "/0",
 		ClaimToken: uuid.New(),
 	}}}
 	storage := &lifecycleStorage{}
