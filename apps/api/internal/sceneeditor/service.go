@@ -43,6 +43,9 @@ func (s *Service) Create(ctx context.Context, ownerID, projectID uuid.UUID, scen
 	if err != nil {
 		return View{}, err
 	}
+	if err := s.validateWriteDependencies(ctx, ownerID, doc); err != nil {
+		return View{}, err
+	}
 	created, err := s.repo.CreateInitial(ctx, doc)
 	if err != nil {
 		return View{}, normalizeRepoError(err)
@@ -84,6 +87,9 @@ func (s *Service) Save(ctx context.Context, ownerID, projectID uuid.UUID, expect
 	updated.CreatedAt = doc.CreatedAt
 	updated.UpdatedAt = s.now().UTC()
 	if err := ValidateDocument(updated); err != nil {
+		return View{}, err
+	}
+	if err := s.validateWriteDependencies(ctx, ownerID, updated); err != nil {
 		return View{}, err
 	}
 
@@ -174,6 +180,19 @@ func (s *Service) Snapshot(ctx context.Context, ownerID, projectID uuid.UUID, ex
 		return Snapshot{}, normalizeRepoError(err)
 	}
 	return persisted, nil
+}
+
+func (s *Service) validateWriteDependencies(ctx context.Context, ownerID uuid.UUID, doc Document) error {
+	states, err := s.resolver.State(ctx, ownerID, doc)
+	if err != nil {
+		return err
+	}
+	for _, state := range states {
+		if state.State == StateBroken {
+			return ValidationError{Fields: map[string]string{"dependencies": "unresolvable_or_cross_project"}}
+		}
+	}
+	return nil
 }
 
 func (s *Service) view(ctx context.Context, ownerID uuid.UUID, doc Document) (View, error) {
