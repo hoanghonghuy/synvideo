@@ -125,7 +125,7 @@ func (s *Service) Duplicate(ctx context.Context, ownerID, projectID, sceneID uui
 			return Document{}, ValidationError{Fields: map[string]string{"new_scene_id": "invalid"}}
 		}
 		scenes := cloneScenes(doc.Scenes)
-		copyScene := scenes[idx]
+		copyScene := cloneScenes([]Scene{scenes[idx]})[0]
 		copyScene.ID = newSceneID
 		scenes = append(scenes, Scene{})
 		copy(scenes[idx+2:], scenes[idx+1:])
