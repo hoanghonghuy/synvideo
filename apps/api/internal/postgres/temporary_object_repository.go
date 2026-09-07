@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarrationjob"
@@ -24,20 +23,26 @@ func NewTemporaryObjectRepository(pool *pgxpool.Pool) *TemporaryObjectRepository
 var _ scenenarrationjob.TemporaryObjectRepository = (*TemporaryObjectRepository)(nil)
 
 func (r *TemporaryObjectRepository) Track(ctx context.Context, object scenenarrationjob.TemporaryObject) error {
-	if object.ID == uuid.Nil || object.OwnerID == uuid.Nil || object.ProjectID == uuid.Nil || object.JobID == uuid.Nil || object.ObjectKey == "" {
+	if object.ID == uuid.Nil || object.ProjectID == uuid.Nil || object.JobID == uuid.Nil || object.ObjectKey == "" {
 		return errors.New("temporary object identity is incomplete")
 	}
-	_, err := r.pool.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO temporary_objects (
 			id, owner_id, project_id, job_id, object_key, state, next_cleanup_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, 'recoverable', now(), now(), now())
+		)
+		SELECT $1, j.owner_id, $2, $3, $4, 'recoverable', now(), now(), now()
+		FROM jobs j
+		WHERE j.id = $3 AND j.project_id = $2
 		ON CONFLICT (project_id, job_id, object_key) DO UPDATE
 		SET owner_id = EXCLUDED.owner_id,
 			state = CASE WHEN temporary_objects.removed_at IS NULL THEN 'recoverable' ELSE temporary_objects.state END,
 			updated_at = now();
-	`, object.ID, object.OwnerID, object.ProjectID, object.JobID, object.ObjectKey)
+	`, object.ID, object.ProjectID, object.JobID, object.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("track temporary object: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return errors.New("temporary object job identity is not authoritative")
 	}
 	return nil
 }
@@ -162,5 +167,3 @@ func (r *TemporaryObjectRepository) RetryCleanup(ctx context.Context, id, claimT
 	}
 	return nil
 }
-
-var _ pgx.Tx = (pgx.Tx)(nil)
