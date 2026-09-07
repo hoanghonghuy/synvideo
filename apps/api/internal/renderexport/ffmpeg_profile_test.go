@@ -36,7 +36,7 @@ func TestProbeLocalFFmpegProfileFreezesSupportedSoftwareProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProbeLocalFFmpegProfile() error = %v", err)
 	}
-	if profile.ID != LocalProfileID || profile.VideoEncoder != "libx264" || profile.AudioEncoder != "aac" || profile.PixelFormat != "yuv420p" || profile.Container != "mp4" {
+	if profile.ID != FFmpegLocalProfileID || profile.VideoEncoder != "libx264" || profile.AudioEncoder != "aac" || profile.PixelFormat != "yuv420p" || profile.Container != "mp4" {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if profile.VersionLine != "ffmpeg version 7.1.1 Copyright" {
