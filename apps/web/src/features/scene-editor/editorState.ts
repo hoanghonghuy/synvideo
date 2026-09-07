@@ -43,6 +43,12 @@ export function validateEditableScene(scene: SceneEditorScene, nextScene?: Scene
   if (treatment.position_x < -1 || treatment.position_x > 1) errors.position_x = 'Position X must be between -1 and 1.'
   if (treatment.position_y < -1 || treatment.position_y > 1) errors.position_y = 'Position Y must be between -1 and 1.'
   if (treatment.scale < 0.25 || treatment.scale > 4) errors.scale = 'Scale must be between 0.25 and 4.'
+  if (treatment.crop) {
+    const crop = treatment.crop
+    if (crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0 || crop.x + crop.width > 1 || crop.y + crop.height > 1) {
+      errors.crop = 'Crop must be a positive normalized rectangle contained within the source.'
+    }
+  }
 
   const transition = scene.transition_out
   if (transition.kind === 'cut') {
@@ -73,11 +79,19 @@ export function normalizeTransitionForKind(scene: SceneEditorScene): void {
 }
 
 export function semanticSceneSummary(scene: SceneEditorScene): string {
+  const treatment = scene.visual_treatment
+  const crop = treatment.crop
+    ? `crop x ${treatment.crop.x}, y ${treatment.crop.y}, w ${treatment.crop.width}, h ${treatment.crop.height}`
+    : 'full frame'
   const visual = scene.visual
-    ? `${scene.visual_treatment.fit}, x ${scene.visual_treatment.position_x}, y ${scene.visual_treatment.position_y}, scale ${scene.visual_treatment.scale}`
+    ? `visual ${scene.visual.asset_id} via ${scene.visual.binding_id}; ${treatment.fit}; ${crop}; x ${treatment.position_x}; y ${treatment.position_y}; scale ${treatment.scale}; source audio ${treatment.mute_video ? 'muted' : 'enabled'}`
     : 'no visual'
-  const caption = scene.caption ? `captions through ${scene.caption.last_end_ms}ms` : 'no captions'
-  const narration = scene.narration ? `narration ${scene.narration.duration_ms}ms` : 'no narration'
+  const narration = scene.narration
+    ? `narration ${scene.narration.asset_id} via ${scene.narration.binding_id}; lineage ${scene.narration.lineage_id}; ${scene.narration.duration_ms}ms`
+    : 'no narration'
+  const caption = scene.caption
+    ? `captions ${scene.caption.document_id} r${scene.caption.revision}; lineage ${scene.caption.lineage_id}; through ${scene.caption.last_end_ms}ms`
+    : 'no captions'
   const transition = `${scene.transition_out.kind} ${scene.transition_out.duration_ms}ms`
   return `${scene.scene_key}: ${scene.duration_ms}ms; ${visual}; ${narration}; ${caption}; ${transition}`
 }
