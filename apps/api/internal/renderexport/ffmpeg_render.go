@@ -23,9 +23,9 @@ const (
 )
 
 var (
-	ErrInvalidRenderInput          = errors.New("render export local render input is invalid")
+	ErrInvalidRenderInput         = errors.New("render export local render input is invalid")
 	ErrUnsupportedRenderSemantics = errors.New("render export semantics are unsupported by the local profile")
-	ErrInvalidRenderOutput         = errors.New("render export produced invalid output")
+	ErrInvalidRenderOutput        = errors.New("render export produced invalid output")
 )
 
 type PreparedLocalRenderInput struct {
@@ -180,11 +180,11 @@ func probeRenderedMP4(ctx context.Context, runner RenderProcessRunner, path stri
 	}
 	stream := probe.Streams[0]
 	return RenderMetadata{
-		DurationMS: int64(durationSeconds*1000 + 0.5),
-		Width:      stream.Width,
-		Height:     stream.Height,
-		VideoCodec: stream.CodecName,
+		DurationMS:  int64(durationSeconds*1000 + 0.5),
+		Width:       stream.Width,
+		Height:      stream.Height,
+		VideoCodec:  stream.CodecName,
 		PixelFormat: stream.PixelFmt,
-		Container:  probe.Format.FormatName,
+		Container:   probe.Format.FormatName,
 	}, nil
 }
