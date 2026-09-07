@@ -74,10 +74,10 @@ func candidateDependencyDocument(base Document, candidate ReconcileCandidate) Do
 	doc.Scenes = make([]Scene, 0, len(candidate.Scenes))
 	for _, candidateScene := range candidate.Scenes {
 		doc.Scenes = append(doc.Scenes, Scene{
-			SceneKey:   candidateScene.SceneKey,
-			Visual:     cloneVisual(candidateScene.Visual),
-			Narration:  cloneNarration(candidateScene.Narration),
-			Caption:    cloneCaption(candidateScene.Caption),
+			SceneKey:  candidateScene.SceneKey,
+			Visual:    cloneVisual(candidateScene.Visual),
+			Narration: cloneNarration(candidateScene.Narration),
+			Caption:   cloneCaption(candidateScene.Caption),
 		})
 	}
 	return doc
