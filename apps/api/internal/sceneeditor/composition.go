@@ -31,10 +31,10 @@ const (
 
 	SnapshotSchemaVersion = 1
 
-	MinPosition          = -1.0
-	MaxPosition          = 1.0
-	MinScale             = 0.25
-	MaxScale             = 4.0
+	MinPosition           = -1.0
+	MaxPosition           = 1.0
+	MinScale              = 0.25
+	MaxScale              = 4.0
 	MinTransitionMS int64 = 100
 	MaxTransitionMS int64 = 2_000
 )
