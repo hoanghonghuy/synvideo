@@ -35,14 +35,15 @@ func (r *TemporaryObjectRepository) Track(ctx context.Context, object scenenarra
 		WHERE j.id = $3 AND j.project_id = $2
 		ON CONFLICT (project_id, job_id, object_key) DO UPDATE
 		SET owner_id = EXCLUDED.owner_id,
-			state = CASE WHEN temporary_objects.removed_at IS NULL THEN 'recoverable' ELSE temporary_objects.state END,
-			updated_at = now();
+			state = 'recoverable',
+			updated_at = now()
+		WHERE temporary_objects.removed_at IS NULL;
 	`, object.ID, object.ProjectID, object.JobID, object.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("track temporary object: %w", err)
 	}
 	if tag.RowsAffected() != 1 {
-		return errors.New("temporary object job identity is not authoritative")
+		return errors.New("temporary object job identity is not authoritative or object was already removed")
 	}
 	return nil
 }
