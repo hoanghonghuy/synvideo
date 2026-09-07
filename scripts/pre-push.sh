@@ -14,8 +14,11 @@ export SYNVIDEO_MEDIA_STORAGE_BUCKET="${SYNVIDEO_MEDIA_STORAGE_BUCKET:-synvideo-
 export SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID="${SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID:-synvideo}"
 export SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY="${SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY:-synvideo_dev_password}"
 export SYNVIDEO_MEDIA_STORAGE_PATH_STYLE="${SYNVIDEO_MEDIA_STORAGE_PATH_STYLE:-true}"
+export SYNVIDEO_TEST_FFMPEG="${SYNVIDEO_TEST_FFMPEG:-1}"
 
-echo "==> Validate local infrastructure"
+echo "==> Validate local dependencies"
+command -v ffmpeg >/dev/null || { echo "ffmpeg is required for pre-push verification" >&2; exit 1; }
+command -v ffprobe >/dev/null || { echo "ffprobe is required for pre-push verification" >&2; exit 1; }
 docker compose -f infra/docker-compose.yml config >/dev/null
 docker compose -f infra/docker-compose.yml up -d --wait postgres seaweed-s3
 
