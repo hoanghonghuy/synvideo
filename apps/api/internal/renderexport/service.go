@@ -15,14 +15,14 @@ import (
 )
 
 const (
-	JobKind          = "render_export_v1"
-	LocalProfileID   = "local_software_mp4_v1"
+	JobKind            = "render_export_v1"
+	LocalProfileID     = "local_software_mp4_v1"
 	DefaultMaxAttempts = 2
 )
 
 var (
-	ErrUnauthenticated = errors.New("render export principal is required")
-	ErrInvalidRequest  = errors.New("render export request is invalid")
+	ErrUnauthenticated  = errors.New("render export principal is required")
+	ErrInvalidRequest   = errors.New("render export request is invalid")
 	ErrSnapshotMismatch = errors.New("render export snapshot identity mismatch")
 )
 
