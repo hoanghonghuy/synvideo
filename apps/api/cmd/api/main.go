@@ -128,6 +128,7 @@ func main() {
 		scriptRepo := postgres.NewScriptRepository(pool)
 		scenePlanRepo := postgres.NewScenePlanRepository(pool)
 		jobsRepo := postgres.NewJobRepository(pool)
+		temporaryObjectRepo := postgres.NewTemporaryObjectRepository(pool)
 		settingsRepo := postgres.NewProviderSettingRepository(pool)
 		mediaAssetRepo := postgres.NewMediaAssetRepository(pool)
 		bindingRepo := postgres.NewSceneMediaBindingRepository(pool)
@@ -237,7 +238,7 @@ func main() {
 		}
 		if mediaAssetService != nil && sceneNarrationService != nil {
 			narrationAssetStore := scenenarrationjob.NewAssetStore(mediaAssetService, mediaAssetRepo)
-			narrationChunkStore := scenenarrationjob.NewObjectStorageChunkStore(storage)
+			narrationChunkStore := scenenarrationjob.NewObjectStorageChunkStore(storage, temporaryObjectRepo)
 			narrationJobHandler := scenenarrationjob.NewHandler(providerSettingsService, narrationAssetStore, sceneNarrationService, narrationChunkStore)
 			if err := jobsRegistry.Register(scenenarrationjob.JobKind, narrationJobHandler); err != nil {
 				logger.Error("register scene narration job handler failed", "error", err)
@@ -255,6 +256,24 @@ func main() {
 				logger.Error("job executor failed", "error", err)
 			}
 		}()
+
+		if storage != nil {
+			cleanupReconciler := scenenarrationjob.NewReconciler(temporaryObjectRepo, storage, scenenarrationjob.ReconcilerConfig{})
+			go func() {
+				ticker := time.NewTicker(time.Minute)
+				defer ticker.Stop()
+				for {
+					if err := cleanupReconciler.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+						logger.Warn("temporary object reconciliation incomplete", "error", err)
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				}
+			}()
+		}
 
 		proposalGenerationService = proposalgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, briefRepo)
 		scriptGenerationService = scriptgenerationjob.NewServiceWithRuntime(providerSettingsService, jobsRepo, projectRepo, proposalRepo)
