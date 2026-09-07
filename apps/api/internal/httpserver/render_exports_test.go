@@ -54,8 +54,6 @@ func TestRenderExportCreateReturnsDurableStatusView(t *testing.T) {
 	}
 	handler := renderExportHandler{service: service, actorResolver: renderResolverStub{principal: project.Principal{OwnerID: ownerID}}}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/render-exports", strings.NewReader(`{"snapshot_digest":"`+digest+`"}`))
-	req.Body = http.NoBody
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/render-exports", strings.NewReader(`{"snapshot_digest":"`+digest+`"}`))
 	req.SetPathValue("id", projectID.String())
 	w := httptest.NewRecorder()
 
