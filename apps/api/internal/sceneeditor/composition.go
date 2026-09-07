@@ -220,7 +220,11 @@ func ValidateDocument(doc Document) error {
 		if scene.VisualTreatment.Crop != nil && !validNormalizedCrop(*scene.VisualTreatment.Crop) {
 			fields[prefix+".visual_treatment.crop"] = "normalized_rectangle_required"
 		}
-		if err := validateTransition(scene.TransitionOut, scene.DurationMS); err != nil {
+		transitionDurationMS := scene.DurationMS
+		if i+1 < len(doc.Scenes) && doc.Scenes[i+1].DurationMS < transitionDurationMS {
+			transitionDurationMS = doc.Scenes[i+1].DurationMS
+		}
+		if err := validateTransition(scene.TransitionOut, transitionDurationMS); err != nil {
 			fields[prefix+".transition_out"] = err.Error()
 		}
 	}
