@@ -39,6 +39,9 @@ func (s *Service) PreviewReconcile(ctx context.Context, ownerID, projectID uuid.
 	if err != nil {
 		return ReconcilePreview{}, normalizeRepoError(err)
 	}
+	if err := s.validateWriteDependencies(ctx, ownerID, candidateDependencyDocument(doc, candidate)); err != nil {
+		return ReconcilePreview{}, err
+	}
 	return PreviewReconciliation(doc, candidate)
 }
 
@@ -54,9 +57,28 @@ func (s *Service) Reconcile(ctx context.Context, ownerID, projectID uuid.UUID, i
 	if err != nil {
 		return View{}, err
 	}
+	if err := s.validateWriteDependencies(ctx, ownerID, updated); err != nil {
+		return View{}, err
+	}
 	saved, err := s.repo.CreateRevision(ctx, updated, input.ExpectedRevision)
 	if err != nil {
 		return View{}, normalizeRepoError(err)
 	}
 	return s.view(ctx, ownerID, saved)
+}
+
+func candidateDependencyDocument(base Document, candidate ReconcileCandidate) Document {
+	doc := base
+	doc.ScenePlanVersion = candidate.ScenePlanVersion
+	doc.AudioMix = cloneAudioMix(candidate.AudioMix)
+	doc.Scenes = make([]Scene, 0, len(candidate.Scenes))
+	for _, candidateScene := range candidate.Scenes {
+		doc.Scenes = append(doc.Scenes, Scene{
+			SceneKey:   candidateScene.SceneKey,
+			Visual:     cloneVisual(candidateScene.Visual),
+			Narration:  cloneNarration(candidateScene.Narration),
+			Caption:    cloneCaption(candidateScene.Caption),
+		})
+	}
+	return doc
 }
