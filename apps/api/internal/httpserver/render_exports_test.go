@@ -18,7 +18,9 @@ import (
 
 type renderResolverStub struct{ principal project.Principal }
 
-func (r renderResolverStub) Resolve(*http.Request) (project.Principal, error) { return r.principal, nil }
+func (r renderResolverStub) Resolve(*http.Request) (project.Principal, error) {
+	return r.principal, nil
+}
 
 type renderExportServiceStub struct {
 	job        jobs.Job
