@@ -23,9 +23,9 @@ const (
 )
 
 var (
-	ErrInvalidRenderInput        = errors.New("render export local render input is invalid")
+	ErrInvalidRenderInput          = errors.New("render export local render input is invalid")
 	ErrUnsupportedRenderSemantics = errors.New("render export semantics are unsupported by the local profile")
-	ErrInvalidRenderOutput       = errors.New("render export produced invalid output")
+	ErrInvalidRenderOutput         = errors.New("render export produced invalid output")
 )
 
 type PreparedLocalRenderInput struct {
@@ -127,13 +127,17 @@ func validatePreparedLocalRenderInput(profile FFmpegProfile, input PreparedLocal
 	if input.VisualPath == "" || input.OutputPath == "" || !filepath.IsAbs(input.VisualPath) || !filepath.IsAbs(input.OutputPath) || filepath.Clean(input.VisualPath) == filepath.Clean(input.OutputPath) {
 		return ErrInvalidRenderInput
 	}
+	visualStat, err := os.Stat(input.VisualPath)
+	if err != nil || !visualStat.Mode().IsRegular() || visualStat.Size() <= 0 {
+		return ErrInvalidRenderInput
+	}
 	if input.Width < 64 || input.Width > 3840 || input.Height < 64 || input.Height > 2160 || input.Width%2 != 0 || input.Height%2 != 0 {
 		return ErrInvalidRenderInput
 	}
 	if input.FrameRate != 24 && input.FrameRate != 30 {
 		return ErrInvalidRenderInput
 	}
-	if input.DurationMS <= 0 || time.Duration(input.DurationMS)*time.Millisecond > MaxLocalRenderDuration {
+	if input.DurationMS <= 0 || input.DurationMS > MaxLocalRenderDuration.Milliseconds() {
 		return ErrInvalidRenderInput
 	}
 	if input.Fit != sceneeditor.FitContain {
