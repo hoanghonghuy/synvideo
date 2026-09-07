@@ -274,7 +274,7 @@ func Duplicate(doc Document, sceneID, newSceneID uuid.UUID, expectedRevision int
 		return Document{}, ErrSceneNotFound
 	}
 	scenes := cloneScenes(doc.Scenes)
-	copyScene := scenes[idx]
+	copyScene := cloneScenes([]Scene{scenes[idx]})[0]
 	copyScene.ID = newSceneID
 	scenes = append(scenes, Scene{})
 	copy(scenes[idx+2:], scenes[idx+1:])
