@@ -23,6 +23,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/api/go.mod
+      - name: Install FFmpeg render dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       - run: npm ci
       - name: Run isolated creator smoke path
         env:
