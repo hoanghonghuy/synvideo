@@ -201,7 +201,23 @@ func TestRenderHandlerRecoversStoredOutputAfterLeaseLossWithoutRerender(t *testi
 
 func TestRenderHandlerFailsClosedOnUnsupportedSnapshotSemantics(t *testing.T) {
 	snapshot, visual, visualBytes := handlerFixture(t)
-	snapshot.Scenes[0].Narration = &sceneeditor.NarrationRef{AssetID: uuid.New(), BindingID: uuid.New(), LineageID: uuid.New(), DurationMS: 500}
+	doc := sceneeditor.Document{
+		ID:               snapshot.CompositionID,
+		OwnerID:          visual.OwnerID,
+		ProjectID:        snapshot.ProjectID,
+		Revision:         snapshot.Revision,
+		ScenePlanVersion: snapshot.ScenePlanVersion,
+		Scenes:           append([]sceneeditor.Scene(nil), snapshot.Scenes...),
+		AudioMix:         snapshot.AudioMix,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+	doc.Scenes[0].Narration = &sceneeditor.NarrationRef{AssetID: uuid.New(), BindingID: uuid.New(), LineageID: uuid.New(), DurationMS: 500}
+	var err error
+	snapshot, err = sceneeditor.NewSnapshot(doc, sceneeditor.StateCurrent)
+	if err != nil {
+		t.Fatalf("NewSnapshot() with unsupported-but-valid narration error = %v", err)
+	}
 	assets := &handlerAssets{visual: visual, visualBytes: visualBytes}
 	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, &handlerArtifactRepo{}, testLocalProfile())
 	rendered := false
@@ -210,7 +226,7 @@ func TestRenderHandlerFailsClosedOnUnsupportedSnapshotSemantics(t *testing.T) {
 		return RenderMetadata{}, nil
 	}
 
-	_, err := handler.Handle(context.Background(), handlerJob(t, snapshot))
+	_, err = handler.Handle(context.Background(), handlerJob(t, snapshot))
 	var terminal *jobs.TerminalJobError
 	if !errors.As(err, &terminal) || terminal.Code != ErrorUnsupportedSnapshot {
 		t.Fatalf("Handle() error = %v, want unsupported terminal error", err)
