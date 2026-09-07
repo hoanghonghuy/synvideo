@@ -30,6 +30,13 @@ const (
 	FitCover   FitMode = "cover"
 
 	SnapshotSchemaVersion = 1
+
+	MinPosition          = -1.0
+	MaxPosition          = 1.0
+	MinScale             = 0.25
+	MaxScale             = 4.0
+	MinTransitionMS int64 = 100
+	MaxTransitionMS int64 = 2_000
 )
 
 var (
@@ -214,8 +221,14 @@ func ValidateDocument(doc Document) error {
 		if scene.VisualTreatment.Fit != FitContain && scene.VisualTreatment.Fit != FitCover {
 			fields[prefix+".visual_treatment.fit"] = "invalid"
 		}
-		if scene.VisualTreatment.Scale <= 0 {
-			fields[prefix+".visual_treatment.scale"] = "positive"
+		if scene.VisualTreatment.PositionX < MinPosition || scene.VisualTreatment.PositionX > MaxPosition {
+			fields[prefix+".visual_treatment.position_x"] = "out_of_range"
+		}
+		if scene.VisualTreatment.PositionY < MinPosition || scene.VisualTreatment.PositionY > MaxPosition {
+			fields[prefix+".visual_treatment.position_y"] = "out_of_range"
+		}
+		if scene.VisualTreatment.Scale < MinScale || scene.VisualTreatment.Scale > MaxScale {
+			fields[prefix+".visual_treatment.scale"] = "out_of_range"
 		}
 		if scene.VisualTreatment.Crop != nil && !validNormalizedCrop(*scene.VisualTreatment.Crop) {
 			fields[prefix+".visual_treatment.crop"] = "normalized_rectangle_required"
@@ -425,8 +438,8 @@ func validateTransition(t Transition, sceneDurationMS int64) error {
 			return errors.New("cut_requires_zero_duration")
 		}
 	case TransitionFade, TransitionCrossfade:
-		if t.DurationMS <= 0 {
-			return errors.New("positive_duration_required")
+		if t.DurationMS < MinTransitionMS || t.DurationMS > MaxTransitionMS {
+			return errors.New("out_of_range")
 		}
 		if t.DurationMS > sceneDurationMS {
 			return errors.New("must_fit_scene_duration")
