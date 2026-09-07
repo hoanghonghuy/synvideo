@@ -108,7 +108,11 @@ func TestRenderSingleVisualMP4FailsClosedOnUnsupportedOrUnsafeInput(t *testing.T
 		{name: "same path", input: func() PreparedLocalRenderInput { v := base; v.OutputPath = v.VisualPath; return v }(), want: ErrInvalidRenderInput},
 		{name: "odd canvas", input: func() PreparedLocalRenderInput { v := base; v.Width = 321; return v }(), want: ErrInvalidRenderInput},
 		{name: "unapproved fps", input: func() PreparedLocalRenderInput { v := base; v.FrameRate = 60; return v }(), want: ErrInvalidRenderInput},
-		{name: "duration over budget", input: func() PreparedLocalRenderInput { v := base; v.DurationMS = MaxLocalRenderDuration.Milliseconds() + 1; return v }(), want: ErrInvalidRenderInput},
+		{name: "duration over budget", input: func() PreparedLocalRenderInput {
+			v := base
+			v.DurationMS = MaxLocalRenderDuration.Milliseconds() + 1
+			return v
+		}(), want: ErrInvalidRenderInput},
 		{name: "unsupported fit", input: func() PreparedLocalRenderInput { v := base; v.Fit = sceneeditor.FitCover; return v }(), want: ErrUnsupportedRenderSemantics},
 	}
 	for _, tt := range tests {
