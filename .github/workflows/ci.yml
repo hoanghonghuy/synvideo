@@ -57,6 +57,7 @@ jobs:
       SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID: synvideo
       SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY: synvideo_dev_password
       SYNVIDEO_MEDIA_STORAGE_PATH_STYLE: "true"
+      SYNVIDEO_TEST_FFMPEG: "1"
     defaults:
       run:
         working-directory: apps/api
@@ -65,6 +66,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/api/go.mod
+      - name: Install FFmpeg integration dependency
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Start S3-compatible integration storage
         run: docker compose -f ../../infra/docker-compose.yml up -d --wait seaweed-s3
       - run: test -z "$(gofmt -l .)"
