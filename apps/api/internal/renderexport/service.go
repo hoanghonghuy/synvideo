@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -21,9 +22,11 @@ const (
 )
 
 var (
-	ErrUnauthenticated  = errors.New("render export principal is required")
-	ErrInvalidRequest   = errors.New("render export request is invalid")
-	ErrSnapshotMismatch = errors.New("render export snapshot identity mismatch")
+	ErrUnauthenticated           = errors.New("render export principal is required")
+	ErrInvalidRequest            = errors.New("render export request is invalid")
+	ErrSnapshotMismatch          = errors.New("render export snapshot identity mismatch")
+	ErrRenderNotFound            = errors.New("render export job not found")
+	ErrRenderArtifactUnavailable = errors.New("render export succeeded without a durable artifact")
 )
 
 type SnapshotStore interface {
@@ -34,11 +37,17 @@ type JobQueue interface {
 	Enqueue(ctx context.Context, input jobs.EnqueueInput) (jobs.Job, error)
 }
 
+type JobReader interface {
+	GetByIDForProject(ctx context.Context, ownerID uuid.UUID, projectID uuid.UUID, id uuid.UUID) (jobs.Job, error)
+}
+
 type IDGenerator func() uuid.UUID
 
 type Service struct {
 	snapshots SnapshotStore
 	jobs      JobQueue
+	reader    JobReader
+	artifacts ArtifactRepository
 	newID     IDGenerator
 }
 
@@ -48,11 +57,28 @@ type RenderPayload struct {
 	ProfileID      string `json:"profile_id"`
 }
 
+type JobView struct {
+	ID             uuid.UUID       `json:"id"`
+	State          jobs.State      `json:"state"`
+	Attempt        int             `json:"attempt"`
+	MaxAttempts    int             `json:"max_attempts"`
+	ErrorCode      *string         `json:"error_code,omitempty"`
+	SnapshotDigest string          `json:"snapshot_digest"`
+	ProfileID      string          `json:"profile_id"`
+	Artifact       *RenderArtifact `json:"artifact,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
 func NewService(snapshots SnapshotStore, queue JobQueue, newID IDGenerator) *Service {
+	return NewServiceWithRuntime(snapshots, queue, nil, nil, newID)
+}
+
+func NewServiceWithRuntime(snapshots SnapshotStore, queue JobQueue, reader JobReader, artifacts ArtifactRepository, newID IDGenerator) *Service {
 	if newID == nil {
 		newID = uuid.New
 	}
-	return &Service{snapshots: snapshots, jobs: queue, newID: newID}
+	return &Service{snapshots: snapshots, jobs: queue, reader: reader, artifacts: artifacts, newID: newID}
 }
 
 func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, snapshotDigest string) (jobs.Job, error) {
@@ -90,6 +116,66 @@ func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, sna
 		MaxAttempts: DefaultMaxAttempts,
 		Payload:     payload,
 	})
+}
+
+func (s *Service) Get(ctx context.Context, ownerID, projectID, jobID uuid.UUID) (JobView, error) {
+	if ownerID == uuid.Nil {
+		return JobView{}, ErrUnauthenticated
+	}
+	if projectID == uuid.Nil || jobID == uuid.Nil || s.reader == nil {
+		return JobView{}, ErrInvalidRequest
+	}
+	job, err := s.reader.GetByIDForProject(ctx, ownerID, projectID, jobID)
+	if err != nil {
+		if errors.Is(err, jobs.ErrJobNotFound) {
+			return JobView{}, ErrRenderNotFound
+		}
+		return JobView{}, err
+	}
+	if job.Kind != JobKind || job.ProjectID == nil || *job.ProjectID != projectID {
+		return JobView{}, ErrRenderNotFound
+	}
+	payload, err := decodeRenderPayload(job.Payload)
+	if err != nil {
+		return JobView{}, err
+	}
+	view := JobView{
+		ID:             job.ID,
+		State:          job.State,
+		Attempt:        job.Attempt,
+		MaxAttempts:    job.MaxAttempts,
+		ErrorCode:      job.ErrorCode,
+		SnapshotDigest: payload.SnapshotDigest,
+		ProfileID:      payload.ProfileID,
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
+	}
+	if job.State != jobs.StateSucceeded {
+		return view, nil
+	}
+	if s.artifacts == nil {
+		return JobView{}, ErrRenderArtifactUnavailable
+	}
+	artifact, err := s.artifacts.GetByJob(ctx, ownerID, projectID, jobID)
+	if err != nil {
+		if errors.Is(err, ErrArtifactNotFound) {
+			return JobView{}, ErrRenderArtifactUnavailable
+		}
+		return JobView{}, err
+	}
+	if artifact.JobID != jobID || artifact.ProjectID != projectID || artifact.SnapshotDigest != payload.SnapshotDigest || artifact.ProfileID != payload.ProfileID {
+		return JobView{}, ErrRenderArtifactUnavailable
+	}
+	view.Artifact = &artifact
+	return view, nil
+}
+
+func decodeRenderPayload(raw json.RawMessage) (RenderPayload, error) {
+	var payload RenderPayload
+	if err := json.Unmarshal(raw, &payload); err != nil || !validDigest(payload.SnapshotDigest) || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID {
+		return RenderPayload{}, ErrInvalidRequest
+	}
+	return payload, nil
 }
 
 func validDigest(value string) bool {
