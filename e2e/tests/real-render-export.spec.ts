@@ -24,8 +24,8 @@ test('creator can snapshot, render a real durable MP4, refresh, and download it'
   const projectID = page.url().match(/\/projects\/([0-9a-f-]{36})$/i)?.[1]
   expect(projectID).toBeTruthy()
 
-  await execFileAsync('go', ['run', './apps/api/cmd/e2e-render-fixture', projectID!], {
-    cwd: process.cwd(),
+  await execFileAsync('go', ['run', './cmd/e2e-render-fixture', projectID!], {
+    cwd: join(process.cwd(), 'apps/api'),
     env: process.env,
   })
 
