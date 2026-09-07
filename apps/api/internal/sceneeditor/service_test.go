@@ -181,7 +181,7 @@ func TestServicePreservesCompositionIdentityOnSave(t *testing.T) {
 	projectID := uuid.New()
 	repo := &memoryRepository{}
 	service := NewService(repo, staticResolver{states: []DependencyState{{State: StateCurrent}}}, uuid.New, func() time.Time { return time.Now().UTC() })
-	created, err := service.Create(ctx, ownerID, projectID, 1, []Scene{baseScene()}, nil)
+	_, err := service.Create(ctx, ownerID, projectID, 1, []Scene{baseScene()}, nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
