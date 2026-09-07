@@ -80,6 +80,13 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 			return nil, genErr
 		}
 	} else {
+		// A committed generated asset means paid generation already succeeded. Cleanup is
+		// still part of the durable job outcome, so retries must revisit failed checkpoint
+		// deletion instead of silently leaving creator content in internal storage.
+		if cleanupErr := h.cleanupChunks(ctx, projectID, job.ID, payload); cleanupErr != nil {
+			return nil, cleanupErr
+		}
+
 		// Read duration from asset metadata
 		var meta struct {
 			DurationSeconds float64 `json:"duration_seconds"`
@@ -217,11 +224,25 @@ func (h *Handler) synthesizeAndStore(ctx context.Context, principal project.Prin
 		return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
 	}
 
-	if h.chunkStore != nil {
-		_ = h.chunkStore.DeleteChunks(ctx, projectID, jobID, len(chunks))
+	if cleanupErr := h.cleanupChunks(ctx, projectID, jobID, payload); cleanupErr != nil {
+		return mediaasset.MediaAsset{}, 0, cleanupErr
 	}
 
 	return asset, duration, nil
+}
+
+func (h *Handler) cleanupChunks(ctx context.Context, projectID, jobID uuid.UUID, payload Payload) error {
+	if h.chunkStore == nil {
+		return nil
+	}
+	totalChunks := len(audio.ChunkText(payload.NarrationText, DefaultMaxChunkRunes))
+	if totalChunks == 0 {
+		return nil
+	}
+	if err := h.chunkStore.DeleteChunks(ctx, projectID, jobID, totalChunks); err != nil {
+		return jobs.NewRetryableError(ErrorStorageFailed, fmt.Errorf("cleanup narration checkpoints: %w", err), nil)
+	}
+	return nil
 }
 
 func classifyTTSProviderError(err error) error {

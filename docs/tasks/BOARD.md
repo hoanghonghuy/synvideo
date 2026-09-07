@@ -45,23 +45,22 @@ Prefer product/vertical feature slices once foundations exist. Do not create a s
 | TASK-032 | Per-scene AI Video Generation V1 | DONE | Issue #67 closed; implementation accepted via PR #89. |
 | TASK-033 | Stock Media Search & Acquisition V1 | DONE | Issue #68 closed; implementation accepted via PR #130 / squash `85ca3877...`. |
 | TASK-034 | Captions & Scene Timing V1 | DONE | Issue #69 closed; implementation accepted via PR #124. |
-| TASK-035 | Background Music & Audio Mix V1 | IN_PROGRESS | Issue #70; draft PR #129 is active; current exact head needs a `gofmt` CI fix and remaining full-scope implementation before review-ready. |
-| TASK-036 | Scene Editor V1 | BACKLOG | Issue #71; spec frozen; TASK-033 is accepted and activation now waits only for an accepted compatible TASK-035 audio-mix boundary. |
-| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; depends on editor composition snapshot. |
+| TASK-035 | Background Music & Audio Mix V1 | DONE | Issue #70 closed; implementation accepted via PR #129 / squash `0eb43d88...`. |
+| TASK-036 | Scene Editor V1 | IN_PROGRESS | Issue #71; claimed on canonical `feature/TASK-036-scene-editor-v1` with draft PR #134. Exact inspected head `fc8c8085...`; E2E #104 green, CI #601 red at Backend `go vet`; PM/TL blockers/decisions canonicalized on #71/#134. |
+| TASK-037 | Render & Export V1 | BACKLOG | Issue #72; NEXT BACKLOG, contract frozen; waits for a concrete accepted TASK-036 immutable composition snapshot plus renderer/deployment/safety activation decisions. |
 | TASK-038 | Channel Hub & Publishing V1 | BACKLOG | Issue #73; depends on render artifact contract and platform revalidation. |
 
 ## Current F1 implementation supply
-- TASK-035 is active on canonical `feature/TASK-035-background-music-mix` through draft PR #129. Developer must fix the current Backend `gofmt` gate, reconcile with latest protected `develop`, and complete the remaining API/frontend/integration scope before review-ready.
-- TASK-033 is DONE and accepted through PR #130 / squash `85ca3877dfcbb716c8dc870f2397617bce26bcc1`.
-- TASK-036 is the prepared NEXT BACKLOG item. Its stock-media dependency is now accepted; do not activate it until TASK-035 supplies a concrete accepted compatible audio-mix implementation boundary.
-- There is currently no additional F1 feature task that can be truthfully marked READY without bypassing a dependency. Do not manufacture READY work merely to fill a slot; independent production-hardening backlog remains governed by its own activation gates.
+- TASK-036 is active/claimed on canonical `feature/TASK-036-scene-editor-v1` through draft PR #134. PM/TL exact-head fingerprint at this board refresh: `fc8c80852852612298f51c1d5a063c664a45607f`; E2E Acceptance #104 SUCCESS; CI #601 FAILURE at Backend `go vet ./...`. Developer action boundaries and frozen Scene Editor decisions are canonical on issue #71 / PR #134.
+- TASK-047 is `READY / CLAIMABLE` on authoritative issue #102 after governance PR #136 passed CI #605 + E2E Acceptance #106 and merged to protected `develop` as `11a11d730caaf6600a0196054ad4ee509781bffb`. Developer is authorized to claim canonical `feature/TASK-047-temp-object-lifecycle` while normal WIP/isolation rules remain satisfied.
+- TASK-037 remains F1 NEXT BACKLOG and is dependency-gated by accepted TASK-036.
 
 ## Subsequent sequence
-1. Finish and accept TASK-035 audio mix through its canonical PR.
-2. Immediately revalidate and activate TASK-036 editor once the accepted audio-mix boundary is available.
-3. TASK-037 render from immutable composition snapshots.
+1. Complete and accept TASK-036 Scene Editor through its canonical branch/PR.
+2. Keep independent READY TASK-047 available for claim; once claimed, implementation/review follows its canonical branch and frozen `TEMP_OBJECT_LIFECYCLE_V1` contract.
+3. Revalidate TASK-037 Render & Export against the concrete immutable composition snapshot, production safety dependencies, deployment resources and renderer/toolchain/license choices; activate only after those gates are satisfied.
 4. TASK-038 Channel Hub from accepted render artifacts.
-5. Production hardening/E2E and richer intake continue through their existing audited task owners and activation gates.
+5. Independent production-hardening work may proceed within normal WIP when its own activation gates are satisfied.
 
 ## Architecture gates
 - Provider capabilities remain provider-neutral; vendor types stay in adapters.

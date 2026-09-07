@@ -19,11 +19,16 @@ type ChunkStore interface {
 }
 
 type ObjectStorageChunkStore struct {
-	storage mediaasset.ObjectStorage
+	storage   mediaasset.ObjectStorage
+	lifecycle TemporaryObjectRepository
 }
 
-func NewObjectStorageChunkStore(storage mediaasset.ObjectStorage) *ObjectStorageChunkStore {
-	return &ObjectStorageChunkStore{storage: storage}
+func NewObjectStorageChunkStore(storage mediaasset.ObjectStorage, lifecycle ...TemporaryObjectRepository) *ObjectStorageChunkStore {
+	store := &ObjectStorageChunkStore{storage: storage}
+	if len(lifecycle) > 0 {
+		store.lifecycle = lifecycle[0]
+	}
+	return store
 }
 
 func (s *ObjectStorageChunkStore) chunkKey(projectID, jobID uuid.UUID, chunkIndex int) string {
@@ -51,6 +56,16 @@ func (s *ObjectStorageChunkStore) PutChunk(ctx context.Context, projectID, jobID
 		return nil
 	}
 	key := s.chunkKey(projectID, jobID, chunkIndex)
+	if s.lifecycle != nil {
+		if err := s.lifecycle.Track(ctx, TemporaryObject{
+			ID:        uuid.New(),
+			ProjectID: projectID,
+			JobID:     jobID,
+			ObjectKey: key,
+		}); err != nil {
+			return fmt.Errorf("track narration checkpoint: %w", err)
+		}
+	}
 	_, err := s.storage.Put(ctx, mediaasset.PutObjectInput{
 		Key:         key,
 		Body:        bytes.NewReader(data),
@@ -63,9 +78,18 @@ func (s *ObjectStorageChunkStore) DeleteChunks(ctx context.Context, projectID, j
 	if s.storage == nil {
 		return nil
 	}
+	var cleanupErr error
 	for i := 0; i < totalChunks; i++ {
 		key := s.chunkKey(projectID, jobID, i)
-		_ = s.storage.Delete(ctx, key)
+		if err := s.storage.Delete(ctx, key); err != nil && !errors.Is(err, mediaasset.ErrObjectNotFound) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete narration checkpoint %d: %w", i, err))
+			continue
+		}
+		if s.lifecycle != nil {
+			if err := s.lifecycle.MarkRemoved(ctx, projectID, jobID, key); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("mark narration checkpoint %d removed: %w", i, err))
+			}
+		}
 	}
-	return nil
+	return cleanupErr
 }
