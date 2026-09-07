@@ -3,6 +3,7 @@ import { ApiError } from '@/api/projects'
 export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
 export type SceneEditorFit = 'contain' | 'cover'
 export type SceneEditorTransitionKind = 'cut' | 'fade' | 'crossfade'
+export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface SceneEditorVisualRef {
   asset_id: string
@@ -114,7 +115,34 @@ export interface SceneEditorReconcilePreview {
   ambiguous: boolean
 }
 
+export interface RenderExportArtifact {
+  id: string
+  media_asset_id: string
+  byte_size: number
+  sha256: string
+  mime_type: string
+  duration_ms: number
+  width: number
+  height: number
+  toolchain_version: string
+  created_at: string
+}
+
+export interface RenderExportJob {
+  id: string
+  state: RenderExportState
+  attempt: number
+  max_attempts: number
+  error_code?: string
+  snapshot_digest: string
+  profile_id: string
+  artifact?: RenderExportArtifact
+  created_at: string
+  updated_at: string
+}
+
 const base = (projectID: string) => `/api/v1/projects/${encodeURIComponent(projectID)}/scene-editor`
+const renderBase = (projectID: string) => `/api/v1/projects/${encodeURIComponent(projectID)}/render-exports`
 
 export async function getSceneEditor(projectID: string): Promise<SceneEditorView> {
   return request<SceneEditorView>(base(projectID))
@@ -167,6 +195,21 @@ export async function createSceneEditorSnapshot(projectID: string, expectedRevis
     method: 'POST',
     body: JSON.stringify({ expected_revision: expectedRevision }),
   })
+}
+
+export async function createRenderExport(projectID: string, snapshotDigest: string): Promise<RenderExportJob> {
+  return request<RenderExportJob>(renderBase(projectID), {
+    method: 'POST',
+    body: JSON.stringify({ snapshot_digest: snapshotDigest }),
+  })
+}
+
+export async function getRenderExport(projectID: string, jobID: string): Promise<RenderExportJob> {
+  return request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(jobID)}`)
+}
+
+export function mediaAssetContentURL(projectID: string, assetID: string): string {
+  return `/api/v1/projects/${encodeURIComponent(projectID)}/media-assets/${encodeURIComponent(assetID)}/content`
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
