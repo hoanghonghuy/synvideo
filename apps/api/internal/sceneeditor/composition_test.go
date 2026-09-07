@@ -179,3 +179,27 @@ func TestNormalizedCropAndTransitionValidation(t *testing.T) {
 		t.Fatalf("missing transition validation: %v", validation.Fields)
 	}
 }
+
+func TestTransitionMustFitBothAdjacentScenes(t *testing.T) {
+	scenes := []Scene{
+		{
+			ID: uuid.New(), SceneKey: "scene-a", DurationMS: 5_000,
+			VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1},
+			TransitionOut:   Transition{Kind: TransitionCrossfade, DurationMS: 2_000},
+		},
+		{
+			ID: uuid.New(), SceneKey: "scene-b", DurationMS: 1_000,
+			VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1},
+			TransitionOut:   Transition{Kind: TransitionCut},
+		},
+	}
+
+	_, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, scenes, nil, time.Now().UTC())
+	validation, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("err=%T %v want ValidationError", err, err)
+	}
+	if validation.Fields["scenes[0].transition_out"] != "must_fit_scene_duration" {
+		t.Fatalf("expected transition to fit the shorter adjacent scene, fields=%v", validation.Fields)
+	}
+}
