@@ -156,22 +156,39 @@ func TestServiceRejectsStaleWriter(t *testing.T) {
 	}
 }
 
-func TestServiceBlocksSnapshotForStaleOrBrokenDependencies(t *testing.T) {
-	for _, state := range []State{StateStale, StateBroken} {
-		t.Run(string(state), func(t *testing.T) {
-			ctx := context.Background()
-			ownerID := uuid.New()
-			projectID := uuid.New()
-			repo := &memoryRepository{}
-			service := NewService(repo, staticResolver{states: []DependencyState{{State: state}}}, uuid.New, func() time.Time { return time.Now().UTC() })
-			created, err := service.Create(ctx, ownerID, projectID, 1, []Scene{baseScene()}, nil)
-			if err != nil {
-				t.Fatalf("Create: %v", err)
-			}
-			if _, err := service.Snapshot(ctx, ownerID, projectID, created.Revision); !errors.Is(err, ErrSnapshotBlocked) {
-				t.Fatalf("err=%v want snapshot blocked", err)
-			}
-		})
+func TestServiceAllowsVerifiableStaleDependenciesButBlocksSnapshot(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	repo := &memoryRepository{}
+	service := NewService(repo, staticResolver{states: []DependencyState{{State: StateStale}}}, uuid.New, func() time.Time { return time.Now().UTC() })
+
+	created, err := service.Create(ctx, ownerID, projectID, 1, []Scene{baseScene()}, nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.State != StateStale {
+		t.Fatalf("state=%s want stale", created.State)
+	}
+	if _, err := service.Snapshot(ctx, ownerID, projectID, created.Revision); !errors.Is(err, ErrSnapshotBlocked) {
+		t.Fatalf("err=%v want snapshot blocked", err)
+	}
+}
+
+func TestServiceRejectsBrokenDependenciesBeforePersistence(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	repo := &memoryRepository{}
+	service := NewService(repo, staticResolver{states: []DependencyState{{State: StateBroken, Reason: "CROSS_PROJECT"}}}, uuid.New, func() time.Time { return time.Now().UTC() })
+
+	_, err := service.Create(ctx, ownerID, projectID, 1, []Scene{baseScene()}, nil)
+	validation, ok := err.(ValidationError)
+	if !ok || validation.Fields["dependencies"] != "unresolvable_or_cross_project" {
+		t.Fatalf("err=%T %v", err, err)
+	}
+	if repo.latest.ID != uuid.Nil {
+		t.Fatalf("broken dependency was persisted: %+v", repo.latest)
 	}
 }
 
