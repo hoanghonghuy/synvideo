@@ -79,6 +79,13 @@ const staleSource = computed(() => {
   return selectedScript.value !== null && approvedProposalVersion.value !== null &&
     approvedProposalVersion.value > selectedScript.value.source_proposal_version
 })
+const returnToSceneEditor = computed(() => route.query.returnTo === 'scene-editor')
+
+function requestedScriptVersion(): number | null {
+  const raw = route.query.version
+  const value = typeof raw === 'string' ? Number.parseInt(raw, 10) : Number.NaN
+  return Number.isInteger(value) && value > 0 ? value : null
+}
 
 watch(form, () => {
   dirty.value = JSON.stringify(form.value) !== savedSnapshot.value
@@ -130,7 +137,12 @@ async function loadWorkspace() {
     scriptsLoaded.value = true
     summaries.value = await listScripts(project.value.id)
     proposals.value = await loadProposalSummaries(project.value.id)
-    const initial = summaries.value.find((item) => item.status === 'draft') ?? summaries.value[0]
+    const requestedVersion = requestedScriptVersion()
+    const initial = (requestedVersion !== null
+      ? summaries.value.find((item) => item.version === requestedVersion)
+      : undefined)
+      ?? summaries.value.find((item) => item.status === 'draft')
+      ?? summaries.value[0]
     if (initial) {
       await loadVersion(initial.version, true)
     } else {
@@ -447,6 +459,14 @@ function errorMessage(code: string) {
 
 <template>
   <section class="page script-page">
+    <RouterLink
+      v-if="project && returnToSceneEditor"
+      class="text-link"
+      :to="`/projects/${project.id}/scene-editor`"
+      data-testid="back-to-scene-editor"
+    >
+      Back to Scene Editor
+    </RouterLink>
     <RouterLink
       v-if="project"
       class="text-link"

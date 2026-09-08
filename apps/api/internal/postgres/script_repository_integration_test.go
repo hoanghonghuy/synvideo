@@ -719,3 +719,72 @@ func TestScriptRepositoryIntegration_JSONDoesNotExposeJobID(t *testing.T) {
 		t.Fatalf("public JSON exposes source_generation_job_id: %s", jsonStr)
 	}
 }
+
+func TestScriptRepositoryIntegration_ForkApprovedDraftPreservesHistory(t *testing.T) {
+	pool := integrationPool(t)
+	projectRepo := NewProjectRepository(pool)
+	proposalRepo := NewCreativeProposalRepository(pool)
+	repo := NewScriptRepository(pool)
+	svc := script.NewService(repo)
+
+	ownerID := uuid.New()
+	principal := project.Principal{OwnerID: ownerID}
+	ctx := context.Background()
+
+	projectItem, err := projectRepo.Create(ctx, ownerID, validIntegrationCreateInput("Fork Script Project"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	prop, err := proposalRepo.CreateDraft(ctx, ownerID, projectItem.ID, creativeproposal.CreateDraftInput{
+		SourceBriefRevision: 1,
+		Content:             validProposalContent("Fork Proposal"),
+	})
+	if err != nil {
+		t.Fatalf("create proposal: %v", err)
+	}
+	propApproved, err := proposalRepo.Approve(ctx, ownerID, projectItem.ID, prop.Version, prop.Revision)
+	if err != nil {
+		t.Fatalf("approve proposal: %v", err)
+	}
+
+	approvedContent := validScriptContent("Approved Script")
+	draft, err := repo.CreateDraft(ctx, ownerID, projectItem.ID, script.CreateDraftInput{
+		SourceProposalVersion: propApproved.Version,
+		Content:               approvedContent,
+	})
+	if err != nil {
+		t.Fatalf("create draft: %v", err)
+	}
+	approved, err := repo.Approve(ctx, ownerID, projectItem.ID, draft.Version, draft.Revision)
+	if err != nil {
+		t.Fatalf("approve script: %v", err)
+	}
+
+	forked, err := svc.ForkApprovedDraft(ctx, principal, projectItem.ID, approved.Version)
+	if err != nil {
+		t.Fatalf("fork approved draft: %v", err)
+	}
+	if forked.Status != script.StatusDraft || forked.Version <= approved.Version {
+		t.Fatalf("unexpected forked script: %#v", forked)
+	}
+	if forked.SourceProposalVersion != approved.SourceProposalVersion || forked.ContentLocale != approved.ContentLocale {
+		t.Fatalf("fork lost lineage: %#v", forked)
+	}
+	if forked.Sections[0].Body != approvedContent.Sections[0].Body {
+		t.Fatalf("fork did not copy approved content: %#v", forked.Sections)
+	}
+
+	stillApproved, err := repo.GetByVersion(ctx, ownerID, projectItem.ID, approved.Version)
+	if err != nil {
+		t.Fatalf("reload approved script: %v", err)
+	}
+	if stillApproved.Status != script.StatusApproved {
+		t.Fatalf("approved history mutated: %#v", stillApproved)
+	}
+
+	_, err = svc.ForkApprovedDraft(ctx, principal, projectItem.ID, forked.Version)
+	if !errors.Is(err, script.ErrForkSourceNotApproved) {
+		t.Fatalf("fork mutable source err=%v want ErrForkSourceNotApproved", err)
+	}
+}

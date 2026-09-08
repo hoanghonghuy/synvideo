@@ -82,6 +82,17 @@ func (r staticResolver) State(context.Context, uuid.UUID, Document) ([]Dependenc
 	return r.states, r.err
 }
 
+type scenePlanVersionResolver struct {
+	currentPlanVersion int
+}
+
+func (r scenePlanVersionResolver) State(_ context.Context, _ uuid.UUID, doc Document) ([]DependencyState, error) {
+	if doc.ScenePlanVersion < r.currentPlanVersion {
+		return []DependencyState{{State: StateStale, Reason: "SCENE_PLAN_SUPERSEDED"}}, nil
+	}
+	return []DependencyState{{State: StateCurrent}}, nil
+}
+
 func baseScene() Scene {
 	return Scene{
 		ID: uuid.New(), SceneKey: "scene-a", DurationMS: 2_000,
@@ -210,5 +221,63 @@ func TestServicePreservesCompositionIdentityOnSave(t *testing.T) {
 	validation, ok := err.(ValidationError)
 	if !ok || validation.Fields["composition_identity"] != "immutable" {
 		t.Fatalf("err=%T %v", err, err)
+	}
+}
+
+func TestServiceUpstreamBridgeReconcileAfterScenePlanTransition(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	clock := time.Date(2026, 9, 8, 18, 0, 0, 0, time.UTC)
+	oldNarration := &NarrationRef{AssetID: uuid.New(), BindingID: uuid.New(), LineageID: uuid.New(), DurationMS: 1_500}
+	newNarration := &NarrationRef{AssetID: uuid.New(), BindingID: uuid.New(), LineageID: uuid.New(), DurationMS: 1_800}
+	repo := &memoryRepository{}
+	service := NewService(repo, scenePlanVersionResolver{currentPlanVersion: 2}, uuid.New, func() time.Time { return clock })
+
+	created, err := service.Create(ctx, ownerID, projectID, 1, []Scene{{
+		ID: uuid.New(), SceneKey: "intro", Narration: oldNarration, DurationMS: 2_000, Notes: "creator note",
+		VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1.25, PositionX: 0.1},
+		TransitionOut:   Transition{Kind: TransitionFade, DurationMS: 300},
+	}}, nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.State != StateStale {
+		t.Fatalf("state=%s want stale before reconcile", created.State)
+	}
+	if _, err := service.Snapshot(ctx, ownerID, projectID, created.Revision); !errors.Is(err, ErrSnapshotBlocked) {
+		t.Fatalf("snapshot before reconcile err=%v want blocked", err)
+	}
+
+	candidate := ReconcileCandidate{
+		ScenePlanVersion: 2,
+		Scenes:           []SceneCandidate{{SceneKey: "intro", Narration: newNarration}},
+	}
+	preview, err := service.PreviewReconcile(ctx, ownerID, projectID, candidate)
+	if err != nil {
+		t.Fatalf("PreviewReconcile: %v", err)
+	}
+	if preview.Ambiguous || len(preview.Changes) != 1 || !preview.Changes[0].PreservesEdits {
+		t.Fatalf("preview=%+v", preview)
+	}
+
+	reconciled, err := service.Reconcile(ctx, ownerID, projectID, ReconcileInput{
+		ExpectedRevision: created.Revision,
+		Candidate:        candidate,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if reconciled.Revision != 2 || reconciled.ScenePlanVersion != 2 {
+		t.Fatalf("reconciled=%+v", reconciled)
+	}
+	if reconciled.Scenes[0].Notes != "creator note" || reconciled.Scenes[0].VisualTreatment.Scale != 1.25 {
+		t.Fatalf("presentation edits not preserved: %+v", reconciled.Scenes[0])
+	}
+	if reconciled.Scenes[0].Narration.LineageID != newNarration.LineageID {
+		t.Fatalf("narration not rebound: %+v", reconciled.Scenes[0].Narration)
+	}
+	if reconciled.State != StateCurrent {
+		t.Fatalf("state=%s want current after reconcile", reconciled.State)
 	}
 }
