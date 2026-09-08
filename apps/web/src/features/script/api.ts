@@ -87,6 +87,12 @@ export function approveScript(projectId: string, version: number, revision: numb
   })
 }
 
+export function forkScript(projectId: string, version: number): Promise<Script> {
+  return request<Script>(`/api/v1/projects/${projectId}/scripts/${version}/fork`, {
+    method: 'POST',
+  })
+}
+
 export function getTextGenerationOptions(): Promise<TextGenerationOptionsResponse> {
   return request<TextGenerationOptionsResponse>('/api/v1/ai/text-generation-options')
 }

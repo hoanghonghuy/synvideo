@@ -53,6 +53,7 @@ type ScriptService interface {
 	GetByVersion(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
 	UpdateDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input script.PutInput) (script.Script, error)
 	Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error)
+	ForkApprovedDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
 }
 
 type MediaServices struct {
@@ -118,6 +119,7 @@ func New(
 		mux.HandleFunc("GET /api/v1/projects/{id}/scripts/{version}", handler.get)
 		mux.HandleFunc("PUT /api/v1/projects/{id}/scripts/{version}", handler.put)
 		mux.HandleFunc("POST /api/v1/projects/{id}/scripts/{version}/approve", handler.approve)
+		mux.HandleFunc("POST /api/v1/projects/{id}/scripts/{version}/fork", handler.fork)
 	}
 	if scenePlanService != nil && actorResolver != nil {
 		handler := scenePlanHandler{service: scenePlanService, actorResolver: actorResolver}
