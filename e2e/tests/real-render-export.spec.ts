@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
-const PNG_1X1 = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZxZkAAAAASUVORK5CYII=',
+const PNG_2X2 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=',
   'base64',
 )
 
@@ -31,7 +31,7 @@ test('creator can snapshot, render a real durable MP4, refresh, and download it'
 
   const upload = await request.post(`/api/v1/projects/${projectID}/media-assets`, {
     multipart: {
-      file: { name: 'acceptance.png', mimeType: 'image/png', buffer: PNG_1X1 },
+      file: { name: 'acceptance.png', mimeType: 'image/png', buffer: PNG_2X2 },
     },
   })
   expect(upload.status(), await upload.text()).toBe(201)
