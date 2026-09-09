@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -115,6 +116,11 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 		t.Fatalf("presentation notes changed after fork: %#v", afterFork.Scenes[0])
 	}
 
+	_, err = scriptSvc.ForkApprovedDraft(ctx, principal, projectItem.ID, forked.Version)
+	if !errors.Is(err, script.ErrForkSourceNotApproved) {
+		t.Fatalf("fork mutable source err=%v want ErrForkSourceNotApproved", err)
+	}
+
 	approvedScriptV2, err := scriptRepo.Approve(ctx, ownerID, projectItem.ID, forked.Version, forked.Revision)
 	if err != nil {
 		t.Fatalf("approve forked script: %v", err)
@@ -166,11 +172,6 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 	}
 	if reconciled.Scenes[0].Notes != "creator presentation note" || reconciled.Scenes[0].VisualTreatment.Scale != 1.25 {
 		t.Fatalf("presentation edits not preserved after reconcile: %#v", reconciled.Scenes[0])
-	}
-
-	_, err = scriptSvc.ForkApprovedDraft(ctx, principal, projectItem.ID, forked.Version)
-	if err == nil {
-		t.Fatalf("expected fork failure for mutable draft source")
 	}
 }
 
