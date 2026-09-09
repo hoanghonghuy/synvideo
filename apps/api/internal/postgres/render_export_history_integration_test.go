@@ -196,6 +196,43 @@ func TestRenderExportServiceIntegrationHistoryOwnerProjectIsolation(t *testing.T
 	}
 }
 
+func TestRenderExportServiceIntegrationCancelRejectsCrossScopeWithoutLeakage(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	ownerA := uuid.New()
+	ownerB := uuid.New()
+	projectRepo := NewProjectRepository(pool)
+	projectA, err := projectRepo.Create(ctx, ownerA, validIntegrationCreateInput("Render cancel scope A"))
+	if err != nil {
+		t.Fatalf("create project A: %v", err)
+	}
+	projectB, err := projectRepo.Create(ctx, ownerA, validIntegrationCreateInput("Render cancel scope B"))
+	if err != nil {
+		t.Fatalf("create project B: %v", err)
+	}
+
+	jobRepo := NewJobRepository(pool)
+	service := renderexport.NewServiceWithRuntime(nil, jobRepo, jobRepo, nil, uuid.New)
+	queuedID := uuid.New()
+	seedRenderJob(t, jobRepo, ownerA, projectA.ID, queuedID)
+
+	_, err = service.Cancel(ctx, ownerB, projectA.ID, queuedID)
+	if !errors.Is(err, renderexport.ErrRenderNotFound) {
+		t.Fatalf("cross-owner cancel error = %v, want ErrRenderNotFound", err)
+	}
+	if errors.Is(err, renderexport.ErrRenderNotCancellable) {
+		t.Fatal("cross-owner cancel leaked cancellable-state conflict instead of not found")
+	}
+
+	_, err = service.Cancel(ctx, ownerA, projectB.ID, queuedID)
+	if !errors.Is(err, renderexport.ErrRenderNotFound) {
+		t.Fatalf("cross-project cancel error = %v, want ErrRenderNotFound", err)
+	}
+	if errors.Is(err, renderexport.ErrRenderNotCancellable) {
+		t.Fatal("cross-project cancel leaked cancellable-state conflict instead of not found")
+	}
+}
+
 func TestRenderExportServiceIntegrationRetryRejectsCrossScopeWithoutLeakage(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()

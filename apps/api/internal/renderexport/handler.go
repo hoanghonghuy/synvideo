@@ -340,7 +340,9 @@ func (h *Handler) finalizeAsset(ctx context.Context, job jobs.Job, payload Rende
 	}
 	if errors.Is(createErr, ErrRenderCancelFenced) {
 		principal := project.Principal{OwnerID: job.OwnerID}
-		_ = h.assets.Delete(context.Background(), principal, *job.ProjectID, asset.ID)
+		if deleteErr := h.assets.Delete(context.Background(), principal, *job.ProjectID, asset.ID); deleteErr != nil {
+			return RenderArtifact{}, jobs.NewRetryableError(ErrorStorageFailed, deleteErr, nil)
+		}
 		return RenderArtifact{}, context.Canceled
 	}
 	if existing, getErr := h.artifacts.GetByJob(ctx, job.OwnerID, *job.ProjectID, job.ID); getErr == nil {
