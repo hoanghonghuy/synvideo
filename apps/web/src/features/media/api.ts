@@ -87,7 +87,7 @@ export interface UploadOptions {
   onProgress?: (percentage: number) => void
 }
 
-const API_PREFIX = apiUrl('/api/v1')
+const API_PREFIX = '/api/v1'
 
 export function listMediaAssets(projectId: string): Promise<{ assets: MediaAsset[] }> {
   return request<{ assets: MediaAsset[] }>(`${API_PREFIX}/projects/${projectId}/media-assets`)
@@ -162,7 +162,7 @@ export function listPrimaryVisualHistory(
 }
 
 export function mediaAssetContentURL(projectId: string, assetId: string): string {
-  return `${API_PREFIX}/projects/${projectId}/media-assets/${assetId}/content`
+  return apiUrl(`${API_PREFIX}/projects/${projectId}/media-assets/${assetId}/content`)
 }
 
 export function uploadMediaAsset(
@@ -182,7 +182,7 @@ export function uploadMediaAsset(
     const xhr = new XMLHttpRequest()
     const abort = () => xhr.abort()
     const cleanup = () => options.signal?.removeEventListener('abort', abort)
-    xhr.open('POST', `${API_PREFIX}/projects/${projectId}/media-assets`)
+    xhr.open('POST', apiUrl(`${API_PREFIX}/projects/${projectId}/media-assets`))
     xhr.responseType = 'json'
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) options.onProgress?.(Math.round((event.loaded / event.total) * 100))
