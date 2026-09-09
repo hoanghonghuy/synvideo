@@ -1,6 +1,7 @@
 package sceneeditor
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestReconciliationPreservesLocalIdentityAndPresentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewReconciliation: %v", err)
 	}
-	if preview.Ambiguous || len(preview.Changes) != 1 || !preview.Changes[0].PreservesEdits || preview.PreviewDigest == "" {
+	if preview.Ambiguous || len(preview.Changes) != 1 || !preview.Changes[0].PreservesEdits {
 		t.Fatalf("preview=%+v", preview)
 	}
 
@@ -151,7 +152,7 @@ func TestReconciliationRejectsRemovedAndRekeyedScenesAsAmbiguous(t *testing.T) {
 	}
 }
 
-func TestReconciliationRejectsStalePreviewDigest(t *testing.T) {
+func TestReconciliationRejectsStalePreviewDigestWhenCandidateChanges(t *testing.T) {
 	now := time.Now().UTC()
 	doc, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, []Scene{{
 		ID: uuid.New(), SceneKey: "intro", DurationMS: 1_000,
@@ -162,14 +163,16 @@ func TestReconciliationRejectsStalePreviewDigest(t *testing.T) {
 	}
 
 	candidate := ReconcileCandidate{ScenePlanVersion: 2, Scenes: []SceneCandidate{{SceneKey: "intro"}}}
-	preview, err := PreviewReconciliation(doc, candidate)
+	resolver := staticResolver{states: []DependencyState{{State: StateCurrent}}}
+	service := NewService(&memoryRepository{latest: doc}, resolver, uuid.New, func() time.Time { return now })
+	preview, err := service.PreviewReconcile(t.Context(), doc.OwnerID, doc.ProjectID, candidate)
 	if err != nil {
-		t.Fatalf("PreviewReconciliation: %v", err)
+		t.Fatalf("PreviewReconcile: %v", err)
 	}
 
 	drifted := candidate
 	drifted.Scenes = []SceneCandidate{{SceneKey: "intro"}, {SceneKey: "main"}}
-	digest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, drifted.ScenePlanVersion, drifted)
+	digest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, drifted.ScenePlanVersion, drifted, mustDependencyFingerprint(t, resolver.states))
 	if err != nil {
 		t.Fatalf("ReconcilePreviewDigest: %v", err)
 	}
@@ -177,7 +180,6 @@ func TestReconciliationRejectsStalePreviewDigest(t *testing.T) {
 		t.Fatal("drifted candidate digest must differ from preview digest")
 	}
 
-	service := NewService(&memoryRepository{latest: doc}, staticResolver{states: []DependencyState{{State: StateCurrent}}}, uuid.New, func() time.Time { return now })
 	_, err = service.Reconcile(t.Context(), doc.OwnerID, doc.ProjectID, ReconcileInput{
 		ExpectedRevision: 1,
 		PreviewDigest:    preview.PreviewDigest,
@@ -186,6 +188,85 @@ func TestReconciliationRejectsStalePreviewDigest(t *testing.T) {
 	if !errors.Is(err, ErrPreviewStale) {
 		t.Fatalf("err=%v want preview stale", err)
 	}
+}
+
+func TestServiceReconcileRejectsUpstreamDriftWithUnchangedCandidate(t *testing.T) {
+	now := time.Now().UTC()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	doc, err := NewDocument(uuid.New(), ownerID, projectID, 1, []Scene{{
+		ID: uuid.New(), SceneKey: "intro", DurationMS: 2_000,
+		VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+	}}, nil, now)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	resolver := &mutableResolver{states: []DependencyState{{State: StateCurrent, Reason: "PLAN_V2_CURRENT"}}}
+	service := NewService(&memoryRepository{latest: doc}, resolver, uuid.New, func() time.Time { return now })
+	candidate := ReconcileCandidate{ScenePlanVersion: 2, Scenes: []SceneCandidate{{SceneKey: "intro"}}}
+
+	preview, err := service.PreviewReconcile(t.Context(), ownerID, projectID, candidate)
+	if err != nil {
+		t.Fatalf("PreviewReconcile: %v", err)
+	}
+	if preview.PreviewDigest == "" {
+		t.Fatal("preview digest required")
+	}
+
+	resolver.states = []DependencyState{{State: StateStale, Reason: "SCENE_PLAN_SUPERSEDED"}}
+
+	_, err = service.Reconcile(t.Context(), ownerID, projectID, ReconcileInput{
+		ExpectedRevision: 1,
+		PreviewDigest:    preview.PreviewDigest,
+		Candidate:        candidate,
+	})
+	if !errors.Is(err, ErrPreviewStale) {
+		t.Fatalf("err=%v want preview stale", err)
+	}
+}
+
+func TestReconciliationRejectsDuplicateCandidateOnlySceneKeys(t *testing.T) {
+	now := time.Now().UTC()
+	doc, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, []Scene{{
+		ID: uuid.New(), SceneKey: "intro", DurationMS: 1_000,
+		VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+	}}, nil, now)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	candidate := ReconcileCandidate{ScenePlanVersion: 2, Scenes: []SceneCandidate{
+		{SceneKey: "intro"},
+		{SceneKey: "main"},
+		{SceneKey: "main"},
+	}}
+	preview, err := PreviewReconciliation(doc, candidate)
+	if err != nil {
+		t.Fatalf("PreviewReconciliation: %v", err)
+	}
+	if !preview.Ambiguous {
+		t.Fatalf("preview=%+v want ambiguous duplicate candidate-only keys", preview)
+	}
+	if _, err := ApplyReconciliation(doc, candidate, 1, now, uuid.New); !errors.Is(err, ErrAmbiguousMapping) {
+		t.Fatalf("err=%v want ambiguous mapping", err)
+	}
+}
+
+type mutableResolver struct {
+	states []DependencyState
+}
+
+func (r *mutableResolver) State(context.Context, uuid.UUID, Document) ([]DependencyState, error) {
+	return r.states, nil
+}
+
+func mustDependencyFingerprint(t *testing.T, states []DependencyState) string {
+	fingerprint, err := DependencyFingerprint(states)
+	if err != nil {
+		t.Fatalf("DependencyFingerprint: %v", err)
+	}
+	return fingerprint
 }
 
 func TestReconciliationRejectsStaleWriter(t *testing.T) {

@@ -55,14 +55,25 @@ type reconcilePreviewDigestPayload struct {
 	FromRevision         int                `json:"from_revision"`
 	FromScenePlanVersion int                `json:"from_scene_plan_version"`
 	ToScenePlanVersion   int                `json:"to_scene_plan_version"`
+	UpstreamFingerprint  string             `json:"upstream_fingerprint"`
 	Candidate            ReconcileCandidate `json:"candidate"`
 }
 
-func ReconcilePreviewDigest(fromRevision, fromScenePlanVersion, toScenePlanVersion int, candidate ReconcileCandidate) (string, error) {
+func DependencyFingerprint(states []DependencyState) (string, error) {
+	encoded, err := json.Marshal(states)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func ReconcilePreviewDigest(fromRevision, fromScenePlanVersion, toScenePlanVersion int, candidate ReconcileCandidate, upstreamFingerprint string) (string, error) {
 	payload := reconcilePreviewDigestPayload{
 		FromRevision:         fromRevision,
 		FromScenePlanVersion: fromScenePlanVersion,
 		ToScenePlanVersion:   toScenePlanVersion,
+		UpstreamFingerprint:  upstreamFingerprint,
 		Candidate:            candidate,
 	}
 	encoded, err := json.Marshal(payload)
@@ -119,6 +130,14 @@ func PreviewReconciliation(doc Document, candidate ReconcileCandidate) (Reconcil
 
 	for _, candidateScene := range candidate.Scenes {
 		if duplicates[candidateScene.SceneKey] {
+			if _, exists := compositionKeys[candidateScene.SceneKey]; !exists {
+				preview.Ambiguous = true
+				preview.Changes = append(preview.Changes, ReconcileChange{
+					SceneKey:       candidateScene.SceneKey,
+					Reasons:        []ReconcileReason{ReconcileMissingSource},
+					PreservesEdits: false,
+				})
+			}
 			continue
 		}
 		if _, exists := compositionKeys[candidateScene.SceneKey]; exists {
@@ -131,11 +150,6 @@ func PreviewReconciliation(doc Document, candidate ReconcileCandidate) (Reconcil
 		})
 	}
 
-	digest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, candidate.ScenePlanVersion, candidate)
-	if err != nil {
-		return ReconcilePreview{}, err
-	}
-	preview.PreviewDigest = digest
 	return preview, nil
 }
 
@@ -154,9 +168,12 @@ func ApplyReconciliation(doc Document, candidate ReconcileCandidate, expectedRev
 		newID = uuid.New
 	}
 
-	byKey, _, err := indexCandidateScenes(candidate.Scenes)
+	byKey, duplicates, err := indexCandidateScenes(candidate.Scenes)
 	if err != nil {
 		return Document{}, err
+	}
+	if len(duplicates) > 0 {
+		return Document{}, ErrAmbiguousMapping
 	}
 	compositionByKey := make(map[string]Scene, len(doc.Scenes))
 	for _, scene := range doc.Scenes {
@@ -164,10 +181,13 @@ func ApplyReconciliation(doc Document, candidate ReconcileCandidate, expectedRev
 	}
 
 	updated := doc
-	updated.Scenes = make([]Scene, 0, len(candidate.Scenes))
+	updated.Scenes = make([]Scene, 0, len(byKey))
 	updated.ScenePlanVersion = candidate.ScenePlanVersion
 	updated.AudioMix = cloneAudioMix(candidate.AudioMix)
 	for _, candidateScene := range candidate.Scenes {
+		if duplicates[candidateScene.SceneKey] {
+			continue
+		}
 		mapped := byKey[candidateScene.SceneKey]
 		if existing, ok := compositionByKey[candidateScene.SceneKey]; ok {
 			scene := existing
