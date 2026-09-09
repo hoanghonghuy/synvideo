@@ -16,6 +16,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/s3storage"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/testfixtures"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers/fake"
@@ -40,7 +41,7 @@ func TestGeneratedImageAcquisitionIntegrationPersistsAndRecovers(t *testing.T) {
 		t.Fatalf("create owner B project: %v", err)
 	}
 
-	generator := fake.NewImageGenerator([]byte("durable generated image"))
+	generator := fake.NewImageGenerator(testfixtures.MinimalPNG)
 	runtime := integrationImageRuntime{generator: generator}
 	handler := generatedimagejob.NewHandler(runtime, assetStore, nil)
 	jobID := uuid.New()
@@ -77,7 +78,7 @@ func TestGeneratedImageAcquisitionIntegrationPersistsAndRecovers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get persisted asset: %v", err)
 	}
-	if asset.Origin != mediaasset.OriginGeneratedImage || asset.ByteSize != int64(len("durable generated image")) {
+	if asset.Origin != mediaasset.OriginGeneratedImage || asset.ByteSize != int64(len(testfixtures.MinimalPNG)) {
 		t.Fatalf("unexpected persisted asset: %+v", asset)
 	}
 	reader, err := assetService.Open(context.Background(), project.Principal{OwnerID: ownerA}, projectA.ID, asset.ID)
@@ -86,7 +87,7 @@ func TestGeneratedImageAcquisitionIntegrationPersistsAndRecovers(t *testing.T) {
 	}
 	content, readErr := io.ReadAll(reader)
 	closeErr := reader.Close()
-	if readErr != nil || closeErr != nil || string(content) != "durable generated image" {
+	if readErr != nil || closeErr != nil || string(content) != string(testfixtures.MinimalPNG) {
 		t.Fatalf("unexpected persisted object: content=%q read_err=%v close_err=%v", content, readErr, closeErr)
 	}
 	t.Cleanup(func() { _ = storage.Delete(context.Background(), asset.ObjectKey) })

@@ -1,6 +1,7 @@
 package mediaasset
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/ingestvalidation"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
@@ -22,14 +24,21 @@ const (
 )
 
 type Service struct {
-	projects project.Repository
-	repo     Repository
-	storage  ObjectStorage
-	now      func() time.Time
+	projects  project.Repository
+	repo      Repository
+	storage   ObjectStorage
+	validator *ingestvalidation.Validator
+	now       func() time.Time
 }
 
 func NewService(projects project.Repository, repo Repository, storage ObjectStorage) *Service {
-	return &Service{projects: projects, repo: repo, storage: storage, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{
+		projects:  projects,
+		repo:      repo,
+		storage:   storage,
+		validator: ingestvalidation.NewValidator(nil),
+		now:       func() time.Time { return time.Now().UTC() },
+	}
 }
 
 func (s *Service) Store(ctx context.Context, principal project.Principal, projectID uuid.UUID, input CreateInput) (MediaAsset, error) {
@@ -52,24 +61,26 @@ func (s *Service) Store(ctx context.Context, principal project.Principal, projec
 		return MediaAsset{}, ErrInvalidInput
 	}
 
+	declaredMIME := input.MimeType
+	verified, payload, err := s.validator.ValidateReader(ctx, input.Reader, ingestvalidation.DeclaredInput{
+		Kind:     toIngestKind(input.Kind),
+		MimeType: input.MimeType,
+	}, input.MaxBytes)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return MediaAsset{}, err
+		}
+		return MediaAsset{}, mapIngestValidationError(err)
+	}
+
 	assetID := uuid.New()
 	objectKey := fmt.Sprintf("projects/%s/assets/%s", projectID, assetID)
 	digest := &countingHash{Hash: sha256.New()}
-	body := input.Reader
-	var bounded *maxBytesReader
-	if input.MaxBytes > 0 {
-		bounded = &maxBytesReader{reader: body, max: input.MaxBytes}
-		body = bounded
-	}
-	_, err := s.storage.Put(ctx, PutObjectInput{
+	_, err = s.storage.Put(ctx, PutObjectInput{
 		Key:         objectKey,
-		Body:        io.TeeReader(body, digest),
-		ContentType: input.MimeType,
+		Body:        io.TeeReader(bytes.NewReader(payload), digest),
+		ContentType: verified.MimeType,
 	})
-	if bounded != nil && bounded.exceeded {
-		_ = s.compensateDelete(objectKey)
-		return MediaAsset{}, ErrTooLarge
-	}
 	if err != nil {
 		return MediaAsset{}, mapStorageError(err)
 	}
@@ -78,14 +89,14 @@ func (s *Service) Store(ctx context.Context, principal project.Principal, projec
 		ID:               assetID,
 		OwnerID:          principal.OwnerID,
 		ProjectID:        projectID,
-		Kind:             input.Kind,
+		Kind:             fromIngestKind(verified.Kind),
 		Origin:           input.Origin,
 		ObjectKey:        objectKey,
-		MimeType:         input.MimeType,
+		MimeType:         verified.MimeType,
 		ByteSize:         digest.Size,
 		SHA256:           hex.EncodeToString(digest.Sum(nil)),
 		OriginalFilename: input.OriginalFilename,
-		Metadata:         append([]byte(nil), input.Metadata...),
+		Metadata:         mergeDeclaredMIME(input.Metadata, declaredMIME, verified.MimeType),
 		CreatedAt:        s.now(),
 		UpdatedAt:        s.now(),
 	}

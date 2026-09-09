@@ -1,6 +1,7 @@
 package mediaasset_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/testfixtures"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
@@ -27,7 +29,7 @@ func validCreateInput() mediaasset.CreateInput {
 		MimeType:         "image/png",
 		OriginalFilename: "cover.png",
 		Metadata:         []byte(`{"width":1920,"height":1080}`),
-		Reader:           strings.NewReader("media bytes"),
+		Reader:           bytes.NewReader(testfixtures.MinimalPNG),
 	}
 }
 
@@ -257,7 +259,7 @@ func TestServiceStoreCalculatesStreamingMetadataAndUsesScopedKey(t *testing.T) {
 	metadata := []byte(`{"width":1920}`)
 	input := validCreateInput()
 	input.Metadata = metadata
-	input.Reader = strings.NewReader("media bytes")
+	input.Reader = bytes.NewReader(testfixtures.MinimalPNG)
 	repository := &fakeMetadataRepository{}
 	storage := &fakeObjectStorage{}
 	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
@@ -266,8 +268,8 @@ func TestServiceStoreCalculatesStreamingMetadataAndUsesScopedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	wantHash := sha256.Sum256([]byte("media bytes"))
-	if asset.ByteSize != int64(len("media bytes")) || asset.SHA256 != hex.EncodeToString(wantHash[:]) {
+	wantHash := sha256.Sum256(testfixtures.MinimalPNG)
+	if asset.ByteSize != int64(len(testfixtures.MinimalPNG)) || asset.SHA256 != hex.EncodeToString(wantHash[:]) {
 		t.Fatalf("unexpected integrity metadata: %+v", asset)
 	}
 	if !strings.HasPrefix(asset.ObjectKey, "projects/"+projectID.String()+"/assets/") || strings.Contains(asset.ObjectKey, "..") {
@@ -283,8 +285,8 @@ func TestServiceStoreCalculatesStreamingMetadataAndUsesScopedKey(t *testing.T) {
 
 func TestServiceStoreRejectsOversizedReaderWithoutPersistingMetadata(t *testing.T) {
 	input := validCreateInput()
-	input.MaxBytes = int64(len("media bytes") - 1)
-	input.Reader = strings.NewReader("media bytes")
+	input.MaxBytes = int64(len(testfixtures.MinimalPNG) - 1)
+	input.Reader = bytes.NewReader(testfixtures.MinimalPNG)
 	repository := &fakeMetadataRepository{}
 	storage := &fakeObjectStorage{}
 	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
@@ -296,8 +298,62 @@ func TestServiceStoreRejectsOversizedReaderWithoutPersistingMetadata(t *testing.
 	if repository.created.ID != uuid.Nil {
 		t.Fatal("oversized upload persisted metadata")
 	}
-	if storage.putCalls != 1 || storage.deleteCalls != 1 {
-		t.Fatalf("expected bounded storage attempt and compensation, puts=%d deletes=%d", storage.putCalls, storage.deleteCalls)
+	if storage.putCalls != 0 || storage.deleteCalls != 0 {
+		t.Fatalf("expected validation to reject before storage write, puts=%d deletes=%d", storage.putCalls, storage.deleteCalls)
+	}
+}
+
+func TestServiceStoreRejectsSpoofedMIMEBeforePersisting(t *testing.T) {
+	input := validCreateInput()
+	input.MimeType = "image/jpeg"
+	input.Reader = bytes.NewReader(testfixtures.MinimalPNG)
+	repository := &fakeMetadataRepository{}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	_, err := service.Store(context.Background(), project.Principal{OwnerID: ownerID}, projectID, input)
+	if !errors.Is(err, mediaasset.ErrContentMismatch) {
+		t.Fatalf("expected content mismatch, got %v", err)
+	}
+	if repository.created.ID != uuid.Nil || storage.putCalls != 0 {
+		t.Fatal("spoofed upload persisted metadata or object")
+	}
+}
+
+func TestServiceStoreRejectsMalformedContentBeforePersisting(t *testing.T) {
+	input := validCreateInput()
+	input.Reader = strings.NewReader("not-a-png")
+	repository := &fakeMetadataRepository{}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	_, err := service.Store(context.Background(), project.Principal{OwnerID: ownerID}, projectID, input)
+	if err == nil || errors.Is(err, mediaasset.ErrContentMismatch) {
+		t.Fatalf("expected malformed rejection, got %v", err)
+	}
+	if repository.created.ID != uuid.Nil || storage.putCalls != 0 {
+		t.Fatal("malformed upload persisted metadata or object")
+	}
+}
+
+func TestServiceStorePersistsVerifiedMIMEAndDeclaredProvenance(t *testing.T) {
+	input := validCreateInput()
+	input.MimeType = "image/png"
+	input.Metadata = []byte(`{"width":1920}`)
+	input.Reader = bytes.NewReader(testfixtures.MinimalPNG)
+	repository := &fakeMetadataRepository{}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	asset, err := service.Store(context.Background(), project.Principal{OwnerID: ownerID}, projectID, input)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if asset.MimeType != "image/png" {
+		t.Fatalf("verified mime = %q", asset.MimeType)
+	}
+	if strings.Contains(string(repository.created.Metadata), "declared_mime_type") {
+		t.Fatalf("unexpected declared provenance for matching mime: %s", repository.created.Metadata)
 	}
 }
 

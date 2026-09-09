@@ -342,8 +342,16 @@ func writeMediaAssetAPIError(w http.ResponseWriter, err error) {
 		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_INVALID", Message: "Media asset request is invalid.", Fields: validation.Fields}})
 	case errors.Is(err, mediaasset.ErrTooLarge):
 		writeProjectJSON(w, http.StatusRequestEntityTooLarge, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_TOO_LARGE", Message: "Media asset exceeds the upload limit."}})
-	case errors.Is(err, mediaasset.ErrUnsupportedType):
+	case errors.Is(err, mediaasset.ErrUnsupportedType), errors.Is(err, mediaasset.ErrContentUnsupported):
 		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_UNSUPPORTED_TYPE", Message: "Media asset type is not supported."}})
+	case errors.Is(err, mediaasset.ErrContentMalformed):
+		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_CONTENT_MALFORMED", Message: "Media asset content is malformed or truncated."}})
+	case errors.Is(err, mediaasset.ErrContentMismatch):
+		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_CONTENT_MISMATCH", Message: "Media asset content does not match the declared type."}})
+	case errors.Is(err, mediaasset.ErrContentValidationTimeout):
+		writeProjectJSON(w, http.StatusGatewayTimeout, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_VALIDATION_TIMEOUT", Message: "Media asset validation timed out."}})
+	case errors.Is(err, mediaasset.ErrContentValidationFailed):
+		writeProjectJSON(w, http.StatusBadGateway, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_VALIDATION_FAILED", Message: "Media asset validation could not be completed."}})
 	case errors.Is(err, mediaasset.ErrInvalidInput), errors.Is(err, mediaasset.ErrRangeInvalid):
 		writeProjectJSON(w, http.StatusBadRequest, errorEnvelope{Error: apiError{Code: "MEDIA_ASSET_INVALID", Message: "Media asset request is invalid."}})
 	case errors.Is(err, mediaasset.ErrNotFound), errors.Is(err, mediaasset.ErrObjectNotFound):
