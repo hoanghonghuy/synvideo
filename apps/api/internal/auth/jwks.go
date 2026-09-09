@@ -48,11 +48,24 @@ type JWKSCache struct {
 	httpClient     *http.Client
 	cacheTTL       time.Duration
 	refreshBackoff time.Duration
+	now            func() time.Time
 	mu             sync.RWMutex
 	keys           map[string]cachedKey
 	setExpires     time.Time
 	nextRefreshAt  time.Time
 	refreshGroup   singleflight.Group
+}
+
+// SetNowFunc overrides the cache clock. Intended for deterministic tests.
+func (c *JWKSCache) SetNowFunc(now func() time.Time) {
+	c.now = now
+}
+
+func (c *JWKSCache) nowTime() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
 }
 
 func NewJWKSCache(jwksURL string, httpClient *http.Client, cacheTTL time.Duration) *JWKSCache {
@@ -77,7 +90,7 @@ func (c *JWKSCache) Key(ctx context.Context, kid string) (crypto.PublicKey, erro
 		return nil, ErrJWKSKeyNotFound
 	}
 
-	now := time.Now()
+	now := c.nowTime()
 	c.mu.RLock()
 	entry, hasKey := c.keys[kid]
 	snapshotFresh := c.snapshotFresh(now)
@@ -94,7 +107,7 @@ func (c *JWKSCache) Key(ctx context.Context, kid string) (crypto.PublicKey, erro
 		return nil, err
 	}
 
-	now = time.Now()
+	now = c.nowTime()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entry, hasKey = c.keys[kid]
@@ -121,7 +134,7 @@ func (c *JWKSCache) ensureSnapshot(ctx context.Context, now time.Time) error {
 	c.mu.RUnlock()
 
 	_, err, _ := c.refreshGroup.Do("jwks", func() (any, error) {
-		now := time.Now()
+		now := c.nowTime()
 		c.mu.RLock()
 		snapshotFresh := c.snapshotFresh(now)
 		throttled := !c.nextRefreshAt.IsZero() && now.Before(c.nextRefreshAt)
@@ -134,7 +147,7 @@ func (c *JWKSCache) ensureSnapshot(ctx context.Context, now time.Time) error {
 		}
 		if err := c.refresh(ctx); err != nil {
 			c.mu.Lock()
-			c.nextRefreshAt = time.Now().Add(c.refreshBackoff)
+			c.nextRefreshAt = c.nowTime().Add(c.refreshBackoff)
 			c.mu.Unlock()
 			return nil, err
 		}
@@ -170,7 +183,7 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 	}
 
 	keys := make(map[string]cachedKey, len(set.Keys))
-	expiresAt := time.Now().Add(c.cacheTTL)
+	expiresAt := c.nowTime().Add(c.cacheTTL)
 	for _, key := range set.Keys {
 		if strings.ToUpper(key.Kty) != "RSA" || key.Kid == "" {
 			continue

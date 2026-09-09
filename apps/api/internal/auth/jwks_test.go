@@ -73,8 +73,10 @@ func TestJWKSCacheAllowsRotatedKeyAfterSnapshotExpires(t *testing.T) {
 	fixture := testutil.StartJWKSFixture()
 	defer fixture.Close()
 
-	cacheTTL := 40 * time.Millisecond
+	clock := manualClock{current: time.Unix(1_700_000_000, 0)}
+	cacheTTL := time.Minute
 	cache := auth.NewJWKSCache(fixture.Server.URL+"/jwks", fixture.Server.Client(), cacheTTL)
+	cache.SetNowFunc(clock.Now)
 	verifier := mustVerifierWithCache(t, fixture, cache)
 
 	if _, err := verifier.Verify(context.Background(), fixture.SignToken("prime-user")); err != nil {
@@ -84,6 +86,7 @@ func TestJWKSCacheAllowsRotatedKeyAfterSnapshotExpires(t *testing.T) {
 		t.Fatalf("expected initial JWKS fetch, got %d", fixture.JWKSFetchCount())
 	}
 
+	// Publish rotated key only after the snapshot is cached; clock stays frozen so TTL cannot elapse.
 	rotatedKey := fixture.AddRotatedKey("rotated-key-2")
 	rotatedToken := fixture.SignTokenWithKey("rotated-key-2", rotatedKey, "user-rotated")
 
@@ -94,7 +97,7 @@ func TestJWKSCacheAllowsRotatedKeyAfterSnapshotExpires(t *testing.T) {
 		t.Fatalf("expected no additional fetch before snapshot expiry, got %d", fixture.JWKSFetchCount())
 	}
 
-	time.Sleep(cacheTTL + 20*time.Millisecond)
+	clock.Advance(cacheTTL + time.Second)
 
 	if _, err := verifier.Verify(context.Background(), rotatedToken); err != nil {
 		t.Fatalf("expected rotated key after snapshot refresh, got %v", err)
@@ -102,6 +105,18 @@ func TestJWKSCacheAllowsRotatedKeyAfterSnapshotExpires(t *testing.T) {
 	if fixture.JWKSFetchCount() != 2 {
 		t.Fatalf("expected one refresh after snapshot expiry, got %d fetches", fixture.JWKSFetchCount())
 	}
+}
+
+type manualClock struct {
+	current time.Time
+}
+
+func (c *manualClock) Now() time.Time {
+	return c.current
+}
+
+func (c *manualClock) Advance(d time.Duration) {
+	c.current = c.current.Add(d)
 }
 
 func mustVerifierWithCache(t *testing.T, fixture *testutil.JWKSFixture, cache *auth.JWKSCache) *auth.JWTVerifier {
