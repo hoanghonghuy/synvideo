@@ -21,9 +21,9 @@ Browser traffic is intentionally **cross-origin**: Vercel web origin → Render 
 - **Output:** `apps/web/dist`
 - **Manifest:** `apps/web/vercel.json` (SPA rewrite + edge security headers)
 - **Client API base:** `VITE_API_BASE_URL` (configured API origin, no trailing slash)
-- **CSP:** injected into built `index.html` at Vite build time from `VITE_API_BASE_URL` (`apps/web/scripts/production-csp.mjs`)
+- **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.json`; `apps/web/scripts/sync-vercel-csp.mjs` materializes the header from `VITE_API_BASE_URL` before Vercel install/build (`--require-api-base-url`). The same shared builder (`production-csp.mjs`) also injects a matching meta CSP into built `index.html` for defense-in-depth.
 
-Vercel owns web TLS termination and response security headers. `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` are set in `vercel.json`. `Content-Security-Policy` is **not** hard-coded in static config: the production build derives `connect-src` from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`, so a custom API domain or non-default production API origin remains permitted without editing provider-specific host wildcards. `scripts/deploy/validate-deployment-config.sh` builds with a fixture API URL and asserts the delivered HTML CSP includes that origin.
+Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` requires the CSP response header, syncs a fixture API URL into a temporary `vercel.json`, and asserts both the edge header and built HTML include that origin.
 
 ### API (Render)
 

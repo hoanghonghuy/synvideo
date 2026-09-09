@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
-  "installCommand": "npm ci",
+  "installCommand": "node scripts/sync-vercel-csp.mjs --require-api-base-url && npm ci",
+  "buildCommand": "node scripts/sync-vercel-csp.mjs --require-api-base-url && npm run build",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
@@ -25,6 +25,10 @@
         {
           "key": "Referrer-Policy",
           "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         }
       ]
     }
