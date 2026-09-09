@@ -32,9 +32,16 @@ type Validator struct {
 }
 
 func NewValidator(runner CommandRunner) *Validator {
+	return NewValidatorWithProbeLimit(runner, DefaultMaxConcurrentProbes)
+}
+
+func NewValidatorWithProbeLimit(runner CommandRunner, limit int) *Validator {
+	if limit < 1 {
+		limit = DefaultMaxConcurrentProbes
+	}
 	return &Validator{
 		runner:     runner,
-		probeSlots: make(chan struct{}, DefaultMaxConcurrentProbes),
+		probeSlots: make(chan struct{}, limit),
 	}
 }
 

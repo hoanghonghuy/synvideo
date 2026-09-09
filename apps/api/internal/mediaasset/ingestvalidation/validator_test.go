@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,7 @@ func TestValidateImageFamiliesAcceptValidFixtures(t *testing.T) {
 		{"jpeg", minimalJPEG, "image/jpeg"},
 		{"gif", minimalGIF, "image/gif"},
 		{"webp", minimalWebP, "image/webp"},
+		{"avif", minimalAVIF, "image/avif"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,13 +83,39 @@ func TestValidateImageRejectsSpoofedMIME(t *testing.T) {
 func TestValidateImageRejectsMalformedAndTruncated(t *testing.T) {
 	validator := ingestvalidation.NewValidator(nil)
 	for name, data := range map[string][]byte{
-		"truncated": minimalPNG[:16],
-		"garbage":   []byte("not-an-image"),
+		"truncated-png": minimalPNG[:16],
+		"garbage":       []byte("not-an-image"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := writeTempFile(t, data)
 			_, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{
 				Kind: ingestvalidation.KindImage, MimeType: "image/png",
+			})
+			if err == nil || errors.Is(err, ingestvalidation.ErrMismatch) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateImageRejectsHeaderOnlyTruncatedPayloads(t *testing.T) {
+	validator := ingestvalidation.NewValidator(nil)
+	cases := map[string]struct {
+		data []byte
+		mime string
+	}{
+		"jpeg-app-only":      {data: []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02}, mime: "image/jpeg"},
+		"jpeg-missing-eoi":   {data: minimalJPEG[:len(minimalJPEG)-2], mime: "image/jpeg"},
+		"webp-fourcc-only":   {data: minimalWebP[:20], mime: "image/webp"},
+		"webp-truncated-vp8": {data: minimalWebP[:len(minimalWebP)-10], mime: "image/webp"},
+		"avif-ftyp-only":     {data: minimalAVIF[:32], mime: "image/avif"},
+		"png-missing-iend":   {data: minimalPNG[:len(minimalPNG)-12], mime: "image/png"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeTempFile(t, tc.data)
+			_, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{
+				Kind: ingestvalidation.KindImage, MimeType: tc.mime,
 			})
 			if err == nil || errors.Is(err, ingestvalidation.ErrMismatch) {
 				t.Fatalf("error = %v", err)
@@ -105,6 +133,7 @@ func TestValidateProbeFamiliesAcceptValidFixtures(t *testing.T) {
 		mime string
 	}{
 		{"mp4", ffmpegFixture(t, ".mp4", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libx264", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/mp4"},
+		{"quicktime", ffmpegFixture(t, ".mov", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libx264", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/quicktime"},
 		{"webm", ffmpegFixture(t, ".webm", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/webm"},
 		{"wav", ffmpegFixture(t, ".wav", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1"), ingestvalidation.KindAudio, "audio/wav"},
 		{"mp3", ffmpegFixture(t, ".mp3", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "libmp3lame"), ingestvalidation.KindAudio, "audio/mpeg"},
@@ -267,26 +296,97 @@ func TestValidateProbeInfrastructureFailureDoesNotLeakDetails(t *testing.T) {
 	}
 }
 
-func TestConcurrentProbeAdmissionIsBounded(t *testing.T) {
-	runner := &commandRunnerStub{delay: 100 * time.Millisecond, responses: []struct {
-		output []byte
-		err    error
-	}{
-		{output: []byte(`{"format":{"format_name":"wav"},"streams":[{"codec_type":"audio"}]}`)},
-		{output: []byte(`{"format":{"format_name":"wav"},"streams":[{"codec_type":"audio"}]}`)},
-		{output: []byte(`{"format":{"format_name":"wav"},"streams":[{"codec_type":"audio"}]}`)},
-	}}
-	validator := ingestvalidation.NewValidator(runner)
-	path := writeTempFile(t, []byte("fixture"))
+type saturatedProbeRunner struct {
+	mu          sync.Mutex
+	active      int
+	maxActive   int
+	invocations int
+	release     chan struct{}
+	probeOutput []byte
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-	_, err := validator.ValidateFile(ctx, path, ingestvalidation.DeclaredInput{
-		Kind: ingestvalidation.KindAudio, MimeType: "audio/wav",
-	})
-	if err == nil {
-		t.Fatal("expected timeout or cancellation under saturated probe slots")
+func (r *saturatedProbeRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	r.mu.Lock()
+	r.active++
+	r.invocations++
+	if r.active > r.maxActive {
+		r.maxActive = r.active
 	}
+	r.mu.Unlock()
+
+	select {
+	case <-r.release:
+	case <-ctx.Done():
+		r.mu.Lock()
+		r.active--
+		r.mu.Unlock()
+		return nil, ctx.Err()
+	}
+
+	r.mu.Lock()
+	r.active--
+	r.mu.Unlock()
+	return r.probeOutput, nil
+}
+
+func TestConcurrentProbeAdmissionIsBounded(t *testing.T) {
+	const limit = 3
+	runner := &saturatedProbeRunner{
+		release:     make(chan struct{}),
+		probeOutput: []byte(`{"format":{"format_name":"wav"},"streams":[{"codec_type":"audio"}]}`),
+	}
+	validator := ingestvalidation.NewValidatorWithProbeLimit(runner, limit)
+	path := writeTempFile(t, []byte("fixture"))
+	declared := ingestvalidation.DeclaredInput{Kind: ingestvalidation.KindAudio, MimeType: "audio/wav"}
+
+	var wg sync.WaitGroup
+	for i := 0; i < limit; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := validator.ValidateFile(context.Background(), path, declared)
+			if err != nil {
+				t.Errorf("saturating probe failed: %v", err)
+			}
+		}()
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		runner.mu.Lock()
+		active := runner.active
+		runner.mu.Unlock()
+		if active == limit {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	runner.mu.Lock()
+	if runner.maxActive != limit || runner.active != limit {
+		t.Fatalf("probe slots not saturated: active=%d maxActive=%d limit=%d", runner.active, runner.maxActive, limit)
+	}
+	invocationsBeforeWaiter := runner.invocations
+	runner.mu.Unlock()
+
+	waiterCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := validator.ValidateFile(waiterCtx, path, declared)
+	if err == nil {
+		t.Fatal("expected blocked waiter to fail without starting another probe")
+	}
+
+	runner.mu.Lock()
+	if runner.maxActive > limit {
+		t.Fatalf("admission exceeded limit: maxActive=%d limit=%d", runner.maxActive, limit)
+	}
+	if runner.invocations != invocationsBeforeWaiter {
+		t.Fatalf("waiter spawned extra probe: invocations=%d before=%d", runner.invocations, invocationsBeforeWaiter)
+	}
+	runner.mu.Unlock()
+
+	close(runner.release)
+	wg.Wait()
 }
 
 func TestAVIFRequiresBrand(t *testing.T) {
