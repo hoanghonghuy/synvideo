@@ -88,6 +88,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci
       - run: chmod +x scripts/deploy/*.sh
       - run: ./scripts/deploy/validate-deployment-config.sh
       - run: docker build -f apps/api/Dockerfile apps/api

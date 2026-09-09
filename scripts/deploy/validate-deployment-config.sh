@@ -26,12 +26,21 @@ required_header_keys = {
     "X-Content-Type-Options",
     "X-Frame-Options",
     "Referrer-Policy",
-    "Content-Security-Policy",
 }
+forbidden_csp_header = "Content-Security-Policy"
 found = set()
+vercel_text = vercel.read_text()
+if "onrender.com" in vercel_text.lower():
+    sys.exit("apps/web/vercel.json must not hard-code provider-specific API hosts")
 for group in headers:
     for header in group.get("headers", []):
-        found.add(header.get("key"))
+        key = header.get("key")
+        found.add(key)
+        if key == forbidden_csp_header:
+            sys.exit(
+                "apps/web/vercel.json must not define static Content-Security-Policy; "
+                "CSP connect-src is injected at build time from VITE_API_BASE_URL"
+            )
 missing = required_header_keys - found
 if missing:
     sys.exit(f"apps/web/vercel.json missing security headers: {sorted(missing)}")
@@ -56,3 +65,19 @@ test -f "${ROOT}/.env.production.example"
 grep -q 'SYNVIDEO_CORS_ALLOWED_ORIGINS' "${ROOT}/.env.production.example"
 grep -q 'VITE_API_BASE_URL' "${ROOT}/.env.production.example"
 echo ".env.production.example: OK"
+
+FIXTURE_API_BASE_URL="https://api.qa-fixture.synvideo.example"
+echo "validating build-time CSP alignment for ${FIXTURE_API_BASE_URL}"
+(
+  cd "${ROOT}/apps/web"
+  VITE_API_BASE_URL="${FIXTURE_API_BASE_URL}" npm run build >/tmp/synvideo-csp-build.log 2>&1
+  grep -q "connect-src 'self' ${FIXTURE_API_BASE_URL}" dist/index.html
+  if grep -qi 'onrender.com' dist/index.html; then
+    echo "built index.html contains hard-coded onrender.com CSP host" >&2
+    exit 1
+  fi
+)
+echo "build-time CSP validation: OK"
+
+node --test "${ROOT}/apps/web/scripts/production-csp.test.mjs"
+echo "production-csp unit tests: OK"

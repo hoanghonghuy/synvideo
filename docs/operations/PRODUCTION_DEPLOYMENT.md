@@ -19,10 +19,11 @@ Browser traffic is intentionally **cross-origin**: Vercel web origin → Render 
 - **Install (monorepo root):** `npm ci`
 - **Build:** `npm run build` (runs `vue-tsc`, `vite build`)
 - **Output:** `apps/web/dist`
-- **Manifest:** `apps/web/vercel.json` (SPA rewrite + security headers)
-- **Client API base:** `VITE_API_BASE_URL` (Render API origin, no trailing slash)
+- **Manifest:** `apps/web/vercel.json` (SPA rewrite + edge security headers)
+- **Client API base:** `VITE_API_BASE_URL` (configured API origin, no trailing slash)
+- **CSP:** injected into built `index.html` at Vite build time from `VITE_API_BASE_URL` (`apps/web/scripts/production-csp.mjs`)
 
-Vercel owns web TLS termination and response security headers (`Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`). CSP `connect-src` includes `https://*.onrender.com` for the frozen Render API edge; tighten to the exact API origin when known.
+Vercel owns web TLS termination and response security headers. `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` are set in `vercel.json`. `Content-Security-Policy` is **not** hard-coded in static config: the production build derives `connect-src` from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`, so a custom API domain or non-default production API origin remains permitted without editing provider-specific host wildcards. `scripts/deploy/validate-deployment-config.sh` builds with a fixture API URL and asserts the delivered HTML CSP includes that origin.
 
 ### API (Render)
 
@@ -139,6 +140,7 @@ Checks:
 | --- | --- |
 | `503` on `readyz` | Neon connectivity, S3 credentials/bucket, Render logs |
 | Browser CORS failure | `SYNVIDEO_CORS_ALLOWED_ORIGINS` matches exact Vercel origin (scheme + host) |
+| Browser API blocked with no network error detail | Built `index.html` CSP `connect-src` must include the same origin as `VITE_API_BASE_URL`; redeploy web after API URL changes |
 | Migration deploy failure | Render pre-deploy logs for `synvideo-migrate`; do not restart API hoping it migrates |
 | Missing FFmpeg | `GET /api/v1/runtime/toolchain` and Dockerfile build logs |
 | Upload failures | `SYNVIDEO_MEDIA_MAX_UPLOAD_BYTES`, reverse-proxy limits per `docs/operations/http-resource-bounds.md` |
