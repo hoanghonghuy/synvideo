@@ -1,5 +1,15 @@
 import { buildProductionContentSecurityPolicy } from './production-csp.mjs'
 
+export const VERCEL_MONOREPO_CONTRACT = {
+  rootDirectory: '.',
+  configPath: 'vercel.mjs',
+  lockfilePath: 'package-lock.json',
+  workspacePath: 'apps/web',
+  installCommand: 'npm ci',
+  buildCommand: 'npm run build:web',
+  outputDirectory: 'apps/web/dist',
+}
+
 export const REQUIRED_SECURITY_HEADER_KEYS = [
   'X-Content-Type-Options',
   'X-Frame-Options',
@@ -31,9 +41,9 @@ export function buildVercelDeploymentConfig(apiBaseUrl, { requireApiBaseUrl = tr
     : String(apiBaseUrl ?? '').trim()
 
   return {
-    installCommand: 'npm ci',
-    buildCommand: 'npm run build',
-    outputDirectory: 'dist',
+    installCommand: VERCEL_MONOREPO_CONTRACT.installCommand,
+    buildCommand: VERCEL_MONOREPO_CONTRACT.buildCommand,
+    outputDirectory: VERCEL_MONOREPO_CONTRACT.outputDirectory,
     framework: null,
     rewrites: [
       {

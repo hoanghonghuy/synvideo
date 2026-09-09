@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  VERCEL_MONOREPO_CONTRACT,
   buildVercelDeploymentConfig,
   buildVercelSecurityHeaders,
   getVercelContentSecurityPolicy,
@@ -25,10 +26,20 @@ test('buildVercelDeploymentConfig materializes required security headers', () =>
   const config = buildVercelDeploymentConfig('https://api.custom.example')
   const csp = getVercelContentSecurityPolicy(config)
   assert.match(csp, /connect-src 'self' https:\/\/api\.custom\.example/)
-  assert.equal(config.installCommand, 'npm ci')
-  assert.equal(config.buildCommand, 'npm run build')
-  assert.equal(config.outputDirectory, 'dist')
+  assert.equal(config.installCommand, VERCEL_MONOREPO_CONTRACT.installCommand)
+  assert.equal(config.buildCommand, VERCEL_MONOREPO_CONTRACT.buildCommand)
+  assert.equal(config.outputDirectory, VERCEL_MONOREPO_CONTRACT.outputDirectory)
   assert.deepEqual(config.rewrites, [{ source: '/(.*)', destination: '/index.html' }])
+})
+
+test('VERCEL_MONOREPO_CONTRACT targets repository-root workspace install and build', () => {
+  assert.equal(VERCEL_MONOREPO_CONTRACT.rootDirectory, '.')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.configPath, 'vercel.mjs')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.lockfilePath, 'package-lock.json')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.workspacePath, 'apps/web')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.installCommand, 'npm ci')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.buildCommand, 'npm run build:web')
+  assert.equal(VERCEL_MONOREPO_CONTRACT.outputDirectory, 'apps/web/dist')
 })
 
 test('buildVercelDeploymentConfig fails when API base URL is required but missing', () => {

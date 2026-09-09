@@ -15,15 +15,16 @@ Browser traffic is intentionally **cross-origin**: Vercel web origin → Render 
 
 ### Web (Vercel)
 
-- **Repository path:** `apps/web`
-- **Install (monorepo root):** `npm ci`
-- **Build:** `npm run build` (runs `vue-tsc`, `vite build`)
+- **Vercel Root Directory:** repository root (`.`) — required so `npm ci` uses the root `package-lock.json` and npm workspaces contract
+- **Workspace package:** `apps/web` (`@synvideo/web`)
+- **Install:** `npm ci` (repository root; lockfile at `package-lock.json`)
+- **Build:** `npm run build:web` (root script → `npm --workspace apps/web run build`, runs `vue-tsc`, `vite build`)
 - **Output:** `apps/web/dist`
-- **Manifest:** `apps/web/vercel.mjs` (dynamic Vercel deployment config: SPA rewrite + edge security headers)
+- **Manifest:** `vercel.mjs` at repository root (dynamic Vercel deployment config: SPA rewrite + edge security headers)
 - **Client API base:** `VITE_API_BASE_URL` (configured API origin, no trailing slash)
 - **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.mjs`; `apps/web/scripts/vercel-config.mjs` builds the deployment config at Vercel config-evaluation time from `VITE_API_BASE_URL` using the shared builder (`production-csp.mjs`). The same shared builder also injects a matching meta CSP into built `index.html` for defense-in-depth.
 
-Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` evaluates `apps/web/vercel.mjs` with a fixture API URL and asserts both the exported deployment-config CSP and built HTML include that origin.
+Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` evaluates `vercel.mjs` with a fixture API URL, asserts the exported deployment-config CSP, and reproduces the documented repository-root `npm ci` + `npm run build:web` install/build path (not an `apps/web`-only lockfile context).
 
 ### API (Render)
 
