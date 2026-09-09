@@ -238,6 +238,8 @@ func writeSceneEditorAPIError(w http.ResponseWriter, err error) {
 		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "SCENE_EDITOR_LAST_SCENE", Message: "A composition must contain at least one scene."}})
 	case errors.Is(err, sceneeditor.ErrAmbiguousMapping):
 		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "SCENE_EDITOR_RECONCILE_AMBIGUOUS", Message: "Scene mapping requires creator choice."}})
+	case errors.Is(err, sceneeditor.ErrPreviewStale):
+		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "SCENE_EDITOR_RECONCILE_PREVIEW_STALE", Message: "Reconciliation preview is stale. Re-preview before applying."}})
 	case errors.Is(err, sceneeditor.ErrSnapshotBlocked):
 		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "SCENE_EDITOR_SNAPSHOT_BLOCKED", Message: "Resolve stale or broken dependencies before snapshot creation."}})
 	case errors.Is(err, sceneeditor.ErrPersistence):

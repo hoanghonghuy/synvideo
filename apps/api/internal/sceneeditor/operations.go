@@ -20,6 +20,7 @@ type CreateInput struct {
 
 type ReconcileInput struct {
 	ExpectedRevision int                `json:"expected_revision"`
+	PreviewDigest    string             `json:"preview_digest"`
 	Candidate        ReconcileCandidate `json:"candidate"`
 }
 
@@ -42,7 +43,11 @@ func (s *Service) PreviewReconcile(ctx context.Context, ownerID, projectID uuid.
 	if err := s.validateWriteDependencies(ctx, ownerID, candidateDependencyDocument(doc, candidate)); err != nil {
 		return ReconcilePreview{}, err
 	}
-	return PreviewReconciliation(doc, candidate)
+	preview, err := PreviewReconciliation(doc, candidate)
+	if err != nil {
+		return ReconcilePreview{}, err
+	}
+	return s.attachReconcilePreviewDigest(ctx, ownerID, doc, candidate, preview)
 }
 
 func (s *Service) Reconcile(ctx context.Context, ownerID, projectID uuid.UUID, input ReconcileInput) (View, error) {
@@ -53,7 +58,10 @@ func (s *Service) Reconcile(ctx context.Context, ownerID, projectID uuid.UUID, i
 	if err != nil {
 		return View{}, normalizeRepoError(err)
 	}
-	updated, err := ApplyReconciliation(doc, input.Candidate, input.ExpectedRevision, s.now().UTC())
+	if err := s.validateReconcilePreviewDigest(ctx, ownerID, doc, input); err != nil {
+		return View{}, err
+	}
+	updated, err := ApplyReconciliation(doc, input.Candidate, input.ExpectedRevision, s.now().UTC(), s.newID)
 	if err != nil {
 		return View{}, err
 	}
@@ -65,6 +73,42 @@ func (s *Service) Reconcile(ctx context.Context, ownerID, projectID uuid.UUID, i
 		return View{}, normalizeRepoError(err)
 	}
 	return s.view(ctx, ownerID, saved)
+}
+
+func (s *Service) attachReconcilePreviewDigest(ctx context.Context, ownerID uuid.UUID, doc Document, candidate ReconcileCandidate, preview ReconcilePreview) (ReconcilePreview, error) {
+	fingerprint, err := s.reconcileUpstreamFingerprint(ctx, ownerID, doc, candidate)
+	if err != nil {
+		return ReconcilePreview{}, err
+	}
+	digest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, candidate.ScenePlanVersion, candidate, fingerprint)
+	if err != nil {
+		return ReconcilePreview{}, err
+	}
+	preview.PreviewDigest = digest
+	return preview, nil
+}
+
+func (s *Service) validateReconcilePreviewDigest(ctx context.Context, ownerID uuid.UUID, doc Document, input ReconcileInput) error {
+	fingerprint, err := s.reconcileUpstreamFingerprint(ctx, ownerID, doc, input.Candidate)
+	if err != nil {
+		return err
+	}
+	expectedDigest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, input.Candidate.ScenePlanVersion, input.Candidate, fingerprint)
+	if err != nil {
+		return err
+	}
+	if input.PreviewDigest == "" || input.PreviewDigest != expectedDigest {
+		return ErrPreviewStale
+	}
+	return nil
+}
+
+func (s *Service) reconcileUpstreamFingerprint(ctx context.Context, ownerID uuid.UUID, doc Document, candidate ReconcileCandidate) (string, error) {
+	states, err := s.resolver.State(ctx, ownerID, candidateDependencyDocument(doc, candidate))
+	if err != nil {
+		return "", err
+	}
+	return DependencyFingerprint(states)
 }
 
 func candidateDependencyDocument(base Document, candidate ReconcileCandidate) Document {

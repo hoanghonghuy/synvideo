@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, getProject, type Project } from '@/api/projects'
@@ -27,6 +27,7 @@ interface ProposalSummary {
 
 const { t, d } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const project = ref<Project | null>(null)
 const summaries = ref<ScriptSummary[]>([])
@@ -79,6 +80,13 @@ const staleSource = computed(() => {
   return selectedScript.value !== null && approvedProposalVersion.value !== null &&
     approvedProposalVersion.value > selectedScript.value.source_proposal_version
 })
+const returnToSceneEditor = computed(() => route.query.returnTo === 'scene-editor')
+
+function requestedScriptVersion(): number | null {
+  const raw = route.query.version
+  const value = typeof raw === 'string' ? Number.parseInt(raw, 10) : Number.NaN
+  return Number.isInteger(value) && value > 0 ? value : null
+}
 
 watch(form, () => {
   dirty.value = JSON.stringify(form.value) !== savedSnapshot.value
@@ -130,7 +138,12 @@ async function loadWorkspace() {
     scriptsLoaded.value = true
     summaries.value = await listScripts(project.value.id)
     proposals.value = await loadProposalSummaries(project.value.id)
-    const initial = summaries.value.find((item) => item.status === 'draft') ?? summaries.value[0]
+    const requestedVersion = requestedScriptVersion()
+    const initial = (requestedVersion !== null
+      ? summaries.value.find((item) => item.version === requestedVersion)
+      : undefined)
+      ?? summaries.value.find((item) => item.status === 'draft')
+      ?? summaries.value[0]
     if (initial) {
       await loadVersion(initial.version, true)
     } else {
@@ -216,6 +229,13 @@ async function approveSelected() {
     summaries.value = await listScripts(projectID())
     applyScript(approved)
     upsertSummary(approved)
+    if (returnToSceneEditor.value) {
+      await router.push({
+        name: 'scene-plan',
+        params: { id: projectID() },
+        query: { returnTo: 'scene-editor' },
+      })
+    }
   } catch (error) {
     handleMutationError(error)
   } finally {
@@ -447,6 +467,14 @@ function errorMessage(code: string) {
 
 <template>
   <section class="page script-page">
+    <RouterLink
+      v-if="project && returnToSceneEditor"
+      class="text-link"
+      :to="`/projects/${project.id}/scene-editor`"
+      data-testid="back-to-scene-editor"
+    >
+      Back to Scene Editor
+    </RouterLink>
     <RouterLink
       v-if="project"
       class="text-link"

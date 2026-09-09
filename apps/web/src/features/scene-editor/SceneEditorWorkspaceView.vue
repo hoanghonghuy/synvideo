@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError } from '@/api/projects'
+import { listScenePlans } from '@/features/scene-plan/api'
 import {
   createRenderExport,
   createSceneEditorSnapshot,
@@ -10,10 +11,14 @@ import {
   getRenderExport,
   getSceneEditor,
   mediaAssetContentURL,
+  previewSceneEditorReconcile,
+  reconcileSceneEditor,
   removeScene,
   reorderScene,
   updateSceneEditor,
   type RenderExportJob,
+  type SceneEditorCandidate,
+  type SceneEditorReconcilePreview,
   type SceneEditorScene,
   type SceneEditorView,
 } from './api'
@@ -31,8 +36,16 @@ import {
   RENDER_EXPORT_POLL_MS,
   restoreRenderJobID,
 } from './renderExportState'
+import type { UpstreamBridgeGuidance } from './upstreamBridgeGuidance'
+import {
+  buildReconcileCandidate,
+  forkApprovedScriptForComposition,
+  latestApprovedScenePlanVersion,
+  loadUpstreamBridgeGuidance,
+} from './upstreamBridge'
 
 const route = useRoute()
+const router = useRouter()
 const projectID = computed(() => String(route.params.id ?? ''))
 const composition = ref<SceneEditorView | null>(null)
 const draft = ref<SceneEditorView | null>(null)
@@ -42,6 +55,10 @@ const acting = ref(false)
 const conflict = ref(false)
 const error = ref('')
 const notice = ref('')
+const reconcilePreview = ref<SceneEditorReconcilePreview | null>(null)
+const reconcileCandidate = ref<SceneEditorCandidate | null>(null)
+const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
+const upstreamBusy = ref(false)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
@@ -78,6 +95,7 @@ async function load(resetDraft: boolean) {
     composition.value = latest
     if (resetDraft || !draft.value) draft.value = cloneEditorView(latest)
     conflict.value = false
+    await refreshUpstreamGuidance()
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 404) {
       composition.value = null
@@ -248,6 +266,102 @@ function messageFor(cause: unknown): string {
 function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)}s`
 }
+
+async function refreshUpstreamGuidance() {
+  if (!composition.value || !projectID.value) {
+    upstreamGuidance.value = null
+    return
+  }
+  try {
+    upstreamGuidance.value = await loadUpstreamBridgeGuidance(projectID.value, composition.value)
+  } catch {
+    upstreamGuidance.value = null
+  }
+}
+
+async function beginUpstreamScriptEdit() {
+  if (!composition.value || dirty.value || conflict.value || acting.value || upstreamBusy.value) return
+  upstreamBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const forked = await forkApprovedScriptForComposition(projectID.value, composition.value.scene_plan_version)
+    notice.value = `Authoritative script draft v${forked.version} was created from approved history. Continue editing in the Script workspace, then approve and regenerate downstream Scene Plan/narration before reconciling here.`
+    await router.push({ name: 'script', params: { id: projectID.value }, query: { version: String(forked.version), returnTo: 'scene-editor' } })
+  } catch (cause) {
+    error.value = messageFor(cause)
+  } finally {
+    upstreamBusy.value = false
+  }
+}
+
+async function previewUpstreamReconcile() {
+  if (!composition.value || dirty.value || conflict.value || acting.value) return
+  acting.value = true
+  error.value = ''
+  notice.value = ''
+  reconcilePreview.value = null
+  reconcileCandidate.value = null
+  try {
+    const summaries = await listScenePlans(projectID.value)
+    const targetVersion = latestApprovedScenePlanVersion(summaries)
+    if (targetVersion === null) {
+      error.value = 'No approved Scene Plan is available to reconcile against.'
+      return
+    }
+    const candidate = await buildReconcileCandidate(projectID.value, targetVersion)
+    reconcileCandidate.value = candidate
+    reconcilePreview.value = await previewSceneEditorReconcile(projectID.value, candidate)
+    if (reconcilePreview.value.ambiguous) {
+      notice.value = 'Reconciliation preview is ambiguous. Resolve upstream scene-key mapping before applying changes.'
+    } else {
+      notice.value = `Reconciliation preview ready for Scene Plan v${targetVersion}.`
+    }
+  } catch (cause) {
+    error.value = messageFor(cause)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function applyUpstreamReconcile() {
+  if (!composition.value || !reconcilePreview.value || !reconcileCandidate.value || reconcilePreview.value.ambiguous || acting.value) return
+  acting.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const targetVersion = reconcilePreview.value.to_scene_plan_version
+    const reconciled = await reconcileSceneEditor(
+      projectID.value,
+      composition.value.revision,
+      reconcileCandidate.value,
+      reconcilePreview.value.preview_digest,
+    )
+    composition.value = reconciled
+    draft.value = cloneEditorView(reconciled)
+    reconcilePreview.value = null
+    reconcileCandidate.value = null
+    conflict.value = false
+    notice.value = `Composition reconciled to Scene Plan v${targetVersion} as revision ${reconciled.revision}.`
+    await refreshUpstreamGuidance()
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status === 409) {
+      if (cause.code === 'SCENE_EDITOR_RECONCILE_PREVIEW_STALE') {
+        reconcilePreview.value = null
+        reconcileCandidate.value = null
+        error.value = 'Upstream reconciliation preview is stale. Re-preview before applying.'
+      } else {
+        conflict.value = true
+        error.value = 'Reconciliation conflict. Reload authoritative state and retry.'
+        await rereadAfterConflict()
+      }
+    } else {
+      error.value = messageFor(cause)
+    }
+  } finally {
+    acting.value = false
+  }
+}
 </script>
 
 <template>
@@ -278,6 +392,80 @@ function seconds(ms: number): string {
         <p v-else-if="composition.state === 'BROKEN'">One or more exact upstream dependencies are unavailable. Rendering is blocked.</p>
         <p v-else-if="dirty">The preview below reflects local edits that have not been persisted yet.</p>
         <p v-else>All tracked dependencies and creator edits match this saved composition revision.</p>
+        <div v-if="upstreamGuidance && upstreamGuidance.phase !== 'aligned'" class="upstream-guidance" :data-phase="upstreamGuidance.phase" aria-live="polite">
+          <p><strong>Upstream bridge:</strong> {{ upstreamGuidance.message }}</p>
+          <ul v-if="upstreamGuidance.rebuildNarration || upstreamGuidance.rebuildCaptions || upstreamGuidance.rebuildAudioMix" class="rebuild-checklist">
+            <li v-if="upstreamGuidance.rebuildNarration">Rebuild scene narration against the approved Scene Plan.</li>
+            <li v-if="upstreamGuidance.rebuildCaptions">Rebuild captions for the new upstream lineage.</li>
+            <li v-if="upstreamGuidance.rebuildAudioMix">Rebuild the project audio mix assumptions.</li>
+          </ul>
+          <div class="guidance-links">
+            <RouterLink
+              v-if="upstreamGuidance.phase === 'script_draft_pending' || upstreamGuidance.phase === 'script_approved_needs_scene_plan'"
+              :to="`/projects/${projectID}/script${upstreamGuidance.pendingScriptDraftVersion ? `?version=${upstreamGuidance.pendingScriptDraftVersion}&returnTo=scene-editor` : '?returnTo=scene-editor'}`"
+            >
+              Open Script workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.phase === 'script_approved_needs_scene_plan' || upstreamGuidance.phase === 'scene_plan_draft_pending_approval' || upstreamGuidance.phase === 'downstream_rebuild_required' || upstreamGuidance.phase === 'ready_to_reconcile'"
+              :to="`/projects/${projectID}/scene-plan${upstreamGuidance.pendingScenePlanDraftVersion ? `?version=${upstreamGuidance.pendingScenePlanDraftVersion}&returnTo=scene-editor` : '?returnTo=scene-editor'}`"
+            >
+              Open Scene Plan workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildNarration"
+              :to="`/projects/${projectID}/narration`"
+            >
+              Open narration workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildCaptions"
+              :to="`/projects/${projectID}/captions`"
+            >
+              Open captions workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildAudioMix"
+              :to="`/projects/${projectID}/audio-mix`"
+            >
+              Open audio mix workspace
+            </RouterLink>
+          </div>
+        </div>
+        <div class="upstream-actions">
+          <button type="button" :disabled="dirty || conflict || acting || upstreamBusy" @click="beginUpstreamScriptEdit">
+            Edit upstream script
+          </button>
+          <button
+            v-if="composition.state === 'STALE'"
+            type="button"
+            :disabled="dirty || conflict || acting"
+            @click="previewUpstreamReconcile"
+          >
+            Preview upstream reconcile
+          </button>
+          <button
+            v-if="reconcilePreview && !reconcilePreview.ambiguous"
+            type="button"
+            :disabled="acting"
+            @click="applyUpstreamReconcile"
+          >
+            Apply reconcile
+          </button>
+        </div>
+        <div v-if="reconcilePreview" class="reconcile-preview" aria-live="polite">
+          <p>
+            Reconcile Scene Plan v{{ reconcilePreview.to_scene_plan_version }} from revision {{ reconcilePreview.from_revision }}.
+          </p>
+          <ul>
+            <li v-for="change in reconcilePreview.changes" :key="change.composition_scene_id">
+              <strong>{{ change.scene_key }}</strong>
+              <span>{{ change.reasons.join(', ') }}</span>
+              <span>{{ change.preserves_edits ? 'Preserves local presentation edits' : 'Requires creator action' }}</span>
+            </li>
+          </ul>
+          <p v-if="reconcilePreview.audio_mix_changed">Project audio mix will be updated.</p>
+        </div>
         <div class="save-actions">
           <button type="button" :disabled="!dirty || invalid || acting || conflict" @click="saveDraft">Save composition</button>
           <button type="button" :disabled="(!dirty && !conflict) || acting" @click="resetToSaved">Reload saved revision</button>
@@ -427,7 +615,13 @@ function seconds(ms: number): string {
 .render-status p { margin: 0; overflow-wrap: anywhere; }
 .status-panel strong { margin-right: .75rem; }
 .save-status[data-dirty='true'] { text-decoration: underline; text-decoration-thickness: 2px; }
-.save-actions, .scene-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.upstream-guidance { display: grid; gap: .5rem; border-top: 1px solid currentColor; padding-top: .75rem; }
+.upstream-guidance .rebuild-checklist { margin: 0; padding-left: 1.25rem; }
+.guidance-links { display: flex; gap: .75rem; flex-wrap: wrap; }
+.save-actions, .scene-actions, .upstream-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.reconcile-preview { display: grid; gap: .5rem; border-top: 1px solid currentColor; padding-top: .75rem; }
+.reconcile-preview ul { margin: 0; padding-left: 1.25rem; display: grid; gap: .35rem; }
+.reconcile-preview li { display: grid; gap: .15rem; }
 .validation-summary, .field-error { font-weight: 700; }
 .preview-timeline { display: grid; gap: .5rem; margin: 0; padding-left: 1.25rem; }
 .preview-timeline li { display: grid; gap: .2rem; }

@@ -9,7 +9,10 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
-var ErrVersionInvalid = errors.New("invalid script version")
+var (
+	ErrVersionInvalid        = errors.New("invalid script version")
+	ErrForkSourceNotApproved = errors.New("script fork source must be approved")
+)
 
 type Service struct {
 	repo Repository
@@ -30,6 +33,39 @@ func (s *Service) CreateDraft(ctx context.Context, principal project.Principal, 
 		return Script{}, err
 	}
 	return s.repo.CreateDraft(ctx, principal.OwnerID, projectID, input)
+}
+
+// ForkApprovedDraft creates a new mutable version from an immutable approved
+// script. It deliberately copies the authoritative source content instead of
+// allowing callers to mutate approved history in place.
+func (s *Service) ForkApprovedDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (Script, error) {
+	if err := requirePrincipal(principal); err != nil {
+		return Script{}, err
+	}
+	if projectID == uuid.Nil {
+		return Script{}, errors.Join(ErrInvalidInput, errors.New("project_id is required"))
+	}
+	if version < 1 {
+		return Script{}, ErrVersionInvalid
+	}
+
+	source, err := s.repo.GetByVersion(ctx, principal.OwnerID, projectID, version)
+	if err != nil {
+		return Script{}, err
+	}
+	if source.Status != StatusApproved {
+		return Script{}, ErrForkSourceNotApproved
+	}
+
+	return s.repo.CreateDraft(ctx, principal.OwnerID, projectID, CreateDraftInput{
+		SourceProposalVersion: source.SourceProposalVersion,
+		ContentLocale:         source.ContentLocale,
+		Content: Content{
+			Sections:                 append([]Section(nil), source.Sections...),
+			EstimatedDurationSeconds: source.EstimatedDurationSeconds,
+			Notes:                    source.Notes,
+		},
+	})
 }
 
 func (s *Service) UpdateDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input PutInput) (Script, error) {

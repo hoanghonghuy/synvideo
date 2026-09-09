@@ -166,6 +166,29 @@ func (h scriptHandler) put(w http.ResponseWriter, r *http.Request) {
 	writeProjectJSON(w, http.StatusOK, toScriptResponse(updated))
 }
 
+func (h scriptHandler) fork(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
+		return
+	}
+	version, ok := parseScriptVersion(w, r)
+	if !ok {
+		return
+	}
+
+	forked, err := h.service.ForkApprovedDraft(r.Context(), principal, projectID, version)
+	if err != nil {
+		writeScriptAPIError(w, err)
+		return
+	}
+
+	writeProjectJSON(w, http.StatusCreated, toScriptResponse(forked))
+}
+
 func (h scriptHandler) approve(w http.ResponseWriter, r *http.Request) {
 	principal, ok := h.resolvePrincipal(w, r)
 	if !ok {
@@ -272,6 +295,11 @@ func writeScriptAPIError(w http.ResponseWriter, err error) {
 		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{
 			Code:    "SCRIPT_IMMUTABLE",
 			Message: "Script is immutable.",
+		}})
+	case errors.Is(err, script.ErrForkSourceNotApproved):
+		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{
+			Code:    "SCRIPT_FORK_SOURCE_NOT_APPROVED",
+			Message: "Script fork source must be approved.",
 		}})
 	case errors.Is(err, script.ErrNotFound):
 		writeProjectJSON(w, http.StatusNotFound, errorEnvelope{Error: apiError{

@@ -18,10 +18,11 @@ import (
 )
 
 type fakeScriptService struct {
-	listFn         func(ctx context.Context, principal project.Principal, projectID uuid.UUID) ([]script.Script, error)
-	getByVersionFn func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
-	updateDraftFn  func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input script.PutInput) (script.Script, error)
-	approveFn      func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error)
+	listFn              func(ctx context.Context, principal project.Principal, projectID uuid.UUID) ([]script.Script, error)
+	getByVersionFn      func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
+	updateDraftFn       func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, input script.PutInput) (script.Script, error)
+	approveFn           func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error)
+	forkApprovedDraftFn func(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error)
 }
 
 func (f *fakeScriptService) List(ctx context.Context, principal project.Principal, projectID uuid.UUID) ([]script.Script, error) {
@@ -48,6 +49,13 @@ func (f *fakeScriptService) UpdateDraft(ctx context.Context, principal project.P
 func (f *fakeScriptService) Approve(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int, revision int) (script.Script, error) {
 	if f.approveFn != nil {
 		return f.approveFn(ctx, principal, projectID, version, revision)
+	}
+	return script.Script{}, nil
+}
+
+func (f *fakeScriptService) ForkApprovedDraft(ctx context.Context, principal project.Principal, projectID uuid.UUID, version int) (script.Script, error) {
+	if f.forkApprovedDraftFn != nil {
+		return f.forkApprovedDraftFn(ctx, principal, projectID, version)
 	}
 	return script.Script{}, nil
 }
@@ -275,6 +283,54 @@ func TestScriptEndpoints(t *testing.T) {
 		_ = json.Unmarshal(rec.Body.Bytes(), &errEnv)
 		if errEnv.Error.Code != "STALE_REVISION" {
 			t.Fatalf("expected STALE_REVISION, got %s", errEnv.Error.Code)
+		}
+	})
+
+	t.Run("POST fork returns 201 and new draft", func(t *testing.T) {
+		svc := &fakeScriptService{
+			forkApprovedDraftFn: func(ctx context.Context, p project.Principal, pID uuid.UUID, v int) (script.Script, error) {
+				forked := sampleScript
+				forked.Version = 2
+				forked.Revision = 1
+				forked.Status = script.StatusDraft
+				return forked, nil
+			},
+		}
+		server := newTestScriptServer(svc, resolver)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/scripts/1/fork", nil)
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp scriptResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if resp.Version != 2 || resp.Status != script.StatusDraft {
+			t.Fatalf("unexpected fork response: %#v", resp)
+		}
+	})
+
+	t.Run("POST fork returns 409 when source is not approved", func(t *testing.T) {
+		svc := &fakeScriptService{
+			forkApprovedDraftFn: func(ctx context.Context, p project.Principal, pID uuid.UUID, v int) (script.Script, error) {
+				return script.Script{}, script.ErrForkSourceNotApproved
+			},
+		}
+		server := newTestScriptServer(svc, resolver)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/scripts/1/fork", nil)
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d", rec.Code)
+		}
+		var errEnv errorEnvelope
+		_ = json.Unmarshal(rec.Body.Bytes(), &errEnv)
+		if errEnv.Error.Code != "SCRIPT_FORK_SOURCE_NOT_APPROVED" {
+			t.Fatalf("expected SCRIPT_FORK_SOURCE_NOT_APPROVED, got %s", errEnv.Error.Code)
 		}
 	})
 
