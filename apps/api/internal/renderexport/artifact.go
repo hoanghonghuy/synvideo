@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	ErrArtifactNotFound = errors.New("render export artifact not found")
-	ErrArtifactConflict = errors.New("render export artifact already exists")
-	ErrStaleRenderLease = errors.New("render export worker lease is stale")
+	ErrArtifactNotFound   = errors.New("render export artifact not found")
+	ErrArtifactConflict   = errors.New("render export artifact already exists")
+	ErrStaleRenderLease   = errors.New("render export worker lease is stale")
+	ErrRenderCancelFenced = errors.New("render export finalization lost to durable cancellation")
 )
 
 var artifactSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)

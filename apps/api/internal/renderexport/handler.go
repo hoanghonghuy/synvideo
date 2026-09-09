@@ -338,6 +338,13 @@ func (h *Handler) finalizeAsset(ctx context.Context, job jobs.Job, payload Rende
 	if createErr == nil {
 		return created, nil
 	}
+	if errors.Is(createErr, ErrRenderCancelFenced) {
+		principal := project.Principal{OwnerID: job.OwnerID}
+		if deleteErr := h.assets.Delete(context.Background(), principal, *job.ProjectID, asset.ID); deleteErr != nil {
+			return RenderArtifact{}, jobs.NewRetryableError(ErrorStorageFailed, deleteErr, nil)
+		}
+		return RenderArtifact{}, context.Canceled
+	}
 	if existing, getErr := h.artifacts.GetByJob(ctx, job.OwnerID, *job.ProjectID, job.ID); getErr == nil {
 		if existing.SnapshotDigest != payload.SnapshotDigest || existing.ProfileID != payload.ProfileID {
 			return RenderArtifact{}, jobs.NewTerminalError(ErrorFinalizeFailed, ErrSnapshotMismatch)

@@ -41,6 +41,18 @@ func (s *renderExportServiceStub) Get(_ context.Context, ownerID, projectID, job
 	s.ownerID, s.projectID, s.jobID = ownerID, projectID, jobID
 	return s.view, s.getErr
 }
+func (s *renderExportServiceStub) Cancel(_ context.Context, ownerID, projectID, jobID uuid.UUID) (renderexport.JobView, error) {
+	s.ownerID, s.projectID, s.jobID = ownerID, projectID, jobID
+	return s.view, s.getErr
+}
+func (s *renderExportServiceStub) Retry(_ context.Context, ownerID, projectID, sourceJobID, requestID uuid.UUID) (renderexport.JobView, error) {
+	s.ownerID, s.projectID, s.jobID = ownerID, projectID, sourceJobID
+	return s.view, s.getErr
+}
+func (s *renderExportServiceStub) ListHistory(_ context.Context, ownerID, projectID uuid.UUID, limit int, cursor string) (renderexport.HistoryResult, error) {
+	s.ownerID, s.projectID = ownerID, projectID
+	return renderexport.HistoryResult{Items: []renderexport.JobView{s.view}}, s.getErr
+}
 
 func TestRenderExportCreateReturnsDurableStatusView(t *testing.T) {
 	ownerID, projectID, jobID, assetID := uuid.New(), uuid.New(), uuid.New(), uuid.New()

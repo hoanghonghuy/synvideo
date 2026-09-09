@@ -113,6 +113,21 @@ func (m *mockJobsRepo) MarkRetryableFailure(ctx context.Context, id uuid.UUID, l
 func (m *mockJobsRepo) MarkTerminalFailure(ctx context.Context, id uuid.UUID, leaseToken uuid.UUID, errorCode string) (jobs.Job, error) {
 	return jobs.Job{}, nil
 }
+func (m *mockJobsRepo) GetByDedupeKey(context.Context, uuid.UUID, string, string) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+func (m *mockJobsRepo) ListByProjectKind(context.Context, jobs.ListByProjectKindOptions) ([]jobs.Job, *jobs.ListCursor, error) {
+	return nil, nil, nil
+}
+func (m *mockJobsRepo) RequestCancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+func (m *mockJobsRepo) IsCancelRequested(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (m *mockJobsRepo) MarkCancelled(context.Context, uuid.UUID, uuid.UUID) (jobs.Job, error) {
+	return jobs.Job{}, nil
+}
 
 func registerFakeRegistry(t *testing.T) *providers.Registry {
 	t.Helper()

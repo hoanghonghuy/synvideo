@@ -153,7 +153,7 @@ func (f *fakeJobRepository) MarkSuccess(ctx context.Context, id uuid.UUID, lease
 	if !ok {
 		return jobs.Job{}, jobs.ErrJobNotFound
 	}
-	if j.State != jobs.StateRunning || j.LeaseToken == nil || *j.LeaseToken != leaseToken {
+	if j.State != jobs.StateRunning || j.LeaseToken == nil || *j.LeaseToken != leaseToken || j.CancelRequestedAt != nil {
 		return jobs.Job{}, jobs.ErrStaleLease
 	}
 	now := time.Now().UTC()
@@ -199,6 +199,121 @@ func (f *fakeJobRepository) MarkTerminalFailure(ctx context.Context, id uuid.UUI
 	now := time.Now().UTC()
 	j.State = jobs.StateFailed
 	j.ErrorCode = &errorCode
+	j.LeaseToken = nil
+	j.LeaseUntil = nil
+	j.FinishedAt = &now
+	j.UpdatedAt = now
+	return *j, nil
+}
+
+func (f *fakeJobRepository) GetByDedupeKey(ctx context.Context, ownerID uuid.UUID, kind string, dedupeKey string) (jobs.Job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, j := range f.jobs {
+		if j.OwnerID == ownerID && j.Kind == kind && j.DedupeKey != nil && *j.DedupeKey == dedupeKey {
+			return *j, nil
+		}
+	}
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+
+func (f *fakeJobRepository) ListByProjectKind(ctx context.Context, options jobs.ListByProjectKindOptions) ([]jobs.Job, *jobs.ListCursor, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	items := make([]jobs.Job, 0)
+	for _, j := range f.jobs {
+		if j.OwnerID != options.OwnerID || j.ProjectID == nil || *j.ProjectID != options.ProjectID || j.Kind != options.Kind {
+			continue
+		}
+		if options.Cursor != nil {
+			if j.CreatedAt.After(options.Cursor.CreatedAt) {
+				continue
+			}
+			if j.CreatedAt.Equal(options.Cursor.CreatedAt) && j.ID.String() >= options.Cursor.ID.String() {
+				continue
+			}
+		}
+		items = append(items, *j)
+	}
+	sortJobsDesc(items)
+	limit := options.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	var next *jobs.ListCursor
+	if len(items) > limit {
+		last := items[limit-1]
+		next = &jobs.ListCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		items = items[:limit]
+	}
+	return items, next, nil
+}
+
+func sortJobsDesc(items []jobs.Job) {
+	for i := 0; i < len(items); i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[j].CreatedAt.After(items[i].CreatedAt) || (items[j].CreatedAt.Equal(items[i].CreatedAt) && items[j].ID.String() > items[i].ID.String()) {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+}
+
+func (f *fakeJobRepository) RequestCancel(ctx context.Context, ownerID uuid.UUID, projectID uuid.UUID, id uuid.UUID) (jobs.Job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	j, ok := f.jobs[id]
+	if !ok || j.OwnerID != ownerID || j.ProjectID == nil || *j.ProjectID != projectID {
+		return jobs.Job{}, jobs.ErrJobNotFound
+	}
+	now := time.Now().UTC()
+	switch j.State {
+	case jobs.StateCancelled:
+		return *j, nil
+	case jobs.StateSucceeded, jobs.StateFailed:
+		return jobs.Job{}, jobs.ErrJobTerminal
+	case jobs.StateQueued:
+		j.State = jobs.StateCancelled
+		code := jobs.ErrorCodeCancelled
+		j.ErrorCode = &code
+		j.FinishedAt = &now
+		j.UpdatedAt = now
+		return *j, nil
+	case jobs.StateRunning:
+		if j.CancelRequestedAt == nil {
+			j.CancelRequestedAt = &now
+			j.UpdatedAt = now
+		}
+		return *j, nil
+	default:
+		return jobs.Job{}, jobs.ErrInvalidInput
+	}
+}
+
+func (f *fakeJobRepository) IsCancelRequested(ctx context.Context, id uuid.UUID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	j, ok := f.jobs[id]
+	if !ok {
+		return false, jobs.ErrJobNotFound
+	}
+	return j.CancelRequestedAt != nil, nil
+}
+
+func (f *fakeJobRepository) MarkCancelled(ctx context.Context, id uuid.UUID, leaseToken uuid.UUID) (jobs.Job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	j, ok := f.jobs[id]
+	if !ok {
+		return jobs.Job{}, jobs.ErrJobNotFound
+	}
+	if j.State != jobs.StateRunning || j.LeaseToken == nil || *j.LeaseToken != leaseToken || j.CancelRequestedAt == nil {
+		return jobs.Job{}, jobs.ErrStaleLease
+	}
+	now := time.Now().UTC()
+	j.State = jobs.StateCancelled
+	code := jobs.ErrorCodeCancelled
+	j.ErrorCode = &code
 	j.LeaseToken = nil
 	j.LeaseUntil = nil
 	j.FinishedAt = &now

@@ -33,6 +33,7 @@ type handlerAssets struct {
 	visual      mediaasset.MediaAsset
 	visualBytes []byte
 	final       *mediaasset.MediaAsset
+	deleteErr   error
 	stores      int
 	deletes     int
 }
@@ -91,6 +92,9 @@ func (s *handlerAssets) Store(_ context.Context, principal project.Principal, pr
 
 func (s *handlerAssets) Delete(_ context.Context, _ project.Principal, _ uuid.UUID, assetID uuid.UUID) error {
 	s.deletes++
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
 	if s.final != nil && s.final.ID == assetID {
 		s.final = nil
 	}
@@ -98,13 +102,17 @@ func (s *handlerAssets) Delete(_ context.Context, _ project.Principal, _ uuid.UU
 }
 
 type handlerArtifactRepo struct {
-	artifact  *RenderArtifact
-	createErr error
-	creates   int
+	artifact    *RenderArtifact
+	createErr   error
+	cancelFence bool
+	creates     int
 }
 
 func (r *handlerArtifactRepo) CreateForLease(_ context.Context, _ uuid.UUID, artifact RenderArtifact) (RenderArtifact, error) {
 	r.creates++
+	if r.cancelFence {
+		return RenderArtifact{}, ErrRenderCancelFenced
+	}
 	if r.createErr != nil {
 		err := r.createErr
 		r.createErr = nil

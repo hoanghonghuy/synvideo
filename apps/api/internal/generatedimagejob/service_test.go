@@ -149,3 +149,18 @@ func (f *fakeJobsRepo) MarkRetryableFailure(context.Context, uuid.UUID, uuid.UUI
 func (f *fakeJobsRepo) MarkTerminalFailure(context.Context, uuid.UUID, uuid.UUID, string) (jobs.Job, error) {
 	panic("unused")
 }
+func (f *fakeJobsRepo) GetByDedupeKey(context.Context, uuid.UUID, string, string) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+func (f *fakeJobsRepo) ListByProjectKind(context.Context, jobs.ListByProjectKindOptions) ([]jobs.Job, *jobs.ListCursor, error) {
+	return nil, nil, nil
+}
+func (f *fakeJobsRepo) RequestCancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+func (f *fakeJobsRepo) IsCancelRequested(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (f *fakeJobsRepo) MarkCancelled(context.Context, uuid.UUID, uuid.UUID) (jobs.Job, error) {
+	panic("unused")
+}
