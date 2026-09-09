@@ -74,6 +74,16 @@ func readFileRange(file io.ReaderAt, size, offset, length int64) ([]byte, error)
 	return buf, nil
 }
 
+func readProbeBytes(probe imageProbe, offset, length int64) ([]byte, error) {
+	if offset < 0 || length < 0 || offset+length > probe.size {
+		return nil, ErrMalformed
+	}
+	if offset+length <= int64(len(probe.prefix)) {
+		return probe.prefix[offset : offset+length], nil
+	}
+	return readFileRange(probe.file, probe.size, offset, length)
+}
+
 func isPNG(data []byte) bool {
 	return len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
 }
@@ -93,34 +103,31 @@ func validatePNG(probe imageProbe) error {
 		return ErrMalformed
 	}
 
-	offset := 8
-	for offset+8 <= len(prefix) {
-		chunkLen := int(binary.BigEndian.Uint32(prefix[offset : offset+4]))
-		chunkType := prefix[offset+4 : offset+8]
-		chunkEnd := int64(offset + 8 + chunkLen + 4)
+	hasIDAT := false
+	offset := int64(8)
+	for offset+8 <= probe.size {
+		header, err := readProbeBytes(probe, offset, 8)
+		if err != nil {
+			return ErrMalformed
+		}
+		chunkLen := int64(binary.BigEndian.Uint32(header[0:4]))
+		chunkType := header[4:8]
+		chunkEnd := offset + 8 + chunkLen + 4
 		if chunkLen < 0 || chunkEnd > probe.size {
 			return ErrMalformed
 		}
-		if chunkEnd > int64(len(prefix)) {
-			break
+		if bytes.Equal(chunkType, []byte("IDAT")) {
+			hasIDAT = true
 		}
-		offset = int(chunkEnd)
 		if bytes.Equal(chunkType, []byte("IEND")) {
+			if !hasIDAT || chunkEnd != probe.size {
+				return ErrMalformed
+			}
 			return nil
 		}
+		offset = chunkEnd
 	}
-
-	if probe.size < 12 {
-		return ErrMalformed
-	}
-	tail, err := readFileRange(probe.file, probe.size, probe.size-12, 12)
-	if err != nil {
-		return err
-	}
-	if binary.BigEndian.Uint32(tail[0:4]) != 0 || !bytes.Equal(tail[4:8], []byte("IEND")) {
-		return ErrMalformed
-	}
-	return nil
+	return ErrMalformed
 }
 
 func isJPEG(data []byte) bool {

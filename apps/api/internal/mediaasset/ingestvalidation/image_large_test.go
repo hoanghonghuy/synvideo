@@ -18,6 +18,26 @@ func largeJPEG(extra int) []byte {
 	return append(append(body, padding...), 0xFF, 0xD9)
 }
 
+func pngWithoutIDAT() []byte {
+	const idatOffset = 33
+	iendIndex := len(minimalPNG) - 12
+	out := make([]byte, 0, idatOffset+(len(minimalPNG)-iendIndex))
+	out = append(out, minimalPNG[:idatOffset]...)
+	return append(out, minimalPNG[iendIndex:]...)
+}
+
+func largePNGWithoutIDAT(extra int) []byte {
+	textData := bytes.Repeat([]byte{0x41}, extra)
+	textChunk := make([]byte, 8+len(textData)+4)
+	binary.BigEndian.PutUint32(textChunk[0:4], uint32(len(textData)))
+	textChunk[4], textChunk[5], textChunk[6], textChunk[7] = 't', 'E', 'X', 't'
+	copy(textChunk[8:], textData)
+	iendIndex := len(minimalPNG) - 12
+	out := append([]byte(nil), minimalPNG[:33]...)
+	out = append(out, textChunk...)
+	return append(out, minimalPNG[iendIndex:]...)
+}
+
 func largePNG(extra int) []byte {
 	iendIndex := len(minimalPNG) - 12
 	idatData := bytes.Repeat([]byte{0x78, 0x9c, 0x63}, extra/3+1)[:extra]
@@ -61,6 +81,25 @@ func largeAVIF(extra int) []byte {
 	binary.BigEndian.PutUint32(out[mdatOffset:mdatOffset+4], uint32(newMdatSize))
 	copy(out[mdatOffset+8:], payload)
 	return out
+}
+
+func TestValidatePNGRejectsWithoutIDAT(t *testing.T) {
+	validator := ingestvalidation.NewValidator(nil)
+	cases := map[string][]byte{
+		"ihdr-iend-only":      pngWithoutIDAT(),
+		"large-ihdr-tex-iend": largePNGWithoutIDAT(largeImagePadding),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeTempFile(t, data)
+			_, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{
+				Kind: ingestvalidation.KindImage, MimeType: "image/png",
+			})
+			if !errors.Is(err, ingestvalidation.ErrMalformed) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
 }
 
 func TestValidateLargeImagesAboveHeaderBudgetRemainIngestible(t *testing.T) {
