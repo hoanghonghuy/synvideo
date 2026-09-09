@@ -1,3 +1,5 @@
+import { apiFetch } from '@/api/http'
+
 export type ContentFormat = 'short' | 'long' | 'flexible'
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5'
 export type ProjectLocale = 'vi' | 'en'
@@ -75,7 +77,7 @@ export async function updateProject(id: string, payload: UpdateProjectPayload): 
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

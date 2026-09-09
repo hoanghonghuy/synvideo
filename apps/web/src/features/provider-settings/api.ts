@@ -1,3 +1,5 @@
+import { apiFetch } from '@/api/http'
+
 export type Capability = 'text' | 'image' | 'tts'
 
 export interface ModelSettingView {
@@ -83,7 +85,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export async function fetchProviderSettings(): Promise<ProviderSettingsListResponse> {
-  const res = await fetch('/api/v1/ai/provider-settings', {
+  const res = await apiFetch('/api/v1/ai/provider-settings', {
     headers: {
       Accept: 'application/json',
     },
@@ -95,7 +97,7 @@ export async function saveProviderSetting(
   providerId: string,
   input: PutSettingInput,
 ): Promise<ProviderSettingView> {
-  const res = await fetch(`/api/v1/ai/provider-settings/${encodeURIComponent(providerId)}`, {
+  const res = await apiFetch(`/api/v1/ai/provider-settings/${encodeURIComponent(providerId)}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -110,7 +112,7 @@ export async function deleteProviderSetting(
   providerId: string,
   revision: number,
 ): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/ai/provider-settings/${encodeURIComponent(providerId)}?revision=${encodeURIComponent(
       revision,
     )}`,

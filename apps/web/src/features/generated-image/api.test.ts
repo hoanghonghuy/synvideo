@@ -32,9 +32,13 @@ describe('generated image API', () => {
     const result = await fetchImageGenerationOptions()
 
     expect(result.providers[0]?.id).toBe('openai')
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/ai/image-generation-options', {
-      headers: { Accept: 'application/json' },
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/ai/image-generation-options',
+      expect.objectContaining({
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      }),
+    )
   })
 
   it('submits the edited prompt and stable request id to the exact scene', async () => {
@@ -100,7 +104,10 @@ describe('generated image API', () => {
     expect(job.media_asset_id).toBe('asset-9')
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project%2Fone/image-generations/request%2F123',
-      { headers: { Accept: 'application/json' } },
+      expect.objectContaining({
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      }),
     )
   })
 

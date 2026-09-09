@@ -37,6 +37,7 @@ type Config struct {
 	CredentialKeyVersion    string
 	TextProviderDefinitions string // Deprecated: use ProviderDefinitions
 	ProviderDefinitions     string
+	CORSAllowedOrigins      []string
 	MediaStorage            MediaStorageConfig
 }
 
@@ -106,7 +107,7 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Addr:                    getEnv("SYNVIDEO_API_ADDR", defaultAddr),
+		Addr:                    resolveListenAddr(),
 		Environment:             getEnv("SYNVIDEO_ENV", defaultEnvironment),
 		DatabaseURL:             getEnv("SYNVIDEO_DATABASE_URL", ""),
 		LocalActorID:            localActorID,
@@ -114,6 +115,7 @@ func Load() (Config, error) {
 		CredentialKeyVersion:    getEnv("SYNVIDEO_CREDENTIAL_KEY_VERSION", "v1"),
 		TextProviderDefinitions: getEnv("SYNVIDEO_TEXT_PROVIDER_DEFINITIONS", ""),
 		ProviderDefinitions:     getEnv("SYNVIDEO_PROVIDER_DEFINITIONS", ""),
+		CORSAllowedOrigins:      parseCSVEnv("SYNVIDEO_CORS_ALLOWED_ORIGINS"),
 		MediaStorage:            mediaStorage,
 	}
 
@@ -130,6 +132,23 @@ func (c Config) Validate() error {
 	}
 	if c.Environment == EnvironmentProduction && c.LocalActorID != nil {
 		return errors.New("SYNVIDEO_LOCAL_ACTOR_ID must not be set in production")
+	}
+	if c.Environment == EnvironmentProduction {
+		if len(c.CORSAllowedOrigins) == 0 {
+			return errors.New("SYNVIDEO_CORS_ALLOWED_ORIGINS is required in production")
+		}
+		for _, origin := range c.CORSAllowedOrigins {
+			if strings.TrimSpace(origin) == "*" {
+				return errors.New("SYNVIDEO_CORS_ALLOWED_ORIGINS must not contain wildcard in production")
+			}
+			parsed, err := url.Parse(origin)
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+				return fmt.Errorf("SYNVIDEO_CORS_ALLOWED_ORIGINS entry must be an origin URL without path: %q", origin)
+			}
+		}
+		if !c.MediaStorage.Configured() {
+			return errors.New("media storage configuration is required in production")
+		}
 	}
 
 	if c.Addr == "" {
@@ -212,6 +231,32 @@ func loadMediaStorageConfig() (MediaStorageConfig, error) {
 		result.MaxUploadBytes = value
 	}
 	return result, nil
+}
+
+func resolveListenAddr() string {
+	if value, ok := os.LookupEnv("SYNVIDEO_API_ADDR"); ok {
+		return value
+	}
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		return ":" + port
+	}
+	return defaultAddr
+}
+
+func parseCSVEnv(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			origins = append(origins, part)
+		}
+	}
+	return origins
 }
 
 func getEnv(key, fallback string) string {

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type AudioMixState = 'CURRENT' | 'STALE' | 'BROKEN' | 'ERROR'
@@ -79,7 +80,7 @@ export async function getAudioMixSnapshot(projectID: string): Promise<AudioMixSn
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init.headers },
   })

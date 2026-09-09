@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type ScenePlanStatus = 'draft' | 'approved' | 'superseded'
@@ -102,7 +103,7 @@ export function getScenePlanGeneration(
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

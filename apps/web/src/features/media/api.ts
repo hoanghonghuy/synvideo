@@ -1,3 +1,4 @@
+import { apiFetch, apiUrl } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type MediaAssetKind = 'image' | 'video' | 'audio' | 'document' | 'other'
@@ -86,7 +87,7 @@ export interface UploadOptions {
   onProgress?: (percentage: number) => void
 }
 
-const API_PREFIX = '/api/v1'
+const API_PREFIX = apiUrl('/api/v1')
 
 export function listMediaAssets(projectId: string): Promise<{ assets: MediaAsset[] }> {
   return request<{ assets: MediaAsset[] }>(`${API_PREFIX}/projects/${projectId}/media-assets`)
@@ -222,7 +223,7 @@ function createUploadBody(file: File): FormData {
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       ...(typeof FormData !== 'undefined' && init.body instanceof FormData
