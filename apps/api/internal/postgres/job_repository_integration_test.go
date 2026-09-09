@@ -538,5 +538,88 @@ func TestJobRepositoryIntegration(t *testing.T) {
 			t.Fatalf("expected ErrStaleLease on bad token renewal, got %v", err)
 		}
 	})
+	t.Run("12. Creator cancel queued job is durable and idempotent", func(t *testing.T) {
+		projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Cancel Queued Project"))
+		if err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			ProjectID:   &projectItem.ID,
+			Kind:        "cancel_queued_kind",
+			MaxAttempts: 2,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		first, err := jobRepo.RequestCancel(context.Background(), ownerID, projectItem.ID, job.ID)
+		if err != nil || first.State != jobs.StateCancelled {
+			t.Fatalf("cancel queued = %#v err=%v", first, err)
+		}
+		second, err := jobRepo.RequestCancel(context.Background(), ownerID, projectItem.ID, job.ID)
+		if err != nil || second.State != jobs.StateCancelled {
+			t.Fatalf("repeat cancel queued = %#v err=%v", second, err)
+		}
+		_, err = jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{Kinds: []string{"cancel_queued_kind"}, LeaseDuration: time.Second})
+		if !errors.Is(err, jobs.ErrNoJobAvailable) {
+			t.Fatalf("cancelled queued job should not be claimable, got %v", err)
+		}
+	})
+
+	t.Run("13. Creator cancel running job fences success", func(t *testing.T) {
+		projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Cancel Running Project"))
+		if err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			ProjectID:   &projectItem.ID,
+			Kind:        "cancel_running_kind",
+			MaxAttempts: 2,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		claimed, err := jobRepo.ClaimNext(context.Background(), jobs.ClaimOptions{Kinds: []string{"cancel_running_kind"}, LeaseDuration: 10 * time.Second})
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		requested, err := jobRepo.RequestCancel(context.Background(), ownerID, projectItem.ID, job.ID)
+		if err != nil || requested.CancelRequestedAt == nil {
+			t.Fatalf("request running cancel = %#v err=%v", requested, err)
+		}
+		cancelled, err := jobRepo.MarkCancelled(context.Background(), job.ID, *claimed.LeaseToken)
+		if err != nil || cancelled.State != jobs.StateCancelled {
+			t.Fatalf("mark cancelled = %#v err=%v", cancelled, err)
+		}
+		_, err = jobRepo.MarkSuccess(context.Background(), job.ID, *claimed.LeaseToken, json.RawMessage(`{"late":true}`))
+		if !errors.Is(err, jobs.ErrStaleLease) {
+			t.Fatalf("late success after cancel should fail, got %v", err)
+		}
+	})
+
+	t.Run("14. Cross-owner cancel does not leak existence", func(t *testing.T) {
+		projectItem, err := projectRepo.Create(context.Background(), ownerID, validIntegrationCreateInput("Cancel Isolation Project"))
+		if err != nil {
+			t.Fatalf("create project: %v", err)
+		}
+		job, err := jobRepo.Enqueue(context.Background(), jobs.EnqueueInput{
+			OwnerID:     ownerID,
+			ProjectID:   &projectItem.ID,
+			Kind:        "cancel_isolation_kind",
+			MaxAttempts: 2,
+			Payload:     json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		_, err = jobRepo.RequestCancel(context.Background(), otherOwnerID, projectItem.ID, job.ID)
+		if !errors.Is(err, jobs.ErrJobNotFound) {
+			t.Fatalf("cross-owner cancel should be not found, got %v", err)
+		}
+	})
+
 	_ = bytes.Equal
 }

@@ -140,6 +140,18 @@ func (e *Executor) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
+	if errors.Is(handleErr, context.Canceled) || errors.Is(handleErr, context.DeadlineExceeded) {
+		cancelRequested, cancelErr := e.repo.IsCancelRequested(context.Background(), job.ID)
+		if cancelErr != nil {
+			return true, cancelErr
+		}
+		if cancelRequested {
+			_, err := e.repo.MarkCancelled(context.Background(), job.ID, leaseToken)
+			return true, err
+		}
+		return true, nil
+	}
+
 	if ctx.Err() != nil {
 		return true, ctx.Err()
 	}
@@ -234,6 +246,17 @@ func (e *Executor) runHandler(ctx context.Context, handler Handler, job Job, lea
 			waitAfterCancel()
 			return nil, ctx.Err(), nil
 		case <-renewTicker.C:
+			cancelRequested, cancelErr := e.repo.IsCancelRequested(context.Background(), job.ID)
+			if cancelErr != nil {
+				cancelHandler()
+				waitAfterCancel()
+				return nil, nil, cancelErr
+			}
+			if cancelRequested {
+				cancelHandler()
+				waitAfterCancel()
+				return nil, context.Canceled, nil
+			}
 			renewCtx, cancelRenew := context.WithTimeout(context.Background(), renewInterval)
 			_, err := e.repo.RenewLease(renewCtx, job.ID, leaseToken, e.config.LeaseDuration)
 			cancelRenew()

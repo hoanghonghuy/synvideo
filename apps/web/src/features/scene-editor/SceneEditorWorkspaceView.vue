@@ -5,16 +5,19 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError } from '@/api/projects'
 import { listScenePlans } from '@/features/scene-plan/api'
 import {
+  cancelRenderExport,
   createRenderExport,
   createSceneEditorSnapshot,
   duplicateScene,
   getRenderExport,
   getSceneEditor,
+  listRenderExportHistory,
   mediaAssetContentURL,
   previewSceneEditorReconcile,
   reconcileSceneEditor,
   removeScene,
   reorderScene,
+  retryRenderExport,
   updateSceneEditor,
   type RenderExportJob,
   type SceneEditorCandidate,
@@ -31,6 +34,8 @@ import {
   validateEditableScene,
 } from './editorState'
 import {
+  isRenderExportCancellable,
+  isRenderExportRetryable,
   isRenderExportTerminal,
   persistRenderJobID,
   RENDER_EXPORT_POLL_MS,
@@ -50,6 +55,8 @@ const projectID = computed(() => String(route.params.id ?? ''))
 const composition = ref<SceneEditorView | null>(null)
 const draft = ref<SceneEditorView | null>(null)
 const renderJob = ref<RenderExportJob | null>(null)
+const renderHistory = ref<RenderExportJob[]>([])
+const renderHistoryCursor = ref<string | null>(null)
 const loading = ref(true)
 const acting = ref(false)
 const conflict = ref(false)
@@ -80,6 +87,7 @@ const saveStatus = computed(() => {
 onMounted(() => {
   void load(true)
   void restoreRenderExport()
+  void refreshRenderHistory()
 })
 
 onUnmounted(() => {
@@ -191,6 +199,7 @@ async function createSnapshot() {
     persistRenderJobID(window.localStorage, projectID.value, job.id)
     notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4 render.`
     startRenderPolling()
+    void refreshRenderHistory()
   } catch (cause) {
     error.value = messageFor(cause)
   } finally {
@@ -235,6 +244,61 @@ function stopRenderPolling() {
   if (renderPollTimer === null) return
   clearInterval(renderPollTimer)
   renderPollTimer = null
+}
+
+async function refreshRenderHistory(append = false) {
+  if (!projectID.value) return
+  try {
+    const page = await listRenderExportHistory(projectID.value, 20, append ? renderHistoryCursor.value ?? undefined : undefined)
+    renderHistory.value = append ? [...renderHistory.value, ...page.items] : page.items
+    renderHistoryCursor.value = page.next_cursor ?? null
+  } catch (cause) {
+    if (append) error.value = `Render history refresh failed: ${messageFor(cause)}`
+  }
+}
+
+async function cancelActiveRender() {
+  if (!renderJob.value || !isRenderExportCancellable(renderJob.value) || acting.value) return
+  acting.value = true
+  error.value = ''
+  try {
+    const cancelled = await cancelRenderExport(projectID.value, renderJob.value.id)
+    renderJob.value = cancelled
+    persistRenderJobID(window.localStorage, projectID.value, cancelled.id)
+    if (isRenderExportTerminal(cancelled)) stopRenderPolling()
+    notice.value = cancelled.state === 'cancelled' ? 'Render cancelled.' : 'Cancellation requested.'
+    await refreshRenderHistory()
+  } catch (cause) {
+    error.value = messageFor(cause)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function retryTerminalRender(sourceJob: RenderExportJob) {
+  if (!isRenderExportRetryable(sourceJob) || acting.value) return
+  acting.value = true
+  error.value = ''
+  try {
+    const requestID = crypto.randomUUID()
+    const retried = await retryRenderExport(projectID.value, sourceJob.id, requestID)
+    renderJob.value = retried
+    persistRenderJobID(window.localStorage, projectID.value, retried.id)
+    notice.value = `Retry queued from ${sourceJob.id.slice(0, 8)}…`
+    startRenderPolling()
+    await refreshRenderHistory()
+  } catch (cause) {
+    error.value = messageFor(cause)
+  } finally {
+    acting.value = false
+  }
+}
+
+function selectRenderHistoryItem(job: RenderExportJob) {
+  renderJob.value = job
+  persistRenderJobID(window.localStorage, projectID.value, job.id)
+  if (isRenderExportTerminal(job)) stopRenderPolling()
+  else startRenderPolling()
 }
 
 async function act(operation: () => Promise<SceneEditorView>, success: string) {
@@ -492,16 +556,38 @@ async function applyUpstreamReconcile() {
 
         <div v-if="renderJob" class="render-status" aria-live="polite">
           <div>
-            <strong>Render {{ renderJob.state }}</strong>
+            <strong>Render {{ renderJob.cancellation_pending ? 'cancelling' : renderJob.state }}</strong>
             <span>Attempt {{ renderJob.attempt }}/{{ renderJob.max_attempts }} · {{ renderJob.profile_id }}</span>
           </div>
           <p>Snapshot {{ renderJob.snapshot_digest.slice(0, 12) }}…</p>
-          <p v-if="renderJob.error_code" class="field-error" role="alert">Render failed: {{ renderJob.error_code }}</p>
+          <p v-if="renderJob.retry_of_render_job_id">Retry of {{ renderJob.retry_of_render_job_id.slice(0, 8) }}…</p>
+          <p v-if="renderJob.error_code" class="field-error" role="alert">Render {{ renderJob.state }}: {{ renderJob.error_code }}</p>
           <p v-if="renderJob.state === 'succeeded' && renderJob.artifact">
             MP4 ready · {{ renderJob.artifact.width }}×{{ renderJob.artifact.height }} · {{ seconds(renderJob.artifact.duration_ms) }} · {{ renderJob.artifact.byte_size }} bytes
           </p>
-          <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
-          <button v-else-if="!isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
+          <div class="render-actions">
+            <button v-if="isRenderExportCancellable(renderJob)" type="button" :disabled="acting" @click="cancelActiveRender">Cancel render</button>
+            <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">Retry render</button>
+            <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
+            <button v-else-if="!isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
+          </div>
+        </div>
+        <div v-if="renderHistory.length" class="render-history" aria-label="Render history">
+          <div class="render-history-header">
+            <strong>Render history</strong>
+            <button type="button" @click="refreshRenderHistory()">Refresh history</button>
+          </div>
+          <ol>
+            <li v-for="item in renderHistory" :key="item.id">
+              <button type="button" class="history-item" :data-state="item.state" @click="selectRenderHistoryItem(item)">
+                <span>{{ item.state }}</span>
+                <span>{{ item.snapshot_digest.slice(0, 8) }}…</span>
+                <span>{{ item.created_at }}</span>
+              </button>
+              <button v-if="isRenderExportRetryable(item)" type="button" :disabled="acting" @click="retryTerminalRender(item)">Retry</button>
+            </li>
+          </ol>
+          <button v-if="renderHistoryCursor" type="button" @click="refreshRenderHistory(true)">Load more history</button>
         </div>
       </section>
 
@@ -613,6 +699,11 @@ async function applyUpstreamReconcile() {
 .status-panel, .preview-panel, .render-status { display: grid; gap: .75rem; }
 .render-status { border-top: 1px solid currentColor; padding-top: .9rem; }
 .render-status p { margin: 0; overflow-wrap: anywhere; }
+.render-actions, .render-history-header { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.render-history { display: grid; gap: .75rem; border-top: 1px solid currentColor; padding-top: .9rem; }
+.render-history ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.render-history li { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
+.history-item { display: grid; gap: .15rem; text-align: left; }
 .status-panel strong { margin-right: .75rem; }
 .save-status[data-dirty='true'] { text-decoration: underline; text-decoration-thickness: 2px; }
 .upstream-guidance { display: grid; gap: .5rem; border-top: 1px solid currentColor; padding-top: .75rem; }

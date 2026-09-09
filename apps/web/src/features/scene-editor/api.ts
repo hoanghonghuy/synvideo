@@ -3,7 +3,7 @@ import { ApiError } from '@/api/projects'
 export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
 export type SceneEditorFit = 'contain' | 'cover'
 export type SceneEditorTransitionKind = 'cut' | 'fade' | 'crossfade'
-export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed'
+export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface SceneEditorVisualRef {
   asset_id: string
@@ -137,9 +137,16 @@ export interface RenderExportJob {
   error_code?: string
   snapshot_digest: string
   profile_id: string
+  retry_of_render_job_id?: string
+  cancellation_pending?: boolean
   artifact?: RenderExportArtifact
   created_at: string
   updated_at: string
+}
+
+export interface RenderExportHistory {
+  items: RenderExportJob[]
+  next_cursor?: string
 }
 
 const base = (projectID: string) => `/api/v1/projects/${encodeURIComponent(projectID)}/scene-editor`
@@ -212,6 +219,24 @@ export async function createRenderExport(projectID: string, snapshotDigest: stri
 
 export async function getRenderExport(projectID: string, jobID: string): Promise<RenderExportJob> {
   return request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(jobID)}`)
+}
+
+export async function listRenderExportHistory(projectID: string, limit = 20, cursor?: string): Promise<RenderExportHistory> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (cursor) params.set('cursor', cursor)
+  const query = params.toString()
+  return request<RenderExportHistory>(`${renderBase(projectID)}?${query}`)
+}
+
+export async function cancelRenderExport(projectID: string, jobID: string): Promise<RenderExportJob> {
+  return request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(jobID)}/cancel`, { method: 'POST' })
+}
+
+export async function retryRenderExport(projectID: string, sourceJobID: string, requestID: string): Promise<RenderExportJob> {
+  return request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(sourceJobID)}/retry`, {
+    method: 'POST',
+    body: JSON.stringify({ request_id: requestID }),
+  })
 }
 
 export function mediaAssetContentURL(projectID: string, assetID: string): string {

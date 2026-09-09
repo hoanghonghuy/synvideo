@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { RenderExportJob } from './api'
-import { isRenderExportTerminal, persistRenderJobID, renderExportStorageKey, restoreRenderJobID } from './renderExportState'
+import {
+  isRenderExportCancellable,
+  isRenderExportRetryable,
+  isRenderExportTerminal,
+  persistRenderJobID,
+  renderExportStorageKey,
+  restoreRenderJobID,
+} from './renderExportState'
 
 function job(state: RenderExportJob['state']): RenderExportJob {
   return {
@@ -53,5 +60,21 @@ describe('Scene Editor render export UI state', () => {
     expect(isRenderExportTerminal(job('running'))).toBe(false)
     expect(isRenderExportTerminal(job('succeeded'))).toBe(true)
     expect(isRenderExportTerminal(job('failed'))).toBe(true)
+    expect(isRenderExportTerminal(job('cancelled'))).toBe(true)
+  })
+
+  it('enables cancel only for queued or running jobs without pending cancellation', () => {
+    expect(isRenderExportCancellable(job('queued'))).toBe(true)
+    expect(isRenderExportCancellable(job('running'))).toBe(true)
+    expect(isRenderExportCancellable({ ...job('running'), cancellation_pending: true })).toBe(false)
+    expect(isRenderExportCancellable(job('failed'))).toBe(false)
+    expect(isRenderExportCancellable(job('cancelled'))).toBe(false)
+  })
+
+  it('enables retry only for failed or cancelled terminal jobs', () => {
+    expect(isRenderExportRetryable(job('failed'))).toBe(true)
+    expect(isRenderExportRetryable(job('cancelled'))).toBe(true)
+    expect(isRenderExportRetryable(job('succeeded'))).toBe(false)
+    expect(isRenderExportRetryable(job('running'))).toBe(false)
   })
 })

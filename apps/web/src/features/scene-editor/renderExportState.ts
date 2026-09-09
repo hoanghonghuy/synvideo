@@ -7,7 +7,15 @@ export function renderExportStorageKey(projectID: string): string {
 }
 
 export function isRenderExportTerminal(job: RenderExportJob | null): boolean {
-  return job?.state === 'succeeded' || job?.state === 'failed'
+  return job?.state === 'succeeded' || job?.state === 'failed' || job?.state === 'cancelled'
+}
+
+export function isRenderExportCancellable(job: RenderExportJob | null): boolean {
+  return job?.state === 'queued' || (job?.state === 'running' && !job.cancellation_pending)
+}
+
+export function isRenderExportRetryable(job: RenderExportJob | null): boolean {
+  return job?.state === 'failed' || job?.state === 'cancelled'
 }
 
 export function persistRenderJobID(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, projectID: string, jobID: string | null): void {

@@ -17,7 +17,10 @@ const (
 	StateRunning   State = "running"
 	StateSucceeded State = "succeeded"
 	StateFailed    State = "failed"
+	StateCancelled State = "cancelled"
 )
+
+const ErrorCodeCancelled = "ERR_CANCELLED"
 
 var (
 	ErrInvalidInput   = errors.New("jobs: invalid input")
@@ -33,24 +36,33 @@ var (
 const ErrorCodeMaxAttemptsExceeded = "ERR_MAX_ATTEMPTS_EXCEEDED"
 
 type Job struct {
-	ID          uuid.UUID       `json:"id"`
-	OwnerID     uuid.UUID       `json:"owner_id"`
-	ProjectID   *uuid.UUID      `json:"project_id,omitempty"`
-	Kind        string          `json:"kind"`
-	DedupeKey   *string         `json:"dedupe_key,omitempty"`
-	State       State           `json:"state"`
-	Attempt     int             `json:"attempt"`
-	MaxAttempts int             `json:"max_attempts"`
-	AvailableAt time.Time       `json:"available_at"`
-	LeaseToken  *uuid.UUID      `json:"lease_token,omitempty"`
-	LeaseUntil  *time.Time      `json:"lease_until,omitempty"`
-	Payload     json.RawMessage `json:"payload"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	ErrorCode   *string         `json:"error_code,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-	StartedAt   *time.Time      `json:"started_at,omitempty"`
-	FinishedAt  *time.Time      `json:"finished_at,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	OwnerID           uuid.UUID       `json:"owner_id"`
+	ProjectID         *uuid.UUID      `json:"project_id,omitempty"`
+	Kind              string          `json:"kind"`
+	DedupeKey         *string         `json:"dedupe_key,omitempty"`
+	State             State           `json:"state"`
+	Attempt           int             `json:"attempt"`
+	MaxAttempts       int             `json:"max_attempts"`
+	AvailableAt       time.Time       `json:"available_at"`
+	LeaseToken        *uuid.UUID      `json:"lease_token,omitempty"`
+	LeaseUntil        *time.Time      `json:"lease_until,omitempty"`
+	Payload           json.RawMessage `json:"payload"`
+	Result            json.RawMessage `json:"result,omitempty"`
+	ErrorCode         *string         `json:"error_code,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	StartedAt         *time.Time      `json:"started_at,omitempty"`
+	FinishedAt        *time.Time      `json:"finished_at,omitempty"`
+	CancelRequestedAt *time.Time      `json:"cancel_requested_at,omitempty"`
+}
+
+func IsTerminalState(state State) bool {
+	return state == StateSucceeded || state == StateFailed || state == StateCancelled
+}
+
+func IsCancellableState(state State) bool {
+	return state == StateQueued || state == StateRunning
 }
 
 type EnqueueInput struct {

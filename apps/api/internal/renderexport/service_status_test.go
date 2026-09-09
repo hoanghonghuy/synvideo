@@ -28,6 +28,18 @@ func (r *jobReaderStub) GetByIDForProject(_ context.Context, ownerID, projectID,
 	return r.job, r.err
 }
 
+func (r *jobReaderStub) GetByDedupeKey(context.Context, uuid.UUID, string, string) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+
+func (r *jobReaderStub) ListByProjectKind(context.Context, jobs.ListByProjectKindOptions) ([]jobs.Job, *jobs.ListCursor, error) {
+	return nil, nil, nil
+}
+
+func (r *jobReaderStub) RequestCancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (jobs.Job, error) {
+	return jobs.Job{}, jobs.ErrJobNotFound
+}
+
 type artifactReaderStub struct {
 	artifact  RenderArtifact
 	err       error
