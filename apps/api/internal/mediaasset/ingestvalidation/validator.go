@@ -89,11 +89,16 @@ func (v *Validator) validateImageFile(path string, declared DeclaredInput) (Veri
 	}
 	defer file.Close()
 
-	header, err := readBoundedHeader(file)
+	info, err := file.Stat()
+	if err != nil || info.Size() < 1 {
+		return VerifiedContent{}, ErrMalformed
+	}
+
+	prefix, err := readBoundedHeader(file)
 	if err != nil {
 		return VerifiedContent{}, ErrMalformed
 	}
-	facts, err := detectImage(header)
+	facts, err := detectImage(imageProbe{file: file, size: info.Size(), prefix: prefix})
 	if err != nil {
 		return errResult(err)
 	}

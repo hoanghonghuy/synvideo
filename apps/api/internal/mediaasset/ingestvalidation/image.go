@@ -6,39 +6,49 @@ import (
 	"io"
 )
 
-const maxImageHeaderRead = 64 * 1024
+const (
+	maxImageHeaderRead          = 64 * 1024
+	pngIENDTailSize             = 12
+	maxPNGChunkHeadersInspected = 1024
+)
 
 type imageFacts struct {
 	mimeType string
 }
 
-func detectImage(data []byte) (imageFacts, error) {
-	if len(data) < 12 {
+type imageProbe struct {
+	file   io.ReaderAt
+	size   int64
+	prefix []byte
+}
+
+func detectImage(probe imageProbe) (imageFacts, error) {
+	if probe.size < 1 || len(probe.prefix) < 12 {
 		return imageFacts{}, ErrMalformed
 	}
 	switch {
-	case isPNG(data):
-		if err := validatePNGHeader(data); err != nil {
+	case isPNG(probe.prefix):
+		if err := validatePNG(probe); err != nil {
 			return imageFacts{}, err
 		}
 		return imageFacts{mimeType: "image/png"}, nil
-	case isJPEG(data):
-		if err := validateJPEGHeader(data); err != nil {
+	case isJPEG(probe.prefix):
+		if err := validateJPEG(probe); err != nil {
 			return imageFacts{}, err
 		}
 		return imageFacts{mimeType: "image/jpeg"}, nil
-	case isGIF(data):
-		if err := validateGIFHeader(data); err != nil {
+	case isGIF(probe.prefix):
+		if err := validateGIF(probe); err != nil {
 			return imageFacts{}, err
 		}
 		return imageFacts{mimeType: "image/gif"}, nil
-	case isWebP(data):
-		if err := validateWebPHeader(data); err != nil {
+	case isWebP(probe.prefix):
+		if err := validateWebP(probe); err != nil {
 			return imageFacts{}, err
 		}
 		return imageFacts{mimeType: "image/webp"}, nil
-	case isAVIF(data):
-		if err := validateAVIFHeader(data); err != nil {
+	case isAVIF(probe.prefix):
+		if err := validateAVIF(probe); err != nil {
 			return imageFacts{}, err
 		}
 		return imageFacts{mimeType: "image/avif"}, nil
@@ -52,49 +62,90 @@ func readBoundedHeader(r io.Reader) ([]byte, error) {
 	return io.ReadAll(limited)
 }
 
+func readFileRange(file io.ReaderAt, size, offset, length int64) ([]byte, error) {
+	if offset < 0 || length < 0 || offset+length > size {
+		return nil, ErrMalformed
+	}
+	buf := make([]byte, length)
+	n, err := file.ReadAt(buf, offset)
+	if err != nil {
+		return nil, ErrMalformed
+	}
+	if int64(n) != length {
+		return nil, ErrMalformed
+	}
+	return buf, nil
+}
+
 func isPNG(data []byte) bool {
 	return len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
 }
 
-func validatePNGHeader(data []byte) error {
-	if len(data) < 33 {
+func validatePNG(probe imageProbe) error {
+	prefix := probe.prefix
+	if len(prefix) < 33 || !bytes.Equal(prefix[12:16], []byte("IHDR")) {
 		return ErrMalformed
 	}
-	if !bytes.Equal(data[12:16], []byte("IHDR")) {
+	ihdrLen := binary.BigEndian.Uint32(prefix[8:12])
+	if ihdrLen != 13 {
 		return ErrMalformed
 	}
-	chunkLen := binary.BigEndian.Uint32(data[8:12])
-	if chunkLen != 13 {
-		return ErrMalformed
-	}
-	width := binary.BigEndian.Uint32(data[16:20])
-	height := binary.BigEndian.Uint32(data[20:24])
+	width := binary.BigEndian.Uint32(prefix[16:20])
+	height := binary.BigEndian.Uint32(prefix[20:24])
 	if width == 0 || height == 0 {
 		return ErrMalformed
 	}
 
-	offset := 8
 	hasIDAT := false
-	hasIEND := false
-	for offset+8 <= len(data) {
-		chunkLen := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-		chunkType := data[offset+4 : offset+8]
-		chunkEnd := offset + 8 + chunkLen + 4
-		if chunkLen < 0 || chunkEnd > len(data) {
+	inspected := 0
+	prefixLimit := len(prefix)
+	offset := 8
+	for offset+8 <= prefixLimit {
+		if inspected >= maxPNGChunkHeadersInspected {
 			return ErrMalformed
 		}
+		inspected++
+
+		chunkLen := int64(binary.BigEndian.Uint32(prefix[offset : offset+4]))
+		chunkType := prefix[offset+4 : offset+8]
+		chunkEnd := int64(offset) + 8 + chunkLen + 4
+		if chunkEnd > probe.size {
+			return ErrMalformed
+		}
+
 		switch {
 		case bytes.Equal(chunkType, []byte("IDAT")):
 			hasIDAT = true
 		case bytes.Equal(chunkType, []byte("IEND")):
-			hasIEND = true
+			if !hasIDAT || chunkEnd != probe.size {
+				return ErrMalformed
+			}
+			return nil
 		}
-		if hasIEND {
+		if hasIDAT {
 			break
 		}
-		offset = chunkEnd
+
+		if chunkEnd > int64(prefixLimit) {
+			break
+		}
+		if chunkEnd <= int64(offset) {
+			return ErrMalformed
+		}
+		offset = int(chunkEnd)
 	}
-	if !hasIDAT || !hasIEND {
+
+	if !hasIDAT {
+		return ErrMalformed
+	}
+	if probe.size < pngIENDTailSize {
+		return ErrMalformed
+	}
+	tail, err := readFileRange(probe.file, probe.size, probe.size-pngIENDTailSize, pngIENDTailSize)
+	if err != nil {
+		return err
+	}
+	if binary.BigEndian.Uint32(tail[0:4]) != 0 || !bytes.Equal(tail[4:8], []byte("IEND")) {
 		return ErrMalformed
 	}
 	return nil
@@ -104,19 +155,19 @@ func isJPEG(data []byte) bool {
 	return len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF
 }
 
-func validateJPEGHeader(data []byte) error {
-	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+func validateJPEG(probe imageProbe) error {
+	prefix := probe.prefix
+	if len(prefix) < 4 || prefix[0] != 0xFF || prefix[1] != 0xD8 {
 		return ErrMalformed
 	}
 
 	offset := 2
 	hasSOF := false
-
-	for offset+1 < len(data) {
-		if data[offset] != 0xFF {
+	for offset+1 < len(prefix) {
+		if prefix[offset] != 0xFF {
 			return ErrMalformed
 		}
-		marker := data[offset+1]
+		marker := prefix[offset+1]
 		offset += 2
 
 		switch marker {
@@ -133,16 +184,18 @@ func validateJPEGHeader(data []byte) error {
 		if marker == 0x00 {
 			return ErrMalformed
 		}
-
-		if offset+2 > len(data) {
+		if offset+2 > len(prefix) {
 			return ErrMalformed
 		}
-		segmentLen := int(binary.BigEndian.Uint16(data[offset : offset+2]))
+		segmentLen := int(binary.BigEndian.Uint16(prefix[offset : offset+2]))
 		if segmentLen < 2 {
 			return ErrMalformed
 		}
-		segmentEnd := offset + segmentLen
-		if segmentEnd > len(data) {
+		segmentEnd := int64(offset + segmentLen)
+		if segmentEnd > probe.size {
+			return ErrMalformed
+		}
+		if segmentEnd > int64(len(prefix)) {
 			return ErrMalformed
 		}
 
@@ -150,31 +203,42 @@ func validateJPEGHeader(data []byte) error {
 			if !hasSOF {
 				return ErrMalformed
 			}
-			if len(data) < 2 || data[len(data)-2] != 0xFF || data[len(data)-1] != 0xD9 {
-				return ErrMalformed
-			}
-			return nil
+			return validateJPEGTrailer(probe)
 		}
 
 		if isJPEGSOFMarker(marker) {
 			if segmentLen < 8 {
 				return ErrMalformed
 			}
-			height := binary.BigEndian.Uint16(data[offset+3 : offset+5])
-			width := binary.BigEndian.Uint16(data[offset+5 : offset+7])
+			height := binary.BigEndian.Uint16(prefix[offset+3 : offset+5])
+			width := binary.BigEndian.Uint16(prefix[offset+5 : offset+7])
 			if width == 0 || height == 0 {
 				return ErrMalformed
 			}
 			hasSOF = true
 		}
 
-		offset = segmentEnd
+		offset = int(segmentEnd)
 	}
 
-	if hasSOF && len(data) >= 2 && data[len(data)-2] == 0xFF && data[len(data)-1] == 0xD9 {
-		return nil
+	if !hasSOF {
+		return ErrMalformed
 	}
-	return ErrMalformed
+	return validateJPEGTrailer(probe)
+}
+
+func validateJPEGTrailer(probe imageProbe) error {
+	if probe.size < 2 {
+		return ErrMalformed
+	}
+	tail, err := readFileRange(probe.file, probe.size, probe.size-2, 2)
+	if err != nil {
+		return err
+	}
+	if tail[0] != 0xFF || tail[1] != 0xD9 {
+		return ErrMalformed
+	}
+	return nil
 }
 
 func isJPEGSOFMarker(marker byte) bool {
@@ -190,16 +254,24 @@ func isGIF(data []byte) bool {
 	return len(data) >= 6 && (bytes.Equal(data[:6], []byte("GIF87a")) || bytes.Equal(data[:6], []byte("GIF89a")))
 }
 
-func validateGIFHeader(data []byte) error {
-	if len(data) < 13 {
+func validateGIF(probe imageProbe) error {
+	prefix := probe.prefix
+	if len(prefix) < 13 {
 		return ErrMalformed
 	}
-	width := binary.LittleEndian.Uint16(data[6:8])
-	height := binary.LittleEndian.Uint16(data[8:10])
+	width := binary.LittleEndian.Uint16(prefix[6:8])
+	height := binary.LittleEndian.Uint16(prefix[8:10])
 	if width == 0 || height == 0 {
 		return ErrMalformed
 	}
-	if data[len(data)-1] != 0x3B {
+	if probe.size < 1 {
+		return ErrMalformed
+	}
+	tail, err := readFileRange(probe.file, probe.size, probe.size-1, 1)
+	if err != nil {
+		return err
+	}
+	if tail[0] != 0x3B {
 		return ErrMalformed
 	}
 	return nil
@@ -209,29 +281,37 @@ func isWebP(data []byte) bool {
 	return len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP"))
 }
 
-func validateWebPHeader(data []byte) error {
-	if len(data) < 20 {
+func validateWebP(probe imageProbe) error {
+	prefix := probe.prefix
+	if len(prefix) < 20 {
 		return ErrMalformed
 	}
-	riffSize := binary.LittleEndian.Uint32(data[4:8])
-	if int(riffSize)+8 > len(data) {
+	riffSize := int64(binary.LittleEndian.Uint32(prefix[4:8]))
+	declaredFileSize := riffSize + 8
+	if declaredFileSize != probe.size {
 		return ErrMalformed
 	}
-	fourCC := data[12:16]
-	chunkSize := binary.LittleEndian.Uint32(data[16:20])
+	fourCC := prefix[12:16]
+	chunkSize := binary.LittleEndian.Uint32(prefix[16:20])
+	if chunkSize == 0 {
+		return ErrMalformed
+	}
 	payloadStart := 20
-	payloadEnd := payloadStart + int(chunkSize)
-	if chunkSize == 0 || payloadEnd > len(data) || payloadEnd > int(riffSize)+8 {
+	payloadEnd := int64(payloadStart) + int64(chunkSize)
+	if payloadEnd > probe.size {
 		return ErrMalformed
 	}
-	payload := data[payloadStart:payloadEnd]
+	available := prefix[payloadStart:]
+	if int64(len(available)) > int64(chunkSize) {
+		available = available[:chunkSize]
+	}
 	switch {
 	case bytes.Equal(fourCC, []byte("VP8 ")):
-		return validateVP8Payload(payload)
+		return validateVP8Payload(available)
 	case bytes.Equal(fourCC, []byte("VP8L")):
-		return validateVP8LPayload(payload)
+		return validateVP8LPayload(available)
 	case bytes.Equal(fourCC, []byte("VP8X")):
-		return validateVP8XPayload(payload)
+		return validateVP8XPayload(available)
 	default:
 		return ErrMalformed
 	}
@@ -283,30 +363,37 @@ func isAVIF(data []byte) bool {
 	return len(data) >= 12 && bytes.Equal(data[4:8], []byte("ftyp"))
 }
 
-func validateAVIFHeader(data []byte) error {
+func validateAVIF(probe imageProbe) error {
+	prefix := probe.prefix
 	offset := 0
 	hasFTYP := false
 	hasPayloadBox := false
-	for offset+8 <= len(data) {
-		boxSize := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+	for offset+8 <= len(prefix) {
+		boxSize := int(binary.BigEndian.Uint32(prefix[offset : offset+4]))
 		if boxSize < 8 {
 			return ErrMalformed
 		}
-		boxType := data[offset+4 : offset+8]
-		boxEnd := offset + boxSize
-		if boxEnd > len(data) {
+		boxType := prefix[offset+4 : offset+8]
+		boxEnd := int64(offset + boxSize)
+		if boxEnd > probe.size {
 			return ErrMalformed
 		}
 		switch {
 		case bytes.Equal(boxType, []byte("ftyp")):
-			if !stringsContainsAVIFBrand(string(data[offset+8 : boxEnd])) {
+			if boxEnd > int64(len(prefix)) {
+				return ErrMalformed
+			}
+			if !stringsContainsAVIFBrand(string(prefix[offset+8 : boxEnd])) {
 				return ErrMalformed
 			}
 			hasFTYP = true
 		case bytes.Equal(boxType, []byte("meta")), bytes.Equal(boxType, []byte("mdat")), bytes.Equal(boxType, []byte("moov")):
 			hasPayloadBox = true
 		}
-		offset = boxEnd
+		if boxEnd > int64(len(prefix)) {
+			break
+		}
+		offset += boxSize
 	}
 	if !hasFTYP || !hasPayloadBox {
 		return ErrMalformed
