@@ -93,7 +93,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	actorResolver := actor.NewLocalResolver(cfg)
+	var actorResolver actor.Resolver
 
 	var server *http.Server
 	var projectService *project.Service
@@ -125,6 +125,13 @@ func main() {
 			logger.Error("database ping failed", "error", err)
 			os.Exit(1)
 		}
+		identityMapper := postgres.NewIdentityMappingRepository(pool)
+		actorResolver, err = actor.NewResolver(cfg, identityMapper)
+		if err != nil {
+			logger.Error("actor resolver initialization failed", "error", err)
+			os.Exit(1)
+		}
+
 		projectRepo := postgres.NewProjectRepository(pool)
 		briefRepo := postgres.NewCreativeBriefRepository(pool)
 		proposalRepo := postgres.NewCreativeProposalRepository(pool)
@@ -305,6 +312,11 @@ func main() {
 		server.Handler = httpserver.WithRenderExportRoutes(logger, server.Handler, renderExportService, actorResolver)
 		server.Handler = withAudioMixRoutes(logger, server.Handler, pool, actorResolver)
 	} else {
+		actorResolver, err = actor.NewResolver(cfg, nil)
+		if err != nil {
+			logger.Error("actor resolver initialization failed", "error", err)
+			os.Exit(1)
+		}
 		server = httpserver.New(cfg, logger, projectService, creativeBriefService, creativeProposalService, scriptService, scenePlanService, proposalGenerationService, nil, scriptGenerationService, scenePlanGenerationService, actorResolver)
 	}
 	errCh := make(chan error, 1)

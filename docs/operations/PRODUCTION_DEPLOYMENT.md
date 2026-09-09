@@ -54,6 +54,15 @@ See `.env.production.example` for the full variable list. Required API variables
 | `SYNVIDEO_MEDIA_STORAGE_*` | AWS / ops | S3 bucket + credentials (never in Vite) |
 | `SYNVIDEO_CREDENTIAL_ENCRYPTION_KEY` | Render secret | BYOK credential encryption |
 | `VITE_API_BASE_URL` | Vercel env | Cross-origin API origin for browser fetch |
+| `VITE_OIDC_ISSUER` | Vercel env | OIDC issuer for Authorization Code + PKCE browser sign-in |
+| `VITE_OIDC_CLIENT_ID` | Vercel env | Public OIDC client id for the SPA |
+| `VITE_OIDC_AUDIENCE` | Vercel env | API audience presented during sign-in and verified by the API |
+| `VITE_OIDC_REDIRECT_URI` | Vercel env | SPA callback route (`/auth/callback`) registered with the IdP |
+| `SYNVIDEO_OIDC_ISSUER` | Render env | Issuer URL verified on API JWTs (must match `VITE_OIDC_ISSUER`) |
+| `SYNVIDEO_OIDC_AUDIENCE` | Render env | Required JWT `aud` claim for API authentication |
+| `SYNVIDEO_OIDC_JWKS_URL` | Render env (optional) | Explicit JWKS URL; defaults to issuer OIDC discovery |
+| `SYNVIDEO_OIDC_JWKS_FETCH_TIMEOUT` | Render env | Bounded JWKS/discovery fetch timeout |
+| `SYNVIDEO_OIDC_JWKS_CACHE_TTL` | Render env | JWKS cache refresh interval |
 
 Forbidden in production:
 
@@ -68,7 +77,7 @@ The API applies an explicit origin allowlist from `SYNVIDEO_CORS_ALLOWED_ORIGINS
 
 - Allowed methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS`
 - Allowed headers: `Accept, Authorization, Content-Type, X-Request-ID`
-- Credentials: enabled for allowlisted origins (TASK-040 will own auth semantics)
+- Credentials: enabled for allowlisted origins; browser API auth uses `Authorization: Bearer <access_token>` (no API auth cookie in V1)
 - Wildcard `*` is rejected in production config validation
 - Disallowed origins do not receive `Access-Control-Allow-Origin`; preflight returns `403`
 
@@ -88,7 +97,7 @@ Required evidence before go-live:
 - `readyz` returns `200` on the new release
 - Smoke script passes (web, liveness, readiness, toolchain, CORS allow/deny)
 
-TASK-040 production authentication remains a separate gate before public creator exposure.
+Production authentication (TASK-040) uses standards-based OIDC Authorization Code + PKCE in the SPA with short-lived JWT access tokens verified by the API `actor.Resolver`. Access tokens stay in memory in the browser for V1; the API maps verified `(issuer, subject)` tuples to internal owner principals through `identity_principal_mappings`. Public creator exposure still requires PM/TL sign-off after TASK-040 merge and operational IdP configuration.
 
 ## Rollback and migration compatibility
 

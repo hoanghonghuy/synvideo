@@ -2,4 +2,5 @@ import { buildVercelDeploymentConfig } from './apps/web/scripts/vercel-config.mj
 
 export const config = buildVercelDeploymentConfig(process.env.VITE_API_BASE_URL, {
   requireApiBaseUrl: true,
+  oidcIssuer: process.env.VITE_OIDC_ISSUER ?? '',
 })

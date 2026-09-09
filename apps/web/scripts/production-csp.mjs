@@ -32,11 +32,35 @@ export function parseConfiguredApiOrigin(apiBaseUrl) {
   return parsed.origin
 }
 
-export function buildProductionContentSecurityPolicy(apiBaseUrl) {
+export function parseConfiguredOidcIssuer(oidcIssuer) {
+  const trimmed = String(oidcIssuer ?? '').trim().replace(/\/$/, '')
+  if (trimmed === '') {
+    return ''
+  }
+
+  let parsed
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw new Error('VITE_OIDC_ISSUER must be an absolute http(s) issuer URL')
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('VITE_OIDC_ISSUER must use http or https')
+  }
+
+  return parsed.origin
+}
+
+export function buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer = '') {
   const connectSources = ["'self'"]
   const apiOrigin = parseConfiguredApiOrigin(apiBaseUrl)
   if (apiOrigin) {
     connectSources.push(apiOrigin)
+  }
+  const issuerOrigin = parseConfiguredOidcIssuer(oidcIssuer)
+  if (issuerOrigin) {
+    connectSources.push(issuerOrigin)
   }
 
   return [
@@ -52,7 +76,7 @@ export function buildProductionContentSecurityPolicy(apiBaseUrl) {
   ].join('; ')
 }
 
-export function productionCspMetaTag(apiBaseUrl) {
-  const content = buildProductionContentSecurityPolicy(apiBaseUrl)
+export function productionCspMetaTag(apiBaseUrl, oidcIssuer = '') {
+  const content = buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer)
   return `<meta http-equiv="Content-Security-Policy" content="${content}" />`
 }

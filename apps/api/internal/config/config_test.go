@@ -158,6 +158,12 @@ func TestConfigValidateAcceptsProductionContract(t *testing.T) {
 		Environment:        EnvironmentProduction,
 		DatabaseURL:        "postgres://example",
 		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
+		Auth: AuthConfig{
+			OIDCIssuer:       "https://issuer.synvideo.example",
+			OIDCAudience:     "synvideo-api",
+			JWKSFetchTimeout: 5 * time.Second,
+			JWKSCacheTTL:     5 * time.Minute,
+		},
 		MediaStorage: MediaStorageConfig{
 			Endpoint:        "https://s3.amazonaws.com",
 			Region:          "us-east-1",
@@ -171,6 +177,28 @@ func TestConfigValidateAcceptsProductionContract(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected production contract to validate: %v", err)
+	}
+}
+
+func TestConfigValidateRequiresAuthInProduction(t *testing.T) {
+	cfg := Config{
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
+		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
+		MediaStorage: MediaStorageConfig{
+			Endpoint:        "https://s3.amazonaws.com",
+			Region:          "us-east-1",
+			Bucket:          "synvideo",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+			Timeout:         30 * time.Second,
+			MaxUploadBytes:  1024,
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected production config without auth to fail validation")
 	}
 }
 

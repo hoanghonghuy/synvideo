@@ -1,3 +1,5 @@
+import { getAccessToken } from '@/auth/session'
+
 function configuredApiBase(): string {
   return (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
 }
@@ -11,8 +13,22 @@ export function apiUrl(path: string): string {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const accessToken = getAccessToken()
+  if (!accessToken) {
+    return fetch(apiUrl(path), {
+      credentials: 'include',
+      ...init,
+    })
+  }
+
+  const headers = new Headers(init.headers ?? {})
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
   return fetch(apiUrl(path), {
     credentials: 'include',
     ...init,
+    headers,
   })
 }

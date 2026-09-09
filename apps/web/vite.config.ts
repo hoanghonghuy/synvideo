@@ -11,7 +11,10 @@ function productionCspPlugin(): Plugin {
     transformIndexHtml: {
       order: 'pre',
       handler(html) {
-        const meta = productionCspMetaTag(process.env.VITE_API_BASE_URL ?? '')
+        const meta = productionCspMetaTag(
+          process.env.VITE_API_BASE_URL ?? '',
+          process.env.VITE_OIDC_ISSUER ?? '',
+        )
         return html.replace('</head>', `    ${meta}\n  </head>`)
       },
     },

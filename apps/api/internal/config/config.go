@@ -28,11 +28,51 @@ var allowedEnvironments = map[string]struct{}{
 	EnvironmentProduction:  {},
 }
 
+type AuthConfig struct {
+	OIDCIssuer       string
+	OIDCAudience     string
+	JWKSURL          string
+	JWKSFetchTimeout time.Duration
+	JWKSCacheTTL     time.Duration
+}
+
+func (c AuthConfig) Configured() bool {
+	return strings.TrimSpace(c.OIDCIssuer) != "" && strings.TrimSpace(c.OIDCAudience) != ""
+}
+
+func (c AuthConfig) Validate() error {
+	if !c.Configured() {
+		return errors.New("oidc issuer and audience are required")
+	}
+	issuer := strings.TrimRight(strings.TrimSpace(c.OIDCIssuer), "/")
+	parsed, err := url.Parse(issuer)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("SYNVIDEO_OIDC_ISSUER must be an origin URL without path: %q", c.OIDCIssuer)
+	}
+	if strings.TrimSpace(c.OIDCAudience) == "" {
+		return errors.New("SYNVIDEO_OIDC_AUDIENCE is required")
+	}
+	if c.JWKSFetchTimeout <= 0 {
+		return errors.New("SYNVIDEO_OIDC_JWKS_FETCH_TIMEOUT must be positive")
+	}
+	if c.JWKSCacheTTL <= 0 {
+		return errors.New("SYNVIDEO_OIDC_JWKS_CACHE_TTL must be positive")
+	}
+	if jwks := strings.TrimSpace(c.JWKSURL); jwks != "" {
+		parsedJWKS, err := url.Parse(jwks)
+		if err != nil || parsedJWKS.Scheme == "" || parsedJWKS.Host == "" {
+			return fmt.Errorf("SYNVIDEO_OIDC_JWKS_URL must be an absolute http(s) URL: %q", c.JWKSURL)
+		}
+	}
+	return nil
+}
+
 type Config struct {
 	Addr                    string
 	Environment             string
 	DatabaseURL             string
 	LocalActorID            *uuid.UUID
+	Auth                    AuthConfig
 	CredentialEncryptionKey string
 	CredentialKeyVersion    string
 	TextProviderDefinitions string // Deprecated: use ProviderDefinitions
@@ -43,6 +83,8 @@ type Config struct {
 
 const (
 	defaultMediaStorageTimeout = 30 * time.Second
+	defaultJWKSFetchTimeout    = 5 * time.Second
+	defaultJWKSCacheTTL        = 5 * time.Minute
 	DefaultMaxUploadBytes      = 100 * 1024 * 1024
 )
 
@@ -106,11 +148,17 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	authCfg, err := loadAuthConfig()
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		Addr:                    resolveListenAddr(),
 		Environment:             getEnv("SYNVIDEO_ENV", defaultEnvironment),
 		DatabaseURL:             getEnv("SYNVIDEO_DATABASE_URL", ""),
 		LocalActorID:            localActorID,
+		Auth:                    authCfg,
 		CredentialEncryptionKey: byokKey,
 		CredentialKeyVersion:    getEnv("SYNVIDEO_CREDENTIAL_KEY_VERSION", "v1"),
 		TextProviderDefinitions: getEnv("SYNVIDEO_TEXT_PROVIDER_DEFINITIONS", ""),
@@ -134,6 +182,9 @@ func (c Config) Validate() error {
 		return errors.New("SYNVIDEO_LOCAL_ACTOR_ID must not be set in production")
 	}
 	if c.Environment == EnvironmentProduction {
+		if err := c.Auth.Validate(); err != nil {
+			return fmt.Errorf("production auth configuration invalid: %w", err)
+		}
 		if len(c.CORSAllowedOrigins) == 0 {
 			return errors.New("SYNVIDEO_CORS_ALLOWED_ORIGINS is required in production")
 		}
@@ -272,6 +323,31 @@ func getEnvAlias(primary, legacy, fallback string) string {
 		return value
 	}
 	return getEnv(legacy, fallback)
+}
+
+func loadAuthConfig() (AuthConfig, error) {
+	result := AuthConfig{
+		OIDCIssuer:       getEnv("SYNVIDEO_OIDC_ISSUER", ""),
+		OIDCAudience:     getEnv("SYNVIDEO_OIDC_AUDIENCE", ""),
+		JWKSURL:          getEnv("SYNVIDEO_OIDC_JWKS_URL", ""),
+		JWKSFetchTimeout: defaultJWKSFetchTimeout,
+		JWKSCacheTTL:     defaultJWKSCacheTTL,
+	}
+	if raw := strings.TrimSpace(os.Getenv("SYNVIDEO_OIDC_JWKS_FETCH_TIMEOUT")); raw != "" {
+		value, err := time.ParseDuration(raw)
+		if err != nil || value <= 0 {
+			return AuthConfig{}, errors.New("SYNVIDEO_OIDC_JWKS_FETCH_TIMEOUT must be a positive duration")
+		}
+		result.JWKSFetchTimeout = value
+	}
+	if raw := strings.TrimSpace(os.Getenv("SYNVIDEO_OIDC_JWKS_CACHE_TTL")); raw != "" {
+		value, err := time.ParseDuration(raw)
+		if err != nil || value <= 0 {
+			return AuthConfig{}, errors.New("SYNVIDEO_OIDC_JWKS_CACHE_TTL must be a positive duration")
+		}
+		result.JWKSCacheTTL = value
+	}
+	return result, nil
 }
 
 func parseOptionalUUID(key string) (*uuid.UUID, error) {
