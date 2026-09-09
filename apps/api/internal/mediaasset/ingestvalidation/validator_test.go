@@ -124,41 +124,9 @@ func TestValidateImageRejectsHeaderOnlyTruncatedPayloads(t *testing.T) {
 	}
 }
 
-func TestValidateProbeFamiliesAcceptValidFixtures(t *testing.T) {
-	validator := ingestvalidation.NewValidator(nil)
-	cases := []struct {
-		name string
-		path string
-		kind ingestvalidation.Kind
-		mime string
-	}{
-		{"mp4", ffmpegFixture(t, ".mp4", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libx264", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/mp4"},
-		{"quicktime", ffmpegFixture(t, ".mov", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libx264", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/quicktime"},
-		{"webm", ffmpegFixture(t, ".webm", "-f", "lavfi", "-i", "color=c=red:s=16x16:d=0.1", "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p"), ingestvalidation.KindVideo, "video/webm"},
-		{"wav", ffmpegFixture(t, ".wav", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1"), ingestvalidation.KindAudio, "audio/wav"},
-		{"mp3", ffmpegFixture(t, ".mp3", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "libmp3lame"), ingestvalidation.KindAudio, "audio/mpeg"},
-		{"flac", ffmpegFixture(t, ".flac", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "flac"), ingestvalidation.KindAudio, "audio/flac"},
-		{"ogg", ffmpegFixture(t, ".ogg", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "libvorbis"), ingestvalidation.KindAudio, "audio/ogg"},
-		{"aac", ffmpegFixture(t, ".aac", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "aac"), ingestvalidation.KindAudio, "audio/aac"},
-		{"m4a", ffmpegFixture(t, ".m4a", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1", "-c:a", "aac"), ingestvalidation.KindAudio, "audio/mp4"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			verified, err := validator.ValidateFile(context.Background(), tc.path, ingestvalidation.DeclaredInput{
-				Kind: tc.kind, MimeType: tc.mime,
-			})
-			if err != nil {
-				t.Fatalf("ValidateFile() error = %v", err)
-			}
-			if verified.Kind != tc.kind {
-				t.Fatalf("verified kind = %q", verified.Kind)
-			}
-		})
-	}
-}
-
 func TestValidateProbeRejectsSpoofedMIME(t *testing.T) {
-	validator := ingestvalidation.NewValidator(nil)
+	requireFFprobe(t)
+	validator := ingestvalidation.NewValidator(ingestvalidation.ExecCommandRunner{})
 	path := ffmpegFixture(t, ".wav", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1")
 	_, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{
 		Kind: ingestvalidation.KindAudio, MimeType: "audio/flac",

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,28 +25,43 @@ type ExecCommandRunner struct{}
 
 func (ExecCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var output bytes.Buffer
-	cmd.Stdout = &boundedBuffer{buf: &output, max: ProbeLogMaxBytes}
-	cmd.Stderr = &boundedBuffer{buf: &output, max: ProbeLogMaxBytes}
+	output := newBoundedProbeOutput(ProbeLogMaxBytes)
+	cmd.Stdout = output
+	cmd.Stderr = output
 	err := cmd.Run()
 	return output.Bytes(), err
 }
 
-type boundedBuffer struct {
-	buf *bytes.Buffer
+type boundedProbeOutput struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
 	max int
 }
 
-func (b *boundedBuffer) Write(p []byte) (int, error) {
+func newBoundedProbeOutput(max int) *boundedProbeOutput {
+	return &boundedProbeOutput{max: max}
+}
+
+func (o *boundedProbeOutput) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	original := len(p)
-	remaining := b.max - b.buf.Len()
-	if remaining > 0 {
-		if len(p) > remaining {
-			p = p[:remaining]
-		}
-		_, _ = b.buf.Write(p)
+	remaining := o.max - o.buf.Len()
+	if remaining <= 0 {
+		return original, nil
 	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	_, _ = o.buf.Write(p)
 	return original, nil
+}
+
+func (o *boundedProbeOutput) Bytes() []byte {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.buf.Bytes()
 }
 
 type ffprobeResult struct {

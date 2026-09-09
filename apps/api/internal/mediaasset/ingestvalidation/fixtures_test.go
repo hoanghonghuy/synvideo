@@ -83,14 +83,22 @@ func writeTempFile(t *testing.T, data []byte) string {
 	return path
 }
 
-func ffmpegFixture(t *testing.T, extension string, args ...string) string {
+func requireFFprobe(t *testing.T) {
 	t.Helper()
 	if os.Getenv("SYNVIDEO_TEST_FFMPEG") != "1" {
 		t.Skip("SYNVIDEO_TEST_FFMPEG is not enabled")
 	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg is not installed")
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Fatalf("SYNVIDEO_TEST_FFMPEG is enabled but ffprobe is unavailable: %v", err)
 	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Fatalf("SYNVIDEO_TEST_FFMPEG is enabled but ffmpeg is unavailable: %v", err)
+	}
+}
+
+func ffmpegFixture(t *testing.T, extension string, args ...string) string {
+	t.Helper()
+	requireFFprobe(t)
 	path := filepath.Join(t.TempDir(), "fixture"+extension)
 	cmdArgs := append([]string{"-y", "-hide_banner", "-loglevel", "error"}, args...)
 	cmdArgs = append(cmdArgs, path)
