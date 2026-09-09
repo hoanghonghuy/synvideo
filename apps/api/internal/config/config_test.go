@@ -126,9 +126,9 @@ func TestConfigValidateRequiresCORSOriginsInProduction(t *testing.T) {
 
 func TestConfigValidateAcceptsProductionContract(t *testing.T) {
 	cfg := Config{
-		Addr:              ":8080",
-		Environment:       EnvironmentProduction,
-		DatabaseURL:       "postgres://example",
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
 		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
 		MediaStorage: MediaStorageConfig{
 			Endpoint:        "https://s3.amazonaws.com",
@@ -148,9 +148,9 @@ func TestConfigValidateAcceptsProductionContract(t *testing.T) {
 
 func TestConfigValidateRejectsWildcardCORSOriginInProduction(t *testing.T) {
 	cfg := Config{
-		Addr:              ":8080",
-		Environment:       EnvironmentProduction,
-		DatabaseURL:       "postgres://example",
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
 		CORSAllowedOrigins: []string{"*"},
 		MediaStorage: MediaStorageConfig{
 			Endpoint:        "https://s3.amazonaws.com",
@@ -170,9 +170,9 @@ func TestConfigValidateRejectsWildcardCORSOriginInProduction(t *testing.T) {
 
 func TestConfigValidateRequiresMediaStorageInProduction(t *testing.T) {
 	cfg := Config{
-		Addr:              ":8080",
-		Environment:       EnvironmentProduction,
-		DatabaseURL:       "postgres://example",
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
 		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
 	}
 
