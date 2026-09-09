@@ -71,10 +71,11 @@ describe('Scene Editor render export UI state', () => {
     expect(isRenderExportCancellable(job('cancelled'))).toBe(false)
   })
 
-  it('enables retry only for failed or cancelled terminal jobs', () => {
+  it('enables retry for every terminal render job state', () => {
+    expect(isRenderExportRetryable(job('succeeded'))).toBe(true)
     expect(isRenderExportRetryable(job('failed'))).toBe(true)
     expect(isRenderExportRetryable(job('cancelled'))).toBe(true)
-    expect(isRenderExportRetryable(job('succeeded'))).toBe(false)
+    expect(isRenderExportRetryable(job('queued'))).toBe(false)
     expect(isRenderExportRetryable(job('running'))).toBe(false)
   })
 })

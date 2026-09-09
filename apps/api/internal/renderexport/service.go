@@ -216,7 +216,7 @@ func (s *Service) Retry(ctx context.Context, ownerID, projectID, sourceJobID, re
 	if source.Kind != JobKind {
 		return JobView{}, ErrRenderNotFound
 	}
-	if source.State != jobs.StateFailed && source.State != jobs.StateCancelled {
+	if !jobs.IsTerminalState(source.State) {
 		return JobView{}, ErrRenderNotRetryable
 	}
 	sourcePayload, err := decodeRenderPayload(source.Payload)

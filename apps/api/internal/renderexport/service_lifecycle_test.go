@@ -215,11 +215,84 @@ func TestRetryCreatesLinkedJobWithoutMutatingSource(t *testing.T) {
 	}
 }
 
-func TestRetryRejectsSucceededSource(t *testing.T) {
+func TestRetryFromEachTerminalClassCreatesLinkedJob(t *testing.T) {
+	for _, terminalState := range []jobs.State{jobs.StateSucceeded, jobs.StateFailed, jobs.StateCancelled} {
+		t.Run(string(terminalState), func(t *testing.T) {
+			ownerID := uuid.New()
+			projectID := uuid.New()
+			reader := newLifecycleJobReader()
+			source := terminalRenderJob(ownerID, projectID, terminalState)
+			if terminalState == jobs.StateSucceeded {
+				source.ErrorCode = nil
+			}
+			reader.seed(source)
+			service := NewServiceWithRuntime(nil, &lifecycleQueue{reader: reader}, reader, nil, uuid.New)
+			requestID := uuid.New()
+
+			retryView, err := service.Retry(context.Background(), ownerID, projectID, source.ID, requestID)
+			if err != nil {
+				t.Fatalf("Retry() error = %v", err)
+			}
+			if retryView.RetryOfRenderJobID == nil || *retryView.RetryOfRenderJobID != source.ID {
+				t.Fatalf("retry lineage = %#v", retryView.RetryOfRenderJobID)
+			}
+			sourceAfter, err := reader.GetByIDForProject(context.Background(), ownerID, projectID, source.ID)
+			if err != nil || sourceAfter.State != terminalState {
+				t.Fatalf("source mutated: %#v err=%v", sourceAfter, err)
+			}
+		})
+	}
+}
+
+func TestRetryFromSucceededPreservesSourceArtifactAvailability(t *testing.T) {
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	jobID := uuid.New()
+	assetID := uuid.New()
+	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	reader := newLifecycleJobReader()
+	source := terminalRenderJob(ownerID, projectID, jobs.StateSucceeded)
+	source.ID = jobID
+	source.ErrorCode = nil
+	reader.seed(source)
+	artifacts := &artifactReaderStub{artifact: RenderArtifact{
+		ID:             uuid.New(),
+		OwnerID:        ownerID,
+		ProjectID:      projectID,
+		JobID:          jobID,
+		SnapshotDigest: digest,
+		ProfileID:      LocalProfileID,
+		MediaAssetID:   assetID,
+	}}
+	service := NewServiceWithRuntime(nil, &lifecycleQueue{reader: reader}, reader, artifacts, uuid.New)
+
+	before, err := service.Get(context.Background(), ownerID, projectID, jobID)
+	if err != nil || before.Artifact == nil || before.Artifact.MediaAssetID != assetID {
+		t.Fatalf("source artifact before retry = %#v err=%v", before.Artifact, err)
+	}
+
+	retryView, err := service.Retry(context.Background(), ownerID, projectID, jobID, uuid.New())
+	if err != nil {
+		t.Fatalf("Retry() error = %v", err)
+	}
+	if retryView.State != jobs.StateQueued {
+		t.Fatalf("retry job state = %s, want queued", retryView.State)
+	}
+
+	after, err := service.Get(context.Background(), ownerID, projectID, jobID)
+	if err != nil || after.State != jobs.StateSucceeded {
+		t.Fatalf("source after retry = %#v err=%v", after, err)
+	}
+	if after.Artifact == nil || after.Artifact.MediaAssetID != assetID {
+		t.Fatalf("source artifact after retry = %#v", after.Artifact)
+	}
+}
+
+func TestRetryRejectsNonTerminalSource(t *testing.T) {
 	ownerID := uuid.New()
 	projectID := uuid.New()
 	reader := newLifecycleJobReader()
-	source := terminalRenderJob(ownerID, projectID, jobs.StateSucceeded)
+	source := terminalRenderJob(ownerID, projectID, jobs.StateQueued)
 	source.ErrorCode = nil
 	reader.seed(source)
 	service := NewServiceWithRuntime(nil, &lifecycleQueue{reader: reader}, reader, nil, uuid.New)

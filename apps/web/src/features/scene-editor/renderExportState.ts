@@ -15,7 +15,7 @@ export function isRenderExportCancellable(job: RenderExportJob | null): boolean 
 }
 
 export function isRenderExportRetryable(job: RenderExportJob | null): boolean {
-  return job?.state === 'failed' || job?.state === 'cancelled'
+  return isRenderExportTerminal(job)
 }
 
 export function persistRenderJobID(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, projectID: string, jobID: string | null): void {
