@@ -1,3 +1,4 @@
+import { apiFetch, apiUrl } from '@/api/http'
 import type { MediaAsset } from '@/features/media/api'
 
 export interface SceneNarrationBinding {
@@ -109,11 +110,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export function audioContentURL(projectID: string, assetID: string): string {
-  return `/api/v1/projects/${encodeURIComponent(projectID)}/media-assets/${encodeURIComponent(assetID)}/content`
+  return apiUrl(`/api/v1/projects/${encodeURIComponent(projectID)}/media-assets/${encodeURIComponent(assetID)}/content`)
 }
 
 export async function fetchTTSOptions(): Promise<TTSOptionsResponse> {
-  const res = await fetch('/api/v1/ai/tts-options', {
+  const res = await apiFetch('/api/v1/ai/tts-options', {
     headers: {
       Accept: 'application/json',
     },
@@ -125,7 +126,7 @@ export async function listSceneNarrations(
   projectID: string,
   version: number,
 ): Promise<SceneNarrationEntry[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/scene-plans/${encodeURIComponent(version)}/narration-bindings`,
     {
       headers: {
@@ -142,7 +143,7 @@ export async function createSceneNarrationGeneration(
   sceneKey: string,
   input: CreateSceneNarrationGenerationInput,
 ): Promise<SceneNarrationJobView> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/scene-plans/${encodeURIComponent(version)}/scenes/${encodeURIComponent(sceneKey)}/narration-generations`,
     {
       method: 'POST',
@@ -160,7 +161,7 @@ export async function getSceneNarrationGeneration(
   projectID: string,
   jobID: string,
 ): Promise<SceneNarrationJobView> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/narration-generations/${encodeURIComponent(jobID)}`,
     {
       headers: {
@@ -177,7 +178,7 @@ export async function assignSceneNarration(
   sceneKey: string,
   assetID: string,
 ): Promise<SceneNarrationEntry> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/scene-plans/${encodeURIComponent(version)}/scenes/${encodeURIComponent(sceneKey)}/narration`,
     {
       method: 'PUT',
@@ -196,7 +197,7 @@ export async function listSceneNarrationHistory(
   version: number,
   sceneKey: string,
 ): Promise<SceneNarrationEntry[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/scene-plans/${encodeURIComponent(version)}/scenes/${encodeURIComponent(sceneKey)}/narration/history`,
     {
       headers: {

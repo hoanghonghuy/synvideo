@@ -1,10 +1,26 @@
 import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+
+import { productionCspMetaTag } from './scripts/production-csp.mjs'
+
+function productionCspPlugin(): Plugin {
+  return {
+    name: 'synvideo-production-csp',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        const meta = productionCspMetaTag(process.env.VITE_API_BASE_URL ?? '')
+        return html.replace('</head>', `    ${meta}\n  </head>`)
+      },
+    },
+    apply: 'build',
+  }
+}
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), productionCspPlugin()],
   server: {
     proxy: {
       '/api': 'http://localhost:8080',

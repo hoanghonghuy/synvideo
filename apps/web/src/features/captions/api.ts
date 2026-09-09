@@ -1,3 +1,5 @@
+import { apiFetch } from '@/api/http'
+
 export type CaptionState = 'CURRENT' | 'STALE' | 'REBUILDING' | 'ERROR'
 
 export interface CaptionSegment {
@@ -75,11 +77,11 @@ function base(projectID: string, version: number, sceneKey: string): string {
 }
 
 export async function getCaptions(projectID: string, version: number, sceneKey: string): Promise<CaptionView> {
-  return handleResponse(await fetch(base(projectID, version, sceneKey), { headers: { Accept: 'application/json' } }))
+  return handleResponse(await apiFetch(base(projectID, version, sceneKey), { headers: { Accept: 'application/json' } }))
 }
 
 export async function deriveCaptions(projectID: string, version: number, sceneKey: string): Promise<CaptionView> {
-  return handleResponse(await fetch(`${base(projectID, version, sceneKey)}/derive`, { method: 'POST', headers: { Accept: 'application/json' } }))
+  return handleResponse(await apiFetch(`${base(projectID, version, sceneKey)}/derive`, { method: 'POST', headers: { Accept: 'application/json' } }))
 }
 
 export async function updateCaptions(projectID: string, version: number, sceneKey: string, input: {
@@ -87,7 +89,7 @@ export async function updateCaptions(projectID: string, version: number, sceneKe
   segments: CaptionSegment[]
   style: CaptionStyle
 }): Promise<CaptionView> {
-  return handleResponse(await fetch(base(projectID, version, sceneKey), {
+  return handleResponse(await apiFetch(base(projectID, version, sceneKey), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(input),
@@ -95,7 +97,7 @@ export async function updateCaptions(projectID: string, version: number, sceneKe
 }
 
 export async function rebuildCaptions(projectID: string, version: number, sceneKey: string, expectedRevision: number): Promise<CaptionView> {
-  return handleResponse(await fetch(`${base(projectID, version, sceneKey)}/rebuild`, {
+  return handleResponse(await apiFetch(`${base(projectID, version, sceneKey)}/rebuild`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ expected_revision: expectedRevision }),
@@ -103,9 +105,9 @@ export async function rebuildCaptions(projectID: string, version: number, sceneK
 }
 
 export async function listCaptionHistory(projectID: string, version: number, sceneKey: string): Promise<CaptionDocument[]> {
-  return handleResponse(await fetch(`${base(projectID, version, sceneKey)}/history`, { headers: { Accept: 'application/json' } }))
+  return handleResponse(await apiFetch(`${base(projectID, version, sceneKey)}/history`, { headers: { Accept: 'application/json' } }))
 }
 
 export async function getCaptionSnapshot(projectID: string, version: number, sceneKey: string): Promise<CaptionSnapshot> {
-  return handleResponse(await fetch(`${base(projectID, version, sceneKey)}/snapshot`, { headers: { Accept: 'application/json' } }))
+  return handleResponse(await apiFetch(`${base(projectID, version, sceneKey)}/snapshot`, { headers: { Accept: 'application/json' } }))
 }

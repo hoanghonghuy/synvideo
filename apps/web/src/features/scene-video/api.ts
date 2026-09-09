@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export interface VideoGenerationOptionModel {
@@ -64,7 +65,7 @@ export function getSceneVideoGeneration(projectId: string, jobId: string): Promi
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
@@ -244,7 +245,7 @@ export function mediaAssetContentURL(projectID: string, assetID: string): string
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init.headers },
   })

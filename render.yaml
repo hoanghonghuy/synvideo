@@ -1,0 +1,39 @@
+# SynVideo first-production API topology (Render).
+# Web is hosted separately on Vercel; this file defines the single API replica only.
+services:
+  - type: web
+    name: synvideo-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: starter
+    numInstances: 1
+    healthCheckPath: /api/v1/readyz
+    preDeployCommand: /usr/local/bin/synvideo-migrate up
+    envVars:
+      - key: SYNVIDEO_ENV
+        value: production
+      - key: SYNVIDEO_DATABASE_URL
+        sync: false
+      - key: SYNVIDEO_CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_ENDPOINT
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_REGION
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_BUCKET
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: SYNVIDEO_MEDIA_STORAGE_PATH_STYLE
+        value: "false"
+      - key: SYNVIDEO_MEDIA_STORAGE_TIMEOUT
+        value: 30s
+      - key: SYNVIDEO_MEDIA_MAX_UPLOAD_BYTES
+        sync: false
+      - key: SYNVIDEO_CREDENTIAL_ENCRYPTION_KEY
+        sync: false
+      - key: SYNVIDEO_CREDENTIAL_KEY_VERSION
+        value: v1

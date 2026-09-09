@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type CreativeProposalStatus = 'draft' | 'approved' | 'superseded'
@@ -130,7 +131,7 @@ export async function getProposalGeneration(
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

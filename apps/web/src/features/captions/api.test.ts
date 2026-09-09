@@ -31,7 +31,10 @@ describe('caption API', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project%2Fone/scene-plans/2/scenes/scene%20intro/captions',
-      { headers: { Accept: 'application/json' } },
+      expect.objectContaining({
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      }),
     )
   })
 

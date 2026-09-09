@@ -1,3 +1,4 @@
+import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
 export type DistributionTarget = 'youtube' | 'tiktok' | 'instagram' | 'other'
@@ -56,7 +57,7 @@ export async function putCreativeBrief(
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

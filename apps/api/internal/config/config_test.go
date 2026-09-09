@@ -1,11 +1,39 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+func TestResolveListenAddrPrefersExplicitOverride(t *testing.T) {
+	t.Setenv("SYNVIDEO_API_ADDR", "127.0.0.1:9090")
+	t.Setenv("PORT", "10000")
+
+	if addr := resolveListenAddr(); addr != "127.0.0.1:9090" {
+		t.Fatalf("expected SYNVIDEO_API_ADDR override, got %q", addr)
+	}
+}
+
+func TestResolveListenAddrUsesRenderPORTWhenUnset(t *testing.T) {
+	os.Unsetenv("SYNVIDEO_API_ADDR")
+	t.Setenv("PORT", "10000")
+
+	if addr := resolveListenAddr(); addr != ":10000" {
+		t.Fatalf("expected Render PORT fallback, got %q", addr)
+	}
+}
+
+func TestResolveListenAddrFallsBackToDefaultWhenUnset(t *testing.T) {
+	os.Unsetenv("SYNVIDEO_API_ADDR")
+	os.Unsetenv("PORT")
+
+	if addr := resolveListenAddr(); addr != ":8080" {
+		t.Fatalf("expected default listen address, got %q", addr)
+	}
+}
 
 func TestConfigValidateAcceptsDefaults(t *testing.T) {
 	cfg := Config{
@@ -100,6 +128,84 @@ func TestConfigValidateRejectsPartialMediaStorageConfiguration(t *testing.T) {
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected incomplete media storage configuration to fail validation")
+	}
+}
+
+func TestConfigValidateRequiresCORSOriginsInProduction(t *testing.T) {
+	cfg := Config{
+		Addr:        ":8080",
+		Environment: EnvironmentProduction,
+		DatabaseURL: "postgres://example",
+		MediaStorage: MediaStorageConfig{
+			Endpoint:        "https://s3.amazonaws.com",
+			Region:          "us-east-1",
+			Bucket:          "synvideo",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+			Timeout:         30 * time.Second,
+			MaxUploadBytes:  1024,
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected production config without CORS origins to fail validation")
+	}
+}
+
+func TestConfigValidateAcceptsProductionContract(t *testing.T) {
+	cfg := Config{
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
+		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
+		MediaStorage: MediaStorageConfig{
+			Endpoint:        "https://s3.amazonaws.com",
+			Region:          "us-east-1",
+			Bucket:          "synvideo",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+			Timeout:         30 * time.Second,
+			MaxUploadBytes:  1024,
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected production contract to validate: %v", err)
+	}
+}
+
+func TestConfigValidateRejectsWildcardCORSOriginInProduction(t *testing.T) {
+	cfg := Config{
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
+		CORSAllowedOrigins: []string{"*"},
+		MediaStorage: MediaStorageConfig{
+			Endpoint:        "https://s3.amazonaws.com",
+			Region:          "us-east-1",
+			Bucket:          "synvideo",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+			Timeout:         30 * time.Second,
+			MaxUploadBytes:  1024,
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected wildcard CORS origin to fail production validation")
+	}
+}
+
+func TestConfigValidateRequiresMediaStorageInProduction(t *testing.T) {
+	cfg := Config{
+		Addr:               ":8080",
+		Environment:        EnvironmentProduction,
+		DatabaseURL:        "postgres://example",
+		CORSAllowedOrigins: []string{"https://app.synvideo.example"},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected production config without media storage to fail validation")
 	}
 }
 

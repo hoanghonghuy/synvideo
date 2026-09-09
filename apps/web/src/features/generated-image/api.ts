@@ -1,3 +1,5 @@
+import { apiFetch } from '@/api/http'
+
 export interface ImageGenerationOptionModel {
   id: string
   display_name: string
@@ -91,7 +93,7 @@ function normalizeJob(job: SceneImageGenerationJobView): SceneImageGenerationJob
 }
 
 export async function fetchImageGenerationOptions(): Promise<ImageGenerationOptionsResponse> {
-  const response = await fetch('/api/v1/ai/image-generation-options', {
+  const response = await apiFetch('/api/v1/ai/image-generation-options', {
     headers: { Accept: 'application/json' },
   })
   return handleResponse<ImageGenerationOptionsResponse>(response)
@@ -103,7 +105,7 @@ export async function createSceneImageGeneration(
   sceneKey: string,
   input: CreateSceneImageGenerationInput,
 ): Promise<SceneImageGenerationJobView> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/scene-plans/${encodeURIComponent(version)}/scenes/${encodeURIComponent(sceneKey)}/image-generations`,
     {
       method: 'POST',
@@ -121,7 +123,7 @@ export async function getSceneImageGeneration(
   projectID: string,
   jobID: string,
 ): Promise<SceneImageGenerationJobView> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/v1/projects/${encodeURIComponent(projectID)}/image-generations/${encodeURIComponent(jobID)}`,
     { headers: { Accept: 'application/json' } },
   )

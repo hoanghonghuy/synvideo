@@ -94,6 +94,7 @@ func New(
 	}
 	mux.HandleFunc("GET /api/v1/healthz", healthHandler)
 	mux.HandleFunc("GET /api/v1/readyz", readinessHandler(cfg, databaseProbe, storageProbe))
+	mux.HandleFunc("GET /api/v1/runtime/toolchain", runtimeToolchainHandler(probeRuntimeToolchain))
 	if projectService != nil && actorResolver != nil {
 		handler := projectHandler{service: projectService, actorResolver: actorResolver}
 		mux.HandleFunc("POST /api/v1/projects", handler.create)
@@ -207,9 +208,14 @@ func New(
 		}
 	}
 
+	handler := requestLogger(logger, limitJSONRequestBody(defaultMaxJSONBodyBytes, mux))
+	if len(cfg.CORSAllowedOrigins) > 0 {
+		handler = withCORS(cfg.CORSAllowedOrigins, handler)
+	}
+
 	return &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           requestLogger(logger, limitJSONRequestBody(defaultMaxJSONBodyBytes, mux)),
+		Handler:           handler,
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 		ReadTimeout:       0,
 		WriteTimeout:      0,
