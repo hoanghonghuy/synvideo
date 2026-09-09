@@ -98,13 +98,17 @@ func (s *handlerAssets) Delete(_ context.Context, _ project.Principal, _ uuid.UU
 }
 
 type handlerArtifactRepo struct {
-	artifact  *RenderArtifact
-	createErr error
-	creates   int
+	artifact    *RenderArtifact
+	createErr   error
+	cancelFence bool
+	creates     int
 }
 
 func (r *handlerArtifactRepo) CreateForLease(_ context.Context, _ uuid.UUID, artifact RenderArtifact) (RenderArtifact, error) {
 	r.creates++
+	if r.cancelFence {
+		return RenderArtifact{}, ErrRenderCancelFenced
+	}
 	if r.createErr != nil {
 		err := r.createErr
 		r.createErr = nil

@@ -45,6 +45,7 @@ func (r *RenderArtifactRepository) CreateForLease(ctx context.Context, leaseToke
 		JOIN media_assets m ON m.id=$7
 		WHERE j.id=$4 AND j.owner_id=$2 AND j.project_id=$3 AND j.kind=$16
 		  AND j.state='running' AND j.lease_token=$17 AND j.lease_until>now()
+		  AND j.cancel_requested_at IS NULL
 		  AND j.payload->>'snapshot_digest'=$5::text AND j.payload->>'profile_id'=$6
 		  AND m.owner_id=$2 AND m.project_id=$3 AND m.deletion_requested_at IS NULL
 		  AND m.kind='video' AND m.origin='system'
@@ -62,6 +63,13 @@ func (r *RenderArtifactRepository) CreateForLease(ctx context.Context, leaseToke
 		return created, nil
 	}
 	if errors.Is(err, renderexport.ErrArtifactNotFound) {
+		cancelRequested, cancelErr := r.renderCancelRequested(ctx, artifact.JobID)
+		if cancelErr != nil {
+			return renderexport.RenderArtifact{}, cancelErr
+		}
+		if cancelRequested {
+			return renderexport.RenderArtifact{}, renderexport.ErrRenderCancelFenced
+		}
 		active, leaseErr := r.renderLeaseActive(ctx, artifact.OwnerID, artifact.ProjectID, artifact.JobID, leaseToken)
 		if leaseErr != nil {
 			return renderexport.RenderArtifact{}, leaseErr
@@ -85,11 +93,27 @@ func (r *RenderArtifactRepository) renderLeaseActive(ctx context.Context, ownerI
 			SELECT 1 FROM jobs
 			WHERE id=$1 AND owner_id=$2 AND project_id=$3 AND kind=$4
 			  AND state='running' AND lease_token=$5 AND lease_until>now()
+			  AND cancel_requested_at IS NULL
 		)
 	`, jobID, ownerID, projectID, renderexport.JobKind, leaseToken).Scan(&active); err != nil {
 		return false, fmt.Errorf("check render artifact lease: %w", err)
 	}
 	return active, nil
+}
+
+func (r *RenderArtifactRepository) renderCancelRequested(ctx context.Context, jobID uuid.UUID) (bool, error) {
+	var requested bool
+	if err := r.pool.QueryRow(ctx, `
+		SELECT cancel_requested_at IS NOT NULL
+		FROM jobs
+		WHERE id=$1;
+	`, jobID).Scan(&requested); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, renderexport.ErrArtifactNotFound
+		}
+		return false, fmt.Errorf("check render cancel request: %w", err)
+	}
+	return requested, nil
 }
 
 func (r *RenderArtifactRepository) GetByJob(ctx context.Context, ownerID, projectID, jobID uuid.UUID) (renderexport.RenderArtifact, error) {

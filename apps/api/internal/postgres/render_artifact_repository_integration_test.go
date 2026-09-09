@@ -258,6 +258,84 @@ func TestRenderArtifactRepositoryIntegrationRejectsCrossProjectAsset(t *testing.
 	}
 }
 
+func TestRenderArtifactRepositoryIntegrationRejectsFinalizationAfterCancelRequested(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectRepository := NewProjectRepository(pool)
+	projectItem, err := projectRepository.Create(ctx, ownerID, validIntegrationCreateInput("Render cancel fence"))
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	projectID := projectItem.ID
+
+	jobRepository := NewJobRepository(pool)
+	job, err := jobRepository.Enqueue(ctx, jobs.EnqueueInput{
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		ProjectID:   &projectID,
+		Kind:        renderexport.JobKind,
+		MaxAttempts: 2,
+		Payload:     canonicalRenderPayload(),
+	})
+	if err != nil {
+		t.Fatalf("enqueue render job: %v", err)
+	}
+	claimed := claimRenderJob(t, jobRepository)
+	if _, err := jobRepository.RequestCancel(ctx, ownerID, projectID, job.ID); err != nil {
+		t.Fatalf("request cancel: %v", err)
+	}
+
+	assetID := uuid.New()
+	now := time.Now().UTC()
+	asset := mediaasset.MediaAsset{
+		ID:               assetID,
+		OwnerID:          ownerID,
+		ProjectID:        projectID,
+		Kind:             mediaasset.KindVideo,
+		Origin:           mediaasset.OriginSystem,
+		ObjectKey:        "projects/" + projectID.String() + "/assets/" + assetID.String(),
+		MimeType:         "video/mp4",
+		ByteSize:         2048,
+		SHA256:           strings.Repeat("b", 64),
+		OriginalFilename: "render.mp4",
+		Metadata:         json.RawMessage(`{"source":"render_export_v1"}`),
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if _, err := NewMediaAssetRepository(pool).Create(ctx, asset); err != nil {
+		t.Fatalf("create render media asset: %v", err)
+	}
+
+	repository := NewRenderArtifactRepository(pool)
+	_, err = repository.CreateForLease(ctx, *claimed.LeaseToken, renderexport.RenderArtifact{
+		ID:               uuid.New(),
+		OwnerID:          ownerID,
+		ProjectID:        projectID,
+		JobID:            job.ID,
+		SnapshotDigest:   strings.Repeat("a", 64),
+		ProfileID:        renderexport.LocalProfileID,
+		MediaAssetID:     asset.ID,
+		ByteSize:         asset.ByteSize,
+		SHA256:           asset.SHA256,
+		MimeType:         asset.MimeType,
+		DurationMS:       1000,
+		Width:            320,
+		Height:           180,
+		ToolchainVersion: "ffmpeg version integration-test",
+		CreatedAt:        now,
+	})
+	if !errors.Is(err, renderexport.ErrRenderCancelFenced) {
+		t.Fatalf("expected cancel fence rejection, got %v", err)
+	}
+	if _, err := repository.GetByJob(ctx, ownerID, projectID, job.ID); !errors.Is(err, renderexport.ErrArtifactNotFound) {
+		t.Fatalf("cancel-fenced job should have no authoritative artifact, got %v", err)
+	}
+	if _, err := jobRepository.MarkSuccess(ctx, job.ID, *claimed.LeaseToken, json.RawMessage(`{"blocked":true}`)); !errors.Is(err, jobs.ErrStaleLease) {
+		t.Fatalf("MarkSuccess after cancel request should fail, got %v", err)
+	}
+}
+
 func claimRenderJob(t *testing.T, repository *JobRepository) jobs.Job {
 	t.Helper()
 	claimed, err := repository.ClaimNext(context.Background(), jobs.ClaimOptions{
