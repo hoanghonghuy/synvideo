@@ -19,11 +19,11 @@ Browser traffic is intentionally **cross-origin**: Vercel web origin → Render 
 - **Install (monorepo root):** `npm ci`
 - **Build:** `npm run build` (runs `vue-tsc`, `vite build`)
 - **Output:** `apps/web/dist`
-- **Manifest:** `apps/web/vercel.json` (SPA rewrite + edge security headers)
+- **Manifest:** `apps/web/vercel.mjs` (dynamic Vercel deployment config: SPA rewrite + edge security headers)
 - **Client API base:** `VITE_API_BASE_URL` (configured API origin, no trailing slash)
-- **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.json`; `apps/web/scripts/sync-vercel-csp.mjs` materializes the header from `VITE_API_BASE_URL` before Vercel install/build (`--require-api-base-url`). The same shared builder (`production-csp.mjs`) also injects a matching meta CSP into built `index.html` for defense-in-depth.
+- **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.mjs`; `apps/web/scripts/vercel-config.mjs` builds the deployment config at Vercel config-evaluation time from `VITE_API_BASE_URL` using the shared builder (`production-csp.mjs`). The same shared builder also injects a matching meta CSP into built `index.html` for defense-in-depth.
 
-Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` requires the CSP response header, syncs a fixture API URL into a temporary `vercel.json`, and asserts both the edge header and built HTML include that origin.
+Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` evaluates `apps/web/vercel.mjs` with a fixture API URL and asserts both the exported deployment-config CSP and built HTML include that origin.
 
 ### API (Render)
 

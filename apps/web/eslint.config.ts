@@ -15,6 +15,15 @@ export default [
     ignores: ['dist/**', 'coverage/**'],
   },
   {
+    name: 'synvideo/vercel-config',
+    files: ['vercel.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: nodeScriptGlobals,
+    },
+  },
+  {
     name: 'synvideo/scripts-node',
     files: ['scripts/**/*.{js,mjs,cjs}'],
     languageOptions: {
