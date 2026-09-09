@@ -13,8 +13,6 @@ services:
     envVars:
       - key: SYNVIDEO_ENV
         value: production
-      - key: SYNVIDEO_API_ADDR
-        sync: false
       - key: SYNVIDEO_DATABASE_URL
         sync: false
       - key: SYNVIDEO_CORS_ALLOWED_ORIGINS

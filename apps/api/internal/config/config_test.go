@@ -1,11 +1,39 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+func TestResolveListenAddrPrefersExplicitOverride(t *testing.T) {
+	t.Setenv("SYNVIDEO_API_ADDR", "127.0.0.1:9090")
+	t.Setenv("PORT", "10000")
+
+	if addr := resolveListenAddr(); addr != "127.0.0.1:9090" {
+		t.Fatalf("expected SYNVIDEO_API_ADDR override, got %q", addr)
+	}
+}
+
+func TestResolveListenAddrUsesRenderPORTWhenUnset(t *testing.T) {
+	os.Unsetenv("SYNVIDEO_API_ADDR")
+	t.Setenv("PORT", "10000")
+
+	if addr := resolveListenAddr(); addr != ":10000" {
+		t.Fatalf("expected Render PORT fallback, got %q", addr)
+	}
+}
+
+func TestResolveListenAddrFallsBackToDefaultWhenUnset(t *testing.T) {
+	os.Unsetenv("SYNVIDEO_API_ADDR")
+	os.Unsetenv("PORT")
+
+	if addr := resolveListenAddr(); addr != ":8080" {
+		t.Fatalf("expected default listen address, got %q", addr)
+	}
+}
 
 func TestConfigValidateAcceptsDefaults(t *testing.T) {
 	cfg := Config{

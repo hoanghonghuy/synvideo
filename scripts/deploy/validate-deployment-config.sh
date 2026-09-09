@@ -63,6 +63,10 @@ if "preDeployCommand: /usr/local/bin/synvideo-migrate up" not in render_text:
     sys.exit("render.yaml must run explicit migrations before app deploy")
 if "healthCheckPath: /api/v1/readyz" not in render_text:
     sys.exit("render.yaml must gate traffic on /api/v1/readyz")
+if "SYNVIDEO_API_ADDR" in render_text:
+    sys.exit(
+        "render.yaml must not declare SYNVIDEO_API_ADDR; Render injects PORT and resolveListenAddr() binds to it"
+    )
 
 docker_text = dockerfile.read_text()
 if "ffmpeg" not in docker_text:

@@ -32,7 +32,7 @@ Vercel owns web TLS termination and response security headers (`X-Content-Type-O
 - **Blueprint:** `render.yaml`
 - **Process entrypoint:** `/usr/local/bin/synvideo-api`
 - **Migration entrypoint:** `/usr/local/bin/synvideo-migrate up` (Render `preDeployCommand`)
-- **Listen address:** Render `PORT` (or `SYNVIDEO_API_ADDR` override)
+- **Listen address:** Render-injected `PORT` (resolved by `resolveListenAddr()` as `:<PORT>`). Do **not** declare `SYNVIDEO_API_ADDR` in `render.yaml` — Blueprint `sync: false` env vars require a manual value at first deploy and can break binding. `SYNVIDEO_API_ADDR` remains available for local/non-Render overrides only.
 - **Health gates:**
   - Liveness: `GET /api/v1/healthz` (process only)
   - Readiness / traffic admission: `GET /api/v1/readyz` (TASK-039 dependency probes)
@@ -48,6 +48,7 @@ See `.env.production.example` for the full variable list. Required API variables
 
 | Variable | Owner | Purpose |
 | --- | --- | --- |
+| `PORT` | Render (injected) | Listen port; consumed by `resolveListenAddr()` when `SYNVIDEO_API_ADDR` is unset |
 | `SYNVIDEO_DATABASE_URL` | Neon / ops | PostgreSQL connection string (`sslmode=require`) |
 | `SYNVIDEO_CORS_ALLOWED_ORIGINS` | Render / ops | Comma-separated HTTPS web origins (no `*`) |
 | `SYNVIDEO_MEDIA_STORAGE_*` | AWS / ops | S3 bucket + credentials (never in Vite) |
