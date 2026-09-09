@@ -35,10 +35,12 @@ import {
   RENDER_EXPORT_POLL_MS,
   restoreRenderJobID,
 } from './renderExportState'
+import type { UpstreamBridgeGuidance } from './upstreamBridgeGuidance'
 import {
   buildReconcileCandidate,
   forkApprovedScriptForComposition,
   latestApprovedScenePlanVersion,
+  loadUpstreamBridgeGuidance,
 } from './upstreamBridge'
 
 const route = useRoute()
@@ -53,6 +55,7 @@ const conflict = ref(false)
 const error = ref('')
 const notice = ref('')
 const reconcilePreview = ref<SceneEditorReconcilePreview | null>(null)
+const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
 const upstreamBusy = ref(false)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -90,6 +93,7 @@ async function load(resetDraft: boolean) {
     composition.value = latest
     if (resetDraft || !draft.value) draft.value = cloneEditorView(latest)
     conflict.value = false
+    await refreshUpstreamGuidance()
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 404) {
       composition.value = null
@@ -261,6 +265,18 @@ function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)}s`
 }
 
+async function refreshUpstreamGuidance() {
+  if (!composition.value || !projectID.value) {
+    upstreamGuidance.value = null
+    return
+  }
+  try {
+    upstreamGuidance.value = await loadUpstreamBridgeGuidance(projectID.value, composition.value)
+  } catch {
+    upstreamGuidance.value = null
+  }
+}
+
 async function beginUpstreamScriptEdit() {
   if (!composition.value || dirty.value || conflict.value || acting.value || upstreamBusy.value) return
   upstreamBusy.value = true
@@ -325,6 +341,7 @@ async function applyUpstreamReconcile() {
     reconcilePreview.value = null
     conflict.value = false
     notice.value = `Composition reconciled to Scene Plan v${targetVersion} as revision ${reconciled.revision}.`
+    await refreshUpstreamGuidance()
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) {
       conflict.value = true
@@ -367,6 +384,46 @@ async function applyUpstreamReconcile() {
         <p v-else-if="composition.state === 'BROKEN'">One or more exact upstream dependencies are unavailable. Rendering is blocked.</p>
         <p v-else-if="dirty">The preview below reflects local edits that have not been persisted yet.</p>
         <p v-else>All tracked dependencies and creator edits match this saved composition revision.</p>
+        <div v-if="upstreamGuidance && upstreamGuidance.phase !== 'aligned'" class="upstream-guidance" :data-phase="upstreamGuidance.phase" aria-live="polite">
+          <p><strong>Upstream bridge:</strong> {{ upstreamGuidance.message }}</p>
+          <ul v-if="upstreamGuidance.rebuildNarration || upstreamGuidance.rebuildCaptions || upstreamGuidance.rebuildAudioMix" class="rebuild-checklist">
+            <li v-if="upstreamGuidance.rebuildNarration">Rebuild scene narration against the approved Scene Plan.</li>
+            <li v-if="upstreamGuidance.rebuildCaptions">Rebuild captions for the new upstream lineage.</li>
+            <li v-if="upstreamGuidance.rebuildAudioMix">Rebuild the project audio mix assumptions.</li>
+          </ul>
+          <div class="guidance-links">
+            <RouterLink
+              v-if="upstreamGuidance.phase === 'script_draft_pending' || upstreamGuidance.phase === 'script_approved_needs_scene_plan'"
+              :to="`/projects/${projectID}/script${upstreamGuidance.pendingScriptDraftVersion ? `?version=${upstreamGuidance.pendingScriptDraftVersion}&returnTo=scene-editor` : '?returnTo=scene-editor'}`"
+            >
+              Open Script workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.phase === 'script_approved_needs_scene_plan' || upstreamGuidance.phase === 'scene_plan_draft_pending_approval' || upstreamGuidance.phase === 'downstream_rebuild_required' || upstreamGuidance.phase === 'ready_to_reconcile'"
+              :to="`/projects/${projectID}/scene-plan${upstreamGuidance.pendingScenePlanDraftVersion ? `?version=${upstreamGuidance.pendingScenePlanDraftVersion}&returnTo=scene-editor` : '?returnTo=scene-editor'}`"
+            >
+              Open Scene Plan workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildNarration"
+              :to="`/projects/${projectID}/narration`"
+            >
+              Open narration workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildCaptions"
+              :to="`/projects/${projectID}/captions`"
+            >
+              Open captions workspace
+            </RouterLink>
+            <RouterLink
+              v-if="upstreamGuidance.rebuildAudioMix"
+              :to="`/projects/${projectID}/audio-mix`"
+            >
+              Open audio mix workspace
+            </RouterLink>
+          </div>
+        </div>
         <div class="upstream-actions">
           <button type="button" :disabled="dirty || conflict || acting || upstreamBusy" @click="beginUpstreamScriptEdit">
             Edit upstream script
@@ -550,6 +607,9 @@ async function applyUpstreamReconcile() {
 .render-status p { margin: 0; overflow-wrap: anywhere; }
 .status-panel strong { margin-right: .75rem; }
 .save-status[data-dirty='true'] { text-decoration: underline; text-decoration-thickness: 2px; }
+.upstream-guidance { display: grid; gap: .5rem; border-top: 1px solid currentColor; padding-top: .75rem; }
+.upstream-guidance .rebuild-checklist { margin: 0; padding-left: 1.25rem; }
+.guidance-links { display: flex; gap: .75rem; flex-wrap: wrap; }
 .save-actions, .scene-actions, .upstream-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .reconcile-preview { display: grid; gap: .5rem; border-top: 1px solid currentColor; padding-top: .75rem; }
 .reconcile-preview ul { margin: 0; padding-left: 1.25rem; display: grid; gap: .35rem; }

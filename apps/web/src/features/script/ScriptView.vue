@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, getProject, type Project } from '@/api/projects'
@@ -27,6 +27,7 @@ interface ProposalSummary {
 
 const { t, d } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const project = ref<Project | null>(null)
 const summaries = ref<ScriptSummary[]>([])
@@ -228,6 +229,13 @@ async function approveSelected() {
     summaries.value = await listScripts(projectID())
     applyScript(approved)
     upsertSummary(approved)
+    if (returnToSceneEditor.value) {
+      await router.push({
+        name: 'scene-plan',
+        params: { id: projectID() },
+        query: { returnTo: 'scene-editor' },
+      })
+    }
   } catch (error) {
     handleMutationError(error)
   } finally {

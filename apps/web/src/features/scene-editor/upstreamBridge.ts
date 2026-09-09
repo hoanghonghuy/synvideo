@@ -2,14 +2,17 @@ import { getAudioMix } from '@/features/audio-mix/api'
 import { getCaptions } from '@/features/captions/api'
 import { listSceneMediaBindings } from '@/features/media/api'
 import { listSceneNarrations } from '@/features/scene-narration/api'
-import { getScenePlan, type ScenePlanSummary } from '@/features/scene-plan/api'
-import { forkScript } from '@/features/script/api'
+import { getScenePlan, listScenePlans } from '@/features/scene-plan/api'
+import { forkScript, listScripts } from '@/features/script/api'
+
+import { evaluateUpstreamBridge, latestApprovedScenePlanVersion, type UpstreamBridgeGuidance } from './upstreamBridgeGuidance'
 
 import type {
   SceneEditorAudioMixRef,
   SceneEditorCandidate,
   SceneEditorCaptionRef,
   SceneEditorNarrationRef,
+  SceneEditorState,
   SceneEditorVisualRef,
 } from './api'
 
@@ -20,10 +23,24 @@ export async function resolveSourceScriptVersion(projectID: string, scenePlanVer
   return plan.source_script_version
 }
 
-export function latestApprovedScenePlanVersion(summaries: ScenePlanSummary[]): number | null {
-  const approved = summaries.filter((item) => item.status === 'approved')
-  if (approved.length === 0) return null
-  return approved.reduce((highest, item) => Math.max(highest, item.version), 0)
+export { latestApprovedScenePlanVersion }
+
+export async function loadUpstreamBridgeGuidance(
+  projectID: string,
+  composition: { scene_plan_version: number; state: SceneEditorState },
+): Promise<UpstreamBridgeGuidance> {
+  const [scripts, scenePlans, plan] = await Promise.all([
+    listScripts(projectID),
+    listScenePlans(projectID),
+    getScenePlan(projectID, composition.scene_plan_version),
+  ])
+  return evaluateUpstreamBridge({
+    compositionScenePlanVersion: composition.scene_plan_version,
+    compositionScriptVersion: plan.source_script_version,
+    compositionState: composition.state,
+    scripts,
+    scenePlans,
+  })
 }
 
 export async function forkApprovedScriptForComposition(projectID: string, scenePlanVersion: number) {

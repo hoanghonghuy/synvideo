@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, getProject, type Project } from '@/api/projects'
@@ -25,6 +25,7 @@ import {
 
 const { t, d } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const project = ref<Project | null>(null)
 const summaries = ref<ScenePlanSummary[]>([])
@@ -123,6 +124,7 @@ const staleSource = computed(() => {
     approvedScriptVersion.value > selectedPlan.value.source_script_version
   )
 })
+const returnToSceneEditor = computed(() => route.query.returnTo === 'scene-editor')
 
 const unmappedFieldErrors = computed(() => {
   const knownKeys = new Set<string>()
@@ -390,6 +392,12 @@ async function approveSelected() {
     summaries.value = await listScenePlans(projectID())
     applyPlan(approved)
     upsertSummary(approved)
+    if (returnToSceneEditor.value) {
+      await router.push({
+        name: 'scene-editor',
+        params: { id: projectID() },
+      })
+    }
   } catch (error) {
     handleMutationError(error)
   } finally {
@@ -720,6 +728,14 @@ function errorMessage(code: string) {
 
 <template>
   <section class="page scene-plan-page">
+    <RouterLink
+      v-if="returnToSceneEditor"
+      class="text-link"
+      :to="`/projects/${projectID()}/scene-editor`"
+      data-testid="back-to-scene-editor"
+    >
+      Back to Scene Editor
+    </RouterLink>
     <RouterLink
       class="text-link"
       :to="`/projects/${projectID()}`"
