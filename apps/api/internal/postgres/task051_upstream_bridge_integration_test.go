@@ -194,18 +194,18 @@ func newTask051UpstreamBridgeTestServer(scriptSvc *script.Service, sceneEditorSv
 }
 
 type task051SceneEditorView struct {
-	Revision         int                    `json:"revision"`
-	State            string                 `json:"state"`
-	ScenePlanVersion int                    `json:"scene_plan_version"`
-	Scenes           []task051Scene         `json:"scenes"`
-	AudioMix         map[string]any         `json:"audio_mix"`
+	Revision         int            `json:"revision"`
+	State            string         `json:"state"`
+	ScenePlanVersion int            `json:"scene_plan_version"`
+	Scenes           []task051Scene `json:"scenes"`
+	AudioMix         map[string]any `json:"audio_mix"`
 }
 
 type task051Scene struct {
-	ID               string                       `json:"id"`
-	SceneKey         string                       `json:"scene_key"`
-	Notes            string                       `json:"notes"`
-	VisualTreatment  task051VisualTreatment       `json:"visual_treatment"`
+	ID              string                 `json:"id"`
+	SceneKey        string                 `json:"scene_key"`
+	Notes           string                 `json:"notes"`
+	VisualTreatment task051VisualTreatment `json:"visual_treatment"`
 }
 
 type task051VisualTreatment struct {
