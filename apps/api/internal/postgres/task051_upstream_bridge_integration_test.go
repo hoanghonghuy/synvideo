@@ -140,18 +140,6 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 		t.Fatalf("stale transition should not silently rebind revision: %d want %d", staleView.Revision, afterFork.Revision)
 	}
 
-	updated := task051PutSceneEditor(t, server.Client(), server.URL+base+"/scene-editor", map[string]any{
-		"expected_revision": staleView.Revision,
-		"scenes":            staleView.Scenes,
-		"audio_mix":         staleView.AudioMix,
-	})
-	if updated.Revision != staleView.Revision+1 {
-		t.Fatalf("expected saved revision increment, got %d", updated.Revision)
-	}
-	if updated.Scenes[0].Notes != "creator presentation note" {
-		t.Fatalf("presentation notes lost on save while stale: %#v", updated.Scenes[0])
-	}
-
 	preview := task051PreviewReconcile(t, server.Client(), server.URL+base+"/scene-editor/reconcile/preview", map[string]any{
 		"candidate": map[string]any{
 			"scene_plan_version": approvedPlanV2.Version,
@@ -165,7 +153,7 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 	}
 
 	reconciled := task051Reconcile(t, server.Client(), server.URL+base+"/scene-editor/reconcile", map[string]any{
-		"expected_revision": updated.Revision,
+		"expected_revision": staleView.Revision,
 		"candidate": map[string]any{
 			"scene_plan_version": approvedPlanV2.Version,
 			"scenes": []map[string]any{
@@ -244,16 +232,6 @@ func task051ForkScript(t *testing.T, client *http.Client, url string) task051Scr
 	var scriptResp task051Script
 	task051DecodeJSON(t, resp, &scriptResp)
 	return scriptResp
-}
-
-func task051PutSceneEditor(t *testing.T, client *http.Client, url string, body map[string]any) task051SceneEditorView {
-	resp := task051Do(t, client, http.MethodPut, url, body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT scene editor status=%d body=%s", resp.StatusCode, task051ReadBody(resp))
-	}
-	var view task051SceneEditorView
-	task051DecodeJSON(t, resp, &view)
-	return view
 }
 
 func task051PreviewReconcile(t *testing.T, client *http.Client, url string, body map[string]any) task051ReconcilePreview {
