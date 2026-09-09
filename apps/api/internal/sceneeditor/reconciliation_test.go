@@ -28,11 +28,11 @@ func TestReconciliationPreservesLocalIdentityAndPresentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewReconciliation: %v", err)
 	}
-	if preview.Ambiguous || len(preview.Changes) != 1 || !preview.Changes[0].PreservesEdits {
+	if preview.Ambiguous || len(preview.Changes) != 1 || !preview.Changes[0].PreservesEdits || preview.PreviewDigest == "" {
 		t.Fatalf("preview=%+v", preview)
 	}
 
-	updated, err := ApplyReconciliation(doc, candidate, 1, now.Add(time.Minute))
+	updated, err := ApplyReconciliation(doc, candidate, 1, now.Add(time.Minute), uuid.New)
 	if err != nil {
 		t.Fatalf("ApplyReconciliation: %v", err)
 	}
@@ -47,6 +47,46 @@ func TestReconciliationPreservesLocalIdentityAndPresentation(t *testing.T) {
 	}
 	if updated.Scenes[0].Notes != "creator note" || updated.Scenes[0].VisualTreatment.Scale != 1.25 {
 		t.Fatal("unrelated creator presentation edits were not preserved")
+	}
+}
+
+func TestReconciliationAddsScenesFromPlanCandidate(t *testing.T) {
+	now := time.Now().UTC()
+	doc, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, []Scene{{
+		ID: uuid.New(), SceneKey: "intro", DurationMS: 2_000,
+		VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+	}}, nil, now)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	candidate := ReconcileCandidate{ScenePlanVersion: 2, Scenes: []SceneCandidate{
+		{SceneKey: "intro"},
+		{SceneKey: "main"},
+	}}
+	preview, err := PreviewReconciliation(doc, candidate)
+	if err != nil {
+		t.Fatalf("PreviewReconciliation: %v", err)
+	}
+	if preview.Ambiguous {
+		t.Fatalf("preview=%+v want non-ambiguous add", preview)
+	}
+	if len(preview.Changes) != 2 {
+		t.Fatalf("changes=%+v want intro update and main add", preview.Changes)
+	}
+	if preview.Changes[1].SceneKey != "main" || preview.Changes[1].Reasons[0] != ReconcileSceneAdded {
+		t.Fatalf("add change=%+v", preview.Changes[1])
+	}
+
+	updated, err := ApplyReconciliation(doc, candidate, 1, now, uuid.New)
+	if err != nil {
+		t.Fatalf("ApplyReconciliation: %v", err)
+	}
+	if len(updated.Scenes) != 2 || updated.Scenes[0].SceneKey != "intro" || updated.Scenes[1].SceneKey != "main" {
+		t.Fatalf("scenes=%+v", updated.Scenes)
+	}
+	if updated.Scenes[0].ID == updated.Scenes[1].ID {
+		t.Fatal("added scene must receive a new identity")
 	}
 }
 
@@ -72,10 +112,79 @@ func TestReconciliationRejectsMissingOrAmbiguousSceneKey(t *testing.T) {
 			if !preview.Ambiguous {
 				t.Fatalf("preview=%+v want ambiguous", preview)
 			}
-			if _, err := ApplyReconciliation(doc, candidate, 1, now); !errors.Is(err, ErrAmbiguousMapping) {
+			if _, err := ApplyReconciliation(doc, candidate, 1, now, uuid.New); !errors.Is(err, ErrAmbiguousMapping) {
 				t.Fatalf("err=%v want ambiguous mapping", err)
 			}
 		})
+	}
+}
+
+func TestReconciliationRejectsRemovedAndRekeyedScenesAsAmbiguous(t *testing.T) {
+	now := time.Now().UTC()
+	doc, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, []Scene{
+		{
+			ID: uuid.New(), SceneKey: "intro", DurationMS: 1_000,
+			VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+		},
+		{
+			ID: uuid.New(), SceneKey: "main", DurationMS: 1_000,
+			VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+		},
+	}, nil, now)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	for name, candidate := range map[string]ReconcileCandidate{
+		"removed": {ScenePlanVersion: 2, Scenes: []SceneCandidate{{SceneKey: "intro"}}},
+		"rekeyed": {ScenePlanVersion: 2, Scenes: []SceneCandidate{{SceneKey: "hook"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			preview, err := PreviewReconciliation(doc, candidate)
+			if err != nil {
+				t.Fatalf("PreviewReconciliation: %v", err)
+			}
+			if !preview.Ambiguous {
+				t.Fatalf("preview=%+v want ambiguous", preview)
+			}
+		})
+	}
+}
+
+func TestReconciliationRejectsStalePreviewDigest(t *testing.T) {
+	now := time.Now().UTC()
+	doc, err := NewDocument(uuid.New(), uuid.New(), uuid.New(), 1, []Scene{{
+		ID: uuid.New(), SceneKey: "intro", DurationMS: 1_000,
+		VisualTreatment: VisualTreatment{Fit: FitContain, Scale: 1}, TransitionOut: Transition{Kind: TransitionCut},
+	}}, nil, now)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	candidate := ReconcileCandidate{ScenePlanVersion: 2, Scenes: []SceneCandidate{{SceneKey: "intro"}}}
+	preview, err := PreviewReconciliation(doc, candidate)
+	if err != nil {
+		t.Fatalf("PreviewReconciliation: %v", err)
+	}
+
+	drifted := candidate
+	drifted.Scenes = []SceneCandidate{{SceneKey: "intro"}, {SceneKey: "main"}}
+	digest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, drifted.ScenePlanVersion, drifted)
+	if err != nil {
+		t.Fatalf("ReconcilePreviewDigest: %v", err)
+	}
+	if digest == preview.PreviewDigest {
+		t.Fatal("drifted candidate digest must differ from preview digest")
+	}
+
+	service := NewService(&memoryRepository{latest: doc}, staticResolver{states: []DependencyState{{State: StateCurrent}}}, uuid.New, func() time.Time { return now })
+	_, err = service.Reconcile(t.Context(), doc.OwnerID, doc.ProjectID, ReconcileInput{
+		ExpectedRevision: 1,
+		PreviewDigest:    preview.PreviewDigest,
+		Candidate:        drifted,
+	})
+	if !errors.Is(err, ErrPreviewStale) {
+		t.Fatalf("err=%v want preview stale", err)
 	}
 }
 
@@ -88,7 +197,7 @@ func TestReconciliationRejectsStaleWriter(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	candidate := ReconcileCandidate{ScenePlanVersion: 1, Scenes: []SceneCandidate{{SceneKey: "intro"}}}
-	if _, err := ApplyReconciliation(doc, candidate, 0, time.Now().UTC()); !errors.Is(err, ErrConflict) {
+	if _, err := ApplyReconciliation(doc, candidate, 0, time.Now().UTC(), uuid.New); !errors.Is(err, ErrConflict) {
 		t.Fatalf("err=%v want conflict", err)
 	}
 }

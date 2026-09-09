@@ -20,6 +20,7 @@ type CreateInput struct {
 
 type ReconcileInput struct {
 	ExpectedRevision int                `json:"expected_revision"`
+	PreviewDigest    string             `json:"preview_digest"`
 	Candidate        ReconcileCandidate `json:"candidate"`
 }
 
@@ -53,7 +54,14 @@ func (s *Service) Reconcile(ctx context.Context, ownerID, projectID uuid.UUID, i
 	if err != nil {
 		return View{}, normalizeRepoError(err)
 	}
-	updated, err := ApplyReconciliation(doc, input.Candidate, input.ExpectedRevision, s.now().UTC())
+	expectedDigest, err := ReconcilePreviewDigest(doc.Revision, doc.ScenePlanVersion, input.Candidate.ScenePlanVersion, input.Candidate)
+	if err != nil {
+		return View{}, err
+	}
+	if input.PreviewDigest == "" || input.PreviewDigest != expectedDigest {
+		return View{}, ErrPreviewStale
+	}
+	updated, err := ApplyReconciliation(doc, input.Candidate, input.ExpectedRevision, s.now().UTC(), s.newID)
 	if err != nil {
 		return View{}, err
 	}

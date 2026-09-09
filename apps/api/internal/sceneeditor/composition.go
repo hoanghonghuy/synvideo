@@ -46,6 +46,7 @@ var (
 	ErrSceneNotFound    = errors.New("scene editor scene not found")
 	ErrSnapshotBlocked  = errors.New("scene editor snapshot blocked by dependency state")
 	ErrAmbiguousMapping = errors.New("scene editor reconciliation mapping is ambiguous")
+	ErrPreviewStale     = errors.New("scene editor reconciliation preview is stale")
 )
 
 type ValidationError struct{ Fields map[string]string }

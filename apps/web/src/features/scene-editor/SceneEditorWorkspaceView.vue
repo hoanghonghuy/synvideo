@@ -17,6 +17,7 @@ import {
   reorderScene,
   updateSceneEditor,
   type RenderExportJob,
+  type SceneEditorCandidate,
   type SceneEditorReconcilePreview,
   type SceneEditorScene,
   type SceneEditorView,
@@ -55,6 +56,7 @@ const conflict = ref(false)
 const error = ref('')
 const notice = ref('')
 const reconcilePreview = ref<SceneEditorReconcilePreview | null>(null)
+const reconcileCandidate = ref<SceneEditorCandidate | null>(null)
 const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
 const upstreamBusy = ref(false)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
@@ -299,6 +301,7 @@ async function previewUpstreamReconcile() {
   error.value = ''
   notice.value = ''
   reconcilePreview.value = null
+  reconcileCandidate.value = null
   try {
     const summaries = await listScenePlans(projectID.value)
     const targetVersion = latestApprovedScenePlanVersion(summaries)
@@ -306,8 +309,8 @@ async function previewUpstreamReconcile() {
       error.value = 'No approved Scene Plan is available to reconcile against.'
       return
     }
-    const sceneKeys = composition.value.scenes.map((scene) => scene.scene_key)
-    const candidate = await buildReconcileCandidate(projectID.value, targetVersion, sceneKeys)
+    const candidate = await buildReconcileCandidate(projectID.value, targetVersion)
+    reconcileCandidate.value = candidate
     reconcilePreview.value = await previewSceneEditorReconcile(projectID.value, candidate)
     if (reconcilePreview.value.ambiguous) {
       notice.value = 'Reconciliation preview is ambiguous. Resolve upstream scene-key mapping before applying changes.'
@@ -322,31 +325,36 @@ async function previewUpstreamReconcile() {
 }
 
 async function applyUpstreamReconcile() {
-  if (!composition.value || !reconcilePreview.value || reconcilePreview.value.ambiguous || acting.value) return
+  if (!composition.value || !reconcilePreview.value || !reconcileCandidate.value || reconcilePreview.value.ambiguous || acting.value) return
   acting.value = true
   error.value = ''
   notice.value = ''
   try {
-    const summaries = await listScenePlans(projectID.value)
-    const targetVersion = latestApprovedScenePlanVersion(summaries)
-    if (targetVersion === null) {
-      error.value = 'No approved Scene Plan is available to reconcile against.'
-      return
-    }
-    const sceneKeys = composition.value.scenes.map((scene) => scene.scene_key)
-    const candidate = await buildReconcileCandidate(projectID.value, targetVersion, sceneKeys)
-    const reconciled = await reconcileSceneEditor(projectID.value, composition.value.revision, candidate)
+    const targetVersion = reconcilePreview.value.to_scene_plan_version
+    const reconciled = await reconcileSceneEditor(
+      projectID.value,
+      composition.value.revision,
+      reconcileCandidate.value,
+      reconcilePreview.value.preview_digest,
+    )
     composition.value = reconciled
     draft.value = cloneEditorView(reconciled)
     reconcilePreview.value = null
+    reconcileCandidate.value = null
     conflict.value = false
     notice.value = `Composition reconciled to Scene Plan v${targetVersion} as revision ${reconciled.revision}.`
     await refreshUpstreamGuidance()
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) {
-      conflict.value = true
-      error.value = 'Reconciliation conflict. Reload authoritative state and retry.'
-      await rereadAfterConflict()
+      if (cause.code === 'SCENE_EDITOR_RECONCILE_PREVIEW_STALE') {
+        reconcilePreview.value = null
+        reconcileCandidate.value = null
+        error.value = 'Upstream reconciliation preview is stale. Re-preview before applying.'
+      } else {
+        conflict.value = true
+        error.value = 'Reconciliation conflict. Reload authoritative state and retry.'
+        await rereadAfterConflict()
+      }
     } else {
       error.value = messageFor(cause)
     }

@@ -263,6 +263,7 @@ func TestServiceUpstreamBridgeReconcileAfterScenePlanTransition(t *testing.T) {
 
 	reconciled, err := service.Reconcile(ctx, ownerID, projectID, ReconcileInput{
 		ExpectedRevision: created.Revision,
+		PreviewDigest:    preview.PreviewDigest,
 		Candidate:        candidate,
 	})
 	if err != nil {

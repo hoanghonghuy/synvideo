@@ -146,7 +146,28 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 		t.Fatalf("stale transition should not silently rebind revision: %d want %d", staleView.Revision, afterFork.Revision)
 	}
 
+	planCandidateScenes := []map[string]any{
+		{"scene_key": "intro"},
+		{"scene_key": "main"},
+		{"scene_key": "outro"},
+	}
+	candidateBody := map[string]any{
+		"scene_plan_version": approvedPlanV2.Version,
+		"scenes":             planCandidateScenes,
+	}
 	preview := task051PreviewReconcile(t, server.Client(), server.URL+base+"/scene-editor/reconcile/preview", map[string]any{
+		"candidate": candidateBody,
+	})
+	if preview.Ambiguous || preview.PreviewDigest == "" || len(preview.Changes) < 3 {
+		t.Fatalf("unexpected reconcile preview: %+v", preview)
+	}
+	if !preview.Changes[0].PreservesEdits {
+		t.Fatalf("intro reconcile should preserve edits: %+v", preview.Changes[0])
+	}
+
+	staleResp := task051Do(t, server.Client(), http.MethodPost, server.URL+base+"/scene-editor/reconcile", map[string]any{
+		"expected_revision": staleView.Revision,
+		"preview_digest":    preview.PreviewDigest,
 		"candidate": map[string]any{
 			"scene_plan_version": approvedPlanV2.Version,
 			"scenes": []map[string]any{
@@ -154,21 +175,20 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 			},
 		},
 	})
-	if preview.Ambiguous || len(preview.Changes) == 0 || !preview.Changes[0].PreservesEdits {
-		t.Fatalf("unexpected reconcile preview: %+v", preview)
+	if staleResp.StatusCode != http.StatusConflict {
+		t.Fatalf("drifted reconcile status=%d body=%s", staleResp.StatusCode, task051ReadBody(staleResp))
 	}
 
 	reconciled := task051Reconcile(t, server.Client(), server.URL+base+"/scene-editor/reconcile", map[string]any{
 		"expected_revision": staleView.Revision,
-		"candidate": map[string]any{
-			"scene_plan_version": approvedPlanV2.Version,
-			"scenes": []map[string]any{
-				{"scene_key": "intro"},
-			},
-		},
+		"preview_digest":    preview.PreviewDigest,
+		"candidate":         candidateBody,
 	})
 	if reconciled.State != "CURRENT" || reconciled.ScenePlanVersion != approvedPlanV2.Version {
 		t.Fatalf("reconciled composition: state=%s plan=%d", reconciled.State, reconciled.ScenePlanVersion)
+	}
+	if len(reconciled.Scenes) != 3 {
+		t.Fatalf("expected plan scene set after reconcile, got %+v", reconciled.Scenes)
 	}
 	if reconciled.Scenes[0].Notes != "creator presentation note" || reconciled.Scenes[0].VisualTreatment.Scale != 1.25 {
 		t.Fatalf("presentation edits not preserved after reconcile: %#v", reconciled.Scenes[0])
@@ -209,8 +229,9 @@ type task051Script struct {
 }
 
 type task051ReconcilePreview struct {
-	Ambiguous bool `json:"ambiguous"`
-	Changes   []struct {
+	Ambiguous     bool   `json:"ambiguous"`
+	PreviewDigest string `json:"preview_digest"`
+	Changes       []struct {
 		PreservesEdits bool `json:"preserves_edits"`
 	} `json:"changes"`
 }

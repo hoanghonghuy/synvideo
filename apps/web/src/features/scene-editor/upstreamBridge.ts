@@ -48,11 +48,16 @@ export async function forkApprovedScriptForComposition(projectID: string, sceneP
   return forkScript(projectID, sourceVersion)
 }
 
+export function scenePlanSceneKeys(plan: { scenes: Array<{ key: string }> }): string[] {
+  return plan.scenes.map((scene) => scene.key)
+}
+
 export async function buildReconcileCandidate(
   projectID: string,
   scenePlanVersion: number,
-  sceneKeys: string[],
 ): Promise<SceneEditorCandidate> {
+  const plan = await getScenePlan(projectID, scenePlanVersion)
+  const sceneKeys = scenePlanSceneKeys(plan)
   const [mediaEntries, narrationEntries, audioMix] = await Promise.all([
     listSceneMediaBindings(projectID, scenePlanVersion),
     listSceneNarrations(projectID, scenePlanVersion),

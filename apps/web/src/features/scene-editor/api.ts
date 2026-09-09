@@ -113,6 +113,7 @@ export interface SceneEditorReconcilePreview {
   }>
   audio_mix_changed: boolean
   ambiguous: boolean
+  preview_digest: string
 }
 
 export interface RenderExportArtifact {
@@ -183,10 +184,15 @@ export async function previewSceneEditorReconcile(projectID: string, candidate: 
   })
 }
 
-export async function reconcileSceneEditor(projectID: string, expectedRevision: number, candidate: SceneEditorCandidate): Promise<SceneEditorView> {
+export async function reconcileSceneEditor(
+  projectID: string,
+  expectedRevision: number,
+  candidate: SceneEditorCandidate,
+  previewDigest: string,
+): Promise<SceneEditorView> {
   return request<SceneEditorView>(`${base(projectID)}/reconcile`, {
     method: 'POST',
-    body: JSON.stringify({ expected_revision: expectedRevision, candidate }),
+    body: JSON.stringify({ expected_revision: expectedRevision, preview_digest: previewDigest, candidate }),
   })
 }
 
