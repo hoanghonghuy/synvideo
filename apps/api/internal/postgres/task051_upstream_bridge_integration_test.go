@@ -57,9 +57,10 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 		t.Fatalf("approve proposal: %v", err)
 	}
 
+	const scriptPrefix = "Upstream Bridge Script"
 	scriptDraft, err := scriptRepo.CreateDraft(ctx, ownerID, projectItem.ID, script.CreateDraftInput{
 		SourceProposalVersion: proposal.Version,
-		Content:               validScriptContent("Upstream Bridge Script"),
+		Content:               validScriptContent(scriptPrefix),
 	})
 	if err != nil {
 		t.Fatalf("create script: %v", err)
@@ -71,7 +72,7 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 
 	planDraft, err := scenePlanRepo.CreateDraft(ctx, ownerID, projectItem.ID, sceneplan.CreateDraftInput{
 		SourceScriptVersion: approvedScript.Version,
-		Content:             validScenePlanContent("Upstream Bridge Plan"),
+		Content:             validScenePlanContent(scriptPrefix),
 	})
 	if err != nil {
 		t.Fatalf("create scene plan: %v", err)
@@ -121,7 +122,7 @@ func TestUpstreamBridgeHTTPForkDoesNotMutateComposition(t *testing.T) {
 
 	planDraftV2, err := scenePlanRepo.CreateDraft(ctx, ownerID, projectItem.ID, sceneplan.CreateDraftInput{
 		SourceScriptVersion: approvedScriptV2.Version,
-		Content:             validScenePlanContent("Upstream Bridge Plan V2"),
+		Content:             validScenePlanContent(scriptPrefix),
 	})
 	if err != nil {
 		t.Fatalf("create scene plan v2: %v", err)
