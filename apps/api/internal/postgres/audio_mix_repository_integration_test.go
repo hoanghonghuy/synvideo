@@ -11,6 +11,7 @@ import (
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/audiomix"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset/testfixtures"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 )
 
@@ -47,7 +48,7 @@ func TestAudioMixRepositoryPostgresIntegration(t *testing.T) {
 		Kind:     mediaasset.KindImage,
 		Origin:   mediaasset.OriginUpload,
 		MimeType: "image/png",
-		Reader:   bytes.NewReader([]byte("not-a-real-image-but-valid-storage-bytes")),
+		Reader:   bytes.NewReader(testfixtures.MinimalPNG),
 		MaxBytes: 10 << 20,
 	})
 	if err != nil {
