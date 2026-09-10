@@ -95,74 +95,86 @@ async function submit(payload: UpdateProjectPayload) {
       <p class="body-copy">
         {{ t('projects.detail.updatedAt', { value: d(new Date(project.updated_at), 'long') }) }}
       </p>
-      <p class="workspace-links">
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/creative-brief`"
-        >
-          {{ t('creativeBrief.actions.open') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/creative-proposal`"
-        >
-          {{ t('creativeProposal.actions.open') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/script`"
-        >
-          {{ t('script.actions.open') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/scene-plan`"
-        >
-          {{ t('scenePlan.actions.open') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/media`"
-        >
-          {{ t('navigation.media') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/media/stock`"
-        >
-          Stock Media
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/images`"
-        >
-          {{ tGeneratedImage('generatedImage.title') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/narration`"
-        >
-          {{ t('navigation.sceneNarration') }}
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/captions`"
-        >
-          Captions &amp; timing
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/audio-mix`"
-        >
-          Background music &amp; audio mix
-        </RouterLink>
-        <RouterLink
-          class="text-link"
-          :to="`/projects/${project.id}/scene-editor`"
-        >
-          Scene Editor
-        </RouterLink>
-      </p>
+
+      <nav
+        class="workspace-nav"
+        :aria-label="t('projects.detail.eyebrow')"
+      >
+        <div class="workspace-links">
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/creative-brief`"
+          >
+            {{ t('creativeBrief.actions.open') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/creative-proposal`"
+          >
+            {{ t('creativeProposal.actions.open') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/script`"
+          >
+            {{ t('script.actions.open') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/scene-plan`"
+          >
+            {{ t('scenePlan.actions.open') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/media`"
+          >
+            {{ t('navigation.media') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/media/stock`"
+          >
+            Stock Media
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/images`"
+          >
+            {{ tGeneratedImage('generatedImage.title') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/narration`"
+          >
+            {{ t('navigation.sceneNarration') }}
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/captions`"
+          >
+            Captions &amp; timing
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/audio-mix`"
+          >
+            Background music &amp; audio mix
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/scene-editor`"
+          >
+            Scene Editor
+          </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/scene-video`"
+          >
+            {{ t('projects.detail.sceneVideoAction') }}
+          </RouterLink>
+        </div>
+      </nav>
 
       <div
         v-if="saved"
@@ -187,3 +199,44 @@ async function submit(payload: UpdateProjectPayload) {
     </template>
   </section>
 </template>
+
+<style scoped>
+.workspace-nav {
+  margin: 24px 0;
+}
+
+.workspace-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+
+.workspace-link {
+  display: flex;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #cbd6d0;
+  border-radius: 8px;
+  color: #143d36;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.workspace-link:hover {
+  background: #f4f8f6;
+}
+
+.workspace-link:focus-visible {
+  outline: 3px solid #7aa995;
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .workspace-links {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

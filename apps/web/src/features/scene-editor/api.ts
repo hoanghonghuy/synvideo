@@ -1,6 +1,8 @@
 import { apiFetch } from '@/api/http'
 import { ApiError } from '@/api/projects'
 
+import { clearRenderRetryRequestID, resolveRenderRetryRequestID } from './renderExportState'
+
 export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
 export type SceneEditorFit = 'contain' | 'cover'
 export type SceneEditorTransitionKind = 'cut' | 'fade' | 'crossfade'
@@ -234,10 +236,22 @@ export async function cancelRenderExport(projectID: string, jobID: string): Prom
 }
 
 export async function retryRenderExport(projectID: string, sourceJobID: string, requestID: string): Promise<RenderExportJob> {
-  return request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(sourceJobID)}/retry`, {
-    method: 'POST',
-    body: JSON.stringify({ request_id: requestID }),
-  })
+  const storage = typeof window === 'undefined' ? null : window.sessionStorage
+  const logicalRequestID = resolveRenderRetryRequestID(storage, projectID, sourceJobID, requestID)
+
+  try {
+    const retried = await request<RenderExportJob>(`${renderBase(projectID)}/${encodeURIComponent(sourceJobID)}/retry`, {
+      method: 'POST',
+      body: JSON.stringify({ request_id: logicalRequestID }),
+    })
+    clearRenderRetryRequestID(storage, projectID, sourceJobID)
+    return retried
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500) {
+      clearRenderRetryRequestID(storage, projectID, sourceJobID)
+    }
+    throw cause
+  }
 }
 
 export function mediaAssetContentURL(projectID: string, assetID: string): string {
