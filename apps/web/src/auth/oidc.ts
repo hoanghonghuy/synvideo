@@ -4,6 +4,7 @@ import { loadOidcConfig, type OidcConfig } from './config'
 import { clearAccessToken, setAccessToken } from './session'
 
 const FLOW_STATE_KEY = 'synvideo_oidc_flow_state'
+const DEFAULT_RETURN_TO = '/projects'
 
 type PendingFlow = {
   codeVerifier: string
@@ -17,13 +18,33 @@ type TokenResponse = {
   token_type?: string
 }
 
-export function beginSignIn(returnTo = '/projects'): void {
+export function sanitizeReturnTo(returnTo: string | null | undefined): string {
+  const candidate = (returnTo ?? '').trim()
+  if (!candidate.startsWith('/') || candidate.startsWith('//')) {
+    return DEFAULT_RETURN_TO
+  }
+
+  try {
+    const parsed = new URL(candidate, window.location.origin)
+    if (parsed.origin !== window.location.origin) {
+      return DEFAULT_RETURN_TO
+    }
+    if (parsed.pathname === '/auth/callback') {
+      return DEFAULT_RETURN_TO
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return DEFAULT_RETURN_TO
+  }
+}
+
+export async function beginSignIn(returnTo = DEFAULT_RETURN_TO): Promise<void> {
   const config = loadOidcConfig()
   if (!config) {
     throw new Error('OIDC is not configured')
   }
 
-  void startAuthorizationRedirect(config, returnTo)
+  await startAuthorizationRedirect(config, sanitizeReturnTo(returnTo))
 }
 
 async function startAuthorizationRedirect(config: OidcConfig, returnTo: string): Promise<void> {
@@ -61,9 +82,16 @@ export async function completeSignInFromCallback(search: string): Promise<string
   }
 
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const providerError = params.get('error')
+  if (providerError) {
+    sessionStorage.removeItem(FLOW_STATE_KEY)
+    throw new Error(providerError === 'access_denied' ? 'sign-in was cancelled' : 'identity provider rejected sign-in')
+  }
+
   const code = params.get('code')
   const state = params.get('state')
   if (!code || !state) {
+    sessionStorage.removeItem(FLOW_STATE_KEY)
     throw new Error('missing authorization code')
   }
 
@@ -73,8 +101,13 @@ export async function completeSignInFromCallback(search: string): Promise<string
     throw new Error('missing oauth flow state')
   }
 
-  const pending = JSON.parse(pendingRaw) as PendingFlow
-  if (pending.state !== state) {
+  let pending: PendingFlow
+  try {
+    pending = JSON.parse(pendingRaw) as PendingFlow
+  } catch {
+    throw new Error('invalid oauth flow state')
+  }
+  if (!pending.codeVerifier || !pending.state || pending.state !== state) {
     throw new Error('oauth state mismatch')
   }
 
@@ -84,7 +117,7 @@ export async function completeSignInFromCallback(search: string): Promise<string
   }
 
   setAccessToken(tokenResponse.access_token)
-  return pending.returnTo || '/projects'
+  return sanitizeReturnTo(pending.returnTo)
 }
 
 export function signOut(): void {
