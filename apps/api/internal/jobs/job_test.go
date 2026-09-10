@@ -16,7 +16,7 @@ type retryHintError struct {
 	delay time.Duration
 }
 
-func (e retryHintError) Error() string { return "retry later" }
+func (e retryHintError) Error() string                     { return "retry later" }
 func (e retryHintError) RetryAfterDuration() time.Duration { return e.delay }
 
 func TestJobValidation(t *testing.T) {
