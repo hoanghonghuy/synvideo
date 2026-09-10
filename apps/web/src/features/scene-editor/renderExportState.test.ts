@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import type { RenderExportJob } from './api'
 import {
+  clearRenderRetryRequestID,
   isRenderExportCancellable,
   isRenderExportRetryable,
   isRenderExportTerminal,
   persistRenderJobID,
   renderExportStorageKey,
+  renderRetryRequestStorageKey,
+  resolveRenderRetryRequestID,
   restoreRenderJobID,
 } from './renderExportState'
 
@@ -53,6 +56,32 @@ describe('Scene Editor render export UI state', () => {
     persistRenderJobID(storage, 'project-1', 'job-1')
     persistRenderJobID(storage, 'project-1', null)
     expect(restoreRenderJobID(storage, 'project-1')).toBeNull()
+  })
+
+  it('reuses one logical retry request id after an unknown client outcome', () => {
+    const storage = new MemoryStorage()
+    const first = resolveRenderRetryRequestID(storage, 'project-1', 'render-1', 'request-a')
+    const afterTransportFailure = resolveRenderRetryRequestID(storage, 'project-1', 'render-1', 'request-b')
+
+    expect(first).toBe('request-a')
+    expect(afterTransportFailure).toBe('request-a')
+    expect(storage.getItem(renderRetryRequestStorageKey('project-1', 'render-1'))).toBe('request-a')
+  })
+
+  it('rotates retry request identity only after the prior logical attempt is cleared', () => {
+    const storage = new MemoryStorage()
+    expect(resolveRenderRetryRequestID(storage, 'project-1', 'render-1', 'request-a')).toBe('request-a')
+
+    clearRenderRetryRequestID(storage, 'project-1', 'render-1')
+
+    expect(resolveRenderRetryRequestID(storage, 'project-1', 'render-1', 'request-b')).toBe('request-b')
+  })
+
+  it('scopes retry request identity by project and source render', () => {
+    const storage = new MemoryStorage()
+    expect(resolveRenderRetryRequestID(storage, 'project-1', 'render-1', 'request-a')).toBe('request-a')
+    expect(resolveRenderRetryRequestID(storage, 'project-1', 'render-2', 'request-b')).toBe('request-b')
+    expect(resolveRenderRetryRequestID(storage, 'project-2', 'render-1', 'request-c')).toBe('request-c')
   })
 
   it('polls only non-terminal durable states', () => {
