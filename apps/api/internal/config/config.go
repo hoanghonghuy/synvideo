@@ -49,6 +49,12 @@ func (c AuthConfig) Validate() error {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return fmt.Errorf("SYNVIDEO_OIDC_ISSUER must be an origin URL without path: %q", c.OIDCIssuer)
 	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("SYNVIDEO_OIDC_ISSUER must use https in production: %q", c.OIDCIssuer)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("SYNVIDEO_OIDC_ISSUER must not include credentials: %q", c.OIDCIssuer)
+	}
 	if strings.TrimSpace(c.OIDCAudience) == "" {
 		return errors.New("SYNVIDEO_OIDC_AUDIENCE is required")
 	}
@@ -61,7 +67,13 @@ func (c AuthConfig) Validate() error {
 	if jwks := strings.TrimSpace(c.JWKSURL); jwks != "" {
 		parsedJWKS, err := url.Parse(jwks)
 		if err != nil || parsedJWKS.Scheme == "" || parsedJWKS.Host == "" {
-			return fmt.Errorf("SYNVIDEO_OIDC_JWKS_URL must be an absolute http(s) URL: %q", c.JWKSURL)
+			return fmt.Errorf("SYNVIDEO_OIDC_JWKS_URL must be an absolute https URL: %q", c.JWKSURL)
+		}
+		if parsedJWKS.Scheme != "https" {
+			return fmt.Errorf("SYNVIDEO_OIDC_JWKS_URL must use https in production: %q", c.JWKSURL)
+		}
+		if parsedJWKS.User != nil || parsedJWKS.Fragment != "" {
+			return fmt.Errorf("SYNVIDEO_OIDC_JWKS_URL must not include credentials or fragment: %q", c.JWKSURL)
 		}
 	}
 	return nil
