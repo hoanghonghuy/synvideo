@@ -133,7 +133,7 @@ func (r *PublishingRepository) CreateAttempt(ctx context.Context, attempt publis
 		return created, nil
 	}
 	if errors.Is(err, publishing.ErrAttemptNotFound) {
-		existing, existingErr := r.GetAttemptByRequest(ctx, attempt.OwnerID, attempt.ProjectID, attempt.ConnectionID, attempt.RenderArtifactID, attempt.RequestID)
+		_, existingErr := r.GetAttemptByRequest(ctx, attempt.OwnerID, attempt.ProjectID, attempt.ConnectionID, attempt.RenderArtifactID, attempt.RequestID)
 		if existingErr == nil {
 			return publishing.PublishAttempt{}, publishing.ErrAttemptConflict
 		}
