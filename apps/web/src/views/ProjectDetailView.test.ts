@@ -85,6 +85,7 @@ describe('ProjectDetailView', () => {
         { path: '/projects/:id/scene-plan', component: { template: '<div>Scene Plan workspace</div>' } },
         { path: '/projects/:id/media', component: { template: '<div>Media workspace</div>' } },
         { path: '/projects/:id/narration', component: { template: '<div>Narration workspace</div>' } },
+        { path: '/projects/:id/scene-video', component: { template: '<div>Scene Video workspace</div>' } },
       ],
     })
     router.push(`/projects/${project.id}`)
@@ -92,6 +93,10 @@ describe('ProjectDetailView', () => {
 
     const wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, i18n] } })
     await flushPromises()
+
+    const workspaceNav = wrapper.find('nav.workspace-nav')
+    expect(workspaceNav.exists()).toBe(true)
+    expect(workspaceNav.attributes('aria-label')).toBeTruthy()
 
     const links = wrapper.findAll('.workspace-links a')
     const briefLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-brief`)
@@ -106,6 +111,8 @@ describe('ProjectDetailView', () => {
     expect(mediaLink?.text()).toContain('Thư viện Media')
     const narrationLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/narration`)
     expect(narrationLink?.text()).toContain('Thuyết minh phân cảnh')
+    const sceneVideoLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/scene-video`)
+    expect(sceneVideoLink?.text()).toContain('Tạo video phân cảnh')
 
     await briefLink?.trigger('click')
     await flushPromises()
@@ -142,6 +149,7 @@ async function mountDetailView() {
       { path: '/projects/:id/scene-plan', component: { template: '<div />' } },
       { path: '/projects/:id/media', component: { template: '<div />' } },
       { path: '/projects/:id/narration', component: { template: '<div />' } },
+      { path: '/projects/:id/scene-video', component: { template: '<div />' } },
     ],
   })
   router.push('/projects/11111111-1111-4111-8111-111111111111')
