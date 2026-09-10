@@ -13,9 +13,16 @@ var (
 	ErrAttemptConflict    = errors.New("publishing attempt conflict")
 )
 
+type RefreshTokenEnvelope struct {
+	Ciphertext []byte
+	Nonce      []byte
+	KeyID      string
+}
+
 type ConnectionRepository interface {
 	UpsertConnection(ctx context.Context, connection ChannelConnection, encryptedRefreshToken, tokenNonce []byte, tokenKeyID string) (ChannelConnection, error)
 	GetConnection(ctx context.Context, ownerID, connectionID uuid.UUID) (ChannelConnection, error)
+	GetRefreshTokenEnvelope(ctx context.Context, ownerID, connectionID uuid.UUID) (RefreshTokenEnvelope, error)
 	ListConnections(ctx context.Context, ownerID uuid.UUID) ([]ChannelConnection, error)
 }
 
