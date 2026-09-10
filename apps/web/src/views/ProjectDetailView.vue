@@ -171,7 +171,7 @@ async function submit(payload: UpdateProjectPayload) {
             class="workspace-link"
             :to="`/projects/${project.id}/scene-video`"
           >
-            Tạo video phân cảnh
+            {{ t('projects.detail.sceneVideoAction') }}
           </RouterLink>
         </div>
       </nav>
