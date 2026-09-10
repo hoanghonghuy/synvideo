@@ -2,6 +2,17 @@ import { createI18n } from 'vue-i18n'
 
 import vi from './vi'
 
+const viMessages = {
+  ...vi,
+  projects: {
+    ...vi.projects,
+    detail: {
+      ...vi.projects.detail,
+      sceneVideoAction: 'Tạo video phân cảnh',
+    },
+  },
+} as const
+
 export const datetimeFormats = {
   vi: {
     long: {
@@ -30,7 +41,7 @@ export const i18n = createI18n({
   locale: 'vi',
   fallbackLocale: 'vi',
   messages: {
-    vi,
+    vi: viMessages,
   },
   datetimeFormats,
 })
