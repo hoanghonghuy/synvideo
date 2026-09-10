@@ -6,15 +6,16 @@ import (
 )
 
 func TestPolicyValidRequiresAllBounds(t *testing.T) {
-	valid := Policy{MaxRequests: 10, Window: time.Hour, MaxInFlight: 2}
+	valid := Policy{MaxRequests: 10, Window: time.Hour, MaxInFlight: 2, LeaseDuration: 5 * time.Minute}
 	if !valid.Valid() {
 		t.Fatal("expected fully bounded policy to be valid")
 	}
 
 	tests := []Policy{
-		{MaxRequests: 0, Window: time.Hour, MaxInFlight: 2},
-		{MaxRequests: 10, Window: 0, MaxInFlight: 2},
-		{MaxRequests: 10, Window: time.Hour, MaxInFlight: 0},
+		{MaxRequests: 0, Window: time.Hour, MaxInFlight: 2, LeaseDuration: 5 * time.Minute},
+		{MaxRequests: 10, Window: 0, MaxInFlight: 2, LeaseDuration: 5 * time.Minute},
+		{MaxRequests: 10, Window: time.Hour, MaxInFlight: 0, LeaseDuration: 5 * time.Minute},
+		{MaxRequests: 10, Window: time.Hour, MaxInFlight: 2, LeaseDuration: 0},
 	}
 	for _, policy := range tests {
 		if policy.Valid() {
