@@ -10,6 +10,7 @@ import (
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/paidgeneration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenemedia"
@@ -21,6 +22,9 @@ const (
 	ErrorStorageFailed       = "ERR_IMAGE_STORAGE_FAILED"
 	ErrorAssignmentFailed    = "ERR_IMAGE_ASSIGNMENT_FAILED"
 	ErrorInvalidPayload      = "ERR_IMAGE_JOB_INVALID"
+	ErrorQuotaExceeded       = "ERR_IMAGE_QUOTA_EXCEEDED"
+	ErrorConcurrencyExceeded = "ERR_IMAGE_CONCURRENCY_EXCEEDED"
+	ErrorGuardUnavailable    = "ERR_IMAGE_GUARD_UNAVAILABLE"
 )
 
 type GeneratedAssetStore interface {
@@ -37,10 +41,20 @@ type Handler struct {
 	runtime  ImageProviderRuntime
 	assets   GeneratedAssetStore
 	bindings SceneBinder
+	guard    paidgeneration.Guard
+	policy   paidgeneration.Policy
 }
 
 func NewHandler(runtime ImageProviderRuntime, assets GeneratedAssetStore, bindings SceneBinder) *Handler {
 	return &Handler{runtime: runtime, assets: assets, bindings: bindings}
+}
+
+// NewGuardedHandler wires the distributed paid-generation guard directly around
+// the cost-bearing provider execution. The existing constructor remains for
+// non-paid/local test wiring while production bootstrap can fail closed before
+// selecting the guarded constructor.
+func NewGuardedHandler(runtime ImageProviderRuntime, assets GeneratedAssetStore, bindings SceneBinder, guard paidgeneration.Guard, policy paidgeneration.Policy) *Handler {
+	return &Handler{runtime: runtime, assets: assets, bindings: bindings, guard: guard, policy: policy}
 }
 
 func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
@@ -94,6 +108,46 @@ func (h *Handler) generateAndStore(ctx context.Context, principal project.Princi
 	if h.runtime == nil || h.assets == nil {
 		return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorProviderUnavailable, errors.New("generated image runtime unavailable"))
 	}
+
+	var asset mediaasset.MediaAsset
+	work := func(workCtx context.Context) error {
+		generated, err := h.generateAndStoreUnprotected(workCtx, principal, projectID, jobID, payload)
+		if err != nil {
+			return err
+		}
+		asset = generated
+		return nil
+	}
+
+	if h.guard == nil {
+		if h.policy.Valid() {
+			return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+		}
+		if err := work(ctx); err != nil {
+			return mediaasset.MediaAsset{}, err
+		}
+		return asset, nil
+	}
+	if !h.policy.Valid() {
+		return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+	}
+
+	if err := paidgeneration.Run(ctx, h.guard, principal.OwnerID, projectID, paidgeneration.OperationImage, jobID, h.policy, work); err != nil {
+		switch {
+		case errors.Is(err, paidgeneration.ErrQuotaExceeded):
+			return mediaasset.MediaAsset{}, jobs.NewRetryableError(ErrorQuotaExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrConcurrencyExceeded):
+			return mediaasset.MediaAsset{}, jobs.NewRetryableError(ErrorConcurrencyExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrGuardUnavailable), errors.Is(err, paidgeneration.ErrLeaseLost):
+			return mediaasset.MediaAsset{}, jobs.NewRetryableError(ErrorGuardUnavailable, err, nil)
+		default:
+			return mediaasset.MediaAsset{}, err
+		}
+	}
+	return asset, nil
+}
+
+func (h *Handler) generateAndStoreUnprotected(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID, payload Payload) (mediaasset.MediaAsset, error) {
 	generator, err := h.runtime.ResolveImageGenerator(ctx, principal.OwnerID, providers.ProviderID(payload.ProviderID), providers.ModelID(payload.ModelID))
 	if err != nil || generator == nil {
 		return mediaasset.MediaAsset{}, jobs.NewTerminalError(ErrorProviderUnavailable, errors.New("selected image provider unavailable"))
