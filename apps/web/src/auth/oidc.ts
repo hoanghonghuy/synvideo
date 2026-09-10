@@ -1,3 +1,4 @@
+import { resolveOidcDiscovery } from './discovery'
 import { createCodeChallenge, createCodeVerifier, createOAuthState } from './pkce'
 import { loadOidcConfig, type OidcConfig } from './config'
 import { clearAccessToken, setAccessToken } from './session'
@@ -26,6 +27,7 @@ export function beginSignIn(returnTo = '/projects'): void {
 }
 
 async function startAuthorizationRedirect(config: OidcConfig, returnTo: string): Promise<void> {
+  const discovery = await resolveOidcDiscovery(config)
   const codeVerifier = createCodeVerifier()
   const state = createOAuthState()
   const challenge = await createCodeChallenge(codeVerifier)
@@ -48,7 +50,8 @@ async function startAuthorizationRedirect(config: OidcConfig, returnTo: string):
     params.set('audience', config.audience)
   }
 
-  window.location.assign(`${config.issuer}/authorize?${params.toString()}`)
+  const separator = discovery.authorizationEndpoint.includes('?') ? '&' : '?'
+  window.location.assign(`${discovery.authorizationEndpoint}${separator}${params.toString()}`)
 }
 
 export async function completeSignInFromCallback(search: string): Promise<string> {
@@ -94,6 +97,7 @@ async function exchangeAuthorizationCode(
   code: string,
   codeVerifier: string,
 ): Promise<TokenResponse> {
+  const discovery = await resolveOidcDiscovery(config)
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: config.clientId,
@@ -102,7 +106,7 @@ async function exchangeAuthorizationCode(
     code_verifier: codeVerifier,
   })
 
-  const response = await fetch(`${config.issuer}/oauth/token`, {
+  const response = await fetch(discovery.tokenEndpoint, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
