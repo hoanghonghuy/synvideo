@@ -49,21 +49,37 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
 	`, ownerID, projectID, string(operation), requestID).Scan(&reservedAt, &state, &existingLeaseToken, &existingLeaseExpiresAt)
 	if err == nil {
-		if state == "reserved" && !existingLeaseExpiresAt.After(now) {
+		releasedReplay := state == "released"
+		expiredRecovery := state == "reserved" && !existingLeaseExpiresAt.After(now)
+		if releasedReplay || expiredRecovery {
+			var inFlight int
+			if err := tx.QueryRow(ctx, `
+				SELECT COUNT(*)
+				FROM paid_generation_reservations
+				WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3
+					AND request_id <> $4 AND state = 'reserved' AND lease_expires_at > $5
+			`, ownerID, projectID, string(operation), requestID, now).Scan(&inFlight); err != nil {
+				return paidgeneration.Reservation{}, fmt.Errorf("count paid generation replay concurrency: %w", err)
+			}
+			if inFlight >= policy.MaxInFlight {
+				return paidgeneration.Reservation{}, paidgeneration.ErrConcurrencyExceeded
+			}
+
 			leaseToken := uuid.New()
 			if _, err := tx.Exec(ctx, `
 				UPDATE paid_generation_reservations
-				SET lease_token = $5, lease_expires_at = $6, released_at = NULL
+				SET state = 'reserved', lease_token = $5, lease_expires_at = $6, released_at = NULL
 				WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
 			`, ownerID, projectID, string(operation), requestID, leaseToken, leaseExpiresAt); err != nil {
-				return paidgeneration.Reservation{}, fmt.Errorf("recover stale paid generation reservation: %w", err)
+				return paidgeneration.Reservation{}, fmt.Errorf("reacquire paid generation reservation: %w", err)
 			}
 			if err := tx.Commit(ctx); err != nil {
-				return paidgeneration.Reservation{}, fmt.Errorf("commit stale paid generation recovery: %w", err)
+				return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation replay recovery: %w", err)
 			}
 			return paidgeneration.Reservation{
 				OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID,
-				ReservedAt: reservedAt, LeaseToken: leaseToken, LeaseExpiresAt: leaseExpiresAt, Recovered: true,
+				ReservedAt: reservedAt, LeaseToken: leaseToken, LeaseExpiresAt: leaseExpiresAt,
+				Replay: releasedReplay, Recovered: expiredRecovery,
 			}, nil
 		}
 
@@ -115,7 +131,7 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 }
 
 func (g *PaidGenerationGuard) Renew(ctx context.Context, reservation paidgeneration.Reservation, leaseDuration time.Duration) (paidgeneration.Reservation, error) {
-	if g == nil || g.pool == nil || reservation.Replay || leaseDuration <= 0 || reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || reservation.LeaseToken == uuid.Nil || !validOperation(reservation.Operation) {
+	if g == nil || g.pool == nil || leaseDuration <= 0 || reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || reservation.LeaseToken == uuid.Nil || !validOperation(reservation.Operation) {
 		return paidgeneration.Reservation{}, paidgeneration.ErrGuardUnavailable
 	}
 
@@ -138,8 +154,8 @@ func (g *PaidGenerationGuard) Renew(ctx context.Context, reservation paidgenerat
 }
 
 func (g *PaidGenerationGuard) Release(ctx context.Context, reservation paidgeneration.Reservation) error {
-	if g == nil || g.pool == nil || reservation.Replay {
-		return nil
+	if g == nil || g.pool == nil {
+		return paidgeneration.ErrGuardUnavailable
 	}
 	if reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || reservation.LeaseToken == uuid.Nil || !validOperation(reservation.Operation) {
 		return paidgeneration.ErrGuardUnavailable
