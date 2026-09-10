@@ -14,6 +14,7 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/audio"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/paidgeneration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenenarration"
@@ -25,6 +26,9 @@ const (
 	ErrorStorageFailed       = "ERR_TTS_STORAGE_FAILED"
 	ErrorAssignmentFailed    = "ERR_TTS_ASSIGNMENT_FAILED"
 	ErrorInvalidPayload      = "ERR_TTS_JOB_INVALID"
+	ErrorQuotaExceeded       = "ERR_TTS_QUOTA_EXCEEDED"
+	ErrorConcurrencyExceeded = "ERR_TTS_CONCURRENCY_EXCEEDED"
+	ErrorGuardUnavailable    = "ERR_TTS_GUARD_UNAVAILABLE"
 )
 
 type GeneratedAssetStore interface {
@@ -42,6 +46,8 @@ type Handler struct {
 	assets     GeneratedAssetStore
 	bindings   SceneNarrationBinder
 	chunkStore ChunkStore
+	guard      paidgeneration.Guard
+	policy     paidgeneration.Policy
 }
 
 func NewHandler(runtime TTSProviderRuntime, assets GeneratedAssetStore, bindings SceneNarrationBinder, chunkStore ChunkStore) *Handler {
@@ -50,6 +56,21 @@ func NewHandler(runtime TTSProviderRuntime, assets GeneratedAssetStore, bindings
 		assets:     assets,
 		bindings:   bindings,
 		chunkStore: chunkStore,
+	}
+}
+
+// NewGuardedHandler wires the distributed paid-generation guard around the
+// logical narration generation job. Durable chunk checkpoints remain inside
+// the boundary so retries reuse completed chunks while the same job ID keeps
+// quota accounting idempotent.
+func NewGuardedHandler(runtime TTSProviderRuntime, assets GeneratedAssetStore, bindings SceneNarrationBinder, chunkStore ChunkStore, guard paidgeneration.Guard, policy paidgeneration.Policy) *Handler {
+	return &Handler{
+		runtime:    runtime,
+		assets:     assets,
+		bindings:   bindings,
+		chunkStore: chunkStore,
+		guard:      guard,
+		policy:     policy,
 	}
 }
 
@@ -129,6 +150,48 @@ func (h *Handler) synthesizeAndStore(ctx context.Context, principal project.Prin
 	if h.runtime == nil || h.assets == nil {
 		return mediaasset.MediaAsset{}, 0, jobs.NewTerminalError(ErrorProviderUnavailable, errors.New("tts runtime unavailable"))
 	}
+
+	var asset mediaasset.MediaAsset
+	var duration float64
+	work := func(workCtx context.Context) error {
+		generated, generatedDuration, err := h.synthesizeAndStoreUnprotected(workCtx, principal, projectID, jobID, payload)
+		if err != nil {
+			return err
+		}
+		asset = generated
+		duration = generatedDuration
+		return nil
+	}
+
+	if h.guard == nil {
+		if h.policy.Valid() {
+			return mediaasset.MediaAsset{}, 0, jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+		}
+		if err := work(ctx); err != nil {
+			return mediaasset.MediaAsset{}, 0, err
+		}
+		return asset, duration, nil
+	}
+	if !h.policy.Valid() {
+		return mediaasset.MediaAsset{}, 0, jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+	}
+
+	if err := paidgeneration.Run(ctx, h.guard, principal.OwnerID, projectID, paidgeneration.OperationNarration, jobID, h.policy, work); err != nil {
+		switch {
+		case errors.Is(err, paidgeneration.ErrQuotaExceeded):
+			return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorQuotaExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrConcurrencyExceeded):
+			return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorConcurrencyExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrGuardUnavailable), errors.Is(err, paidgeneration.ErrLeaseLost):
+			return mediaasset.MediaAsset{}, 0, jobs.NewRetryableError(ErrorGuardUnavailable, err, nil)
+		default:
+			return mediaasset.MediaAsset{}, 0, err
+		}
+	}
+	return asset, duration, nil
+}
+
+func (h *Handler) synthesizeAndStoreUnprotected(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID, payload Payload) (mediaasset.MediaAsset, float64, error) {
 	synthesizer, err := h.runtime.ResolveSpeechSynthesizer(ctx, principal.OwnerID, providers.ProviderID(payload.ProviderID), providers.ModelID(payload.ModelID))
 	if err != nil || synthesizer == nil {
 		return mediaasset.MediaAsset{}, 0, jobs.NewTerminalError(ErrorProviderUnavailable, errors.New("selected tts provider unavailable"))
