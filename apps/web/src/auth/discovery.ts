@@ -57,7 +57,7 @@ export async function resolveOidcDiscovery(
   }
 
   const payload = (await response.json()) as DiscoveryResponse
-  const document = parseDiscoveryDocument(config.issuer, payload)
+  const document = parseDiscoveryDocument(config, payload)
 
   discoveryCache.set(config.issuer, {
     document,
@@ -67,14 +67,22 @@ export async function resolveOidcDiscovery(
   return document
 }
 
-function parseDiscoveryDocument(expectedIssuer: string, payload: DiscoveryResponse): OidcDiscoveryDocument {
+function parseDiscoveryDocument(config: OidcConfig, payload: DiscoveryResponse): OidcDiscoveryDocument {
   const issuer = normalizeIssuer(payload.issuer ?? '')
-  if (issuer !== expectedIssuer) {
+  if (issuer !== config.issuer) {
     throw new Error('oidc discovery issuer mismatch')
   }
 
-  const authorizationEndpoint = validateEndpoint(payload.authorization_endpoint, 'authorization_endpoint')
-  const tokenEndpoint = validateEndpoint(payload.token_endpoint, 'token_endpoint')
+  const issuerURL = new URL(config.issuer)
+  const allowedOrigins = new Set([issuerURL.origin, ...(config.allowedEndpointOrigins ?? [])])
+  const requireHTTPS = issuerURL.protocol === 'https:'
+  const authorizationEndpoint = validateEndpoint(
+    payload.authorization_endpoint,
+    'authorization_endpoint',
+    allowedOrigins,
+    requireHTTPS,
+  )
+  const tokenEndpoint = validateEndpoint(payload.token_endpoint, 'token_endpoint', allowedOrigins, requireHTTPS)
 
   return {
     issuer,
@@ -87,7 +95,12 @@ function normalizeIssuer(value: string): string {
   return value.trim().replace(/\/$/, '')
 }
 
-function validateEndpoint(value: string | undefined, fieldName: string): string {
+function validateEndpoint(
+  value: string | undefined,
+  fieldName: string,
+  allowedOrigins: Set<string>,
+  requireHTTPS: boolean,
+): string {
   const raw = (value ?? '').trim()
   if (raw === '') {
     throw new Error(`oidc discovery missing ${fieldName}`)
@@ -103,11 +116,17 @@ function validateEndpoint(value: string | undefined, fieldName: string): string 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new Error(`oidc discovery ${fieldName} must use http or https`)
   }
+  if (requireHTTPS && parsed.protocol !== 'https:') {
+    throw new Error(`oidc discovery ${fieldName} must use https for a secure issuer`)
+  }
   if (parsed.username || parsed.password) {
     throw new Error(`oidc discovery ${fieldName} must not include credentials`)
   }
   if (parsed.hash) {
     throw new Error(`oidc discovery ${fieldName} must not include a fragment`)
+  }
+  if (!allowedOrigins.has(parsed.origin)) {
+    throw new Error(`oidc discovery ${fieldName} origin is not allowed by VITE_OIDC_CONNECT_ORIGINS`)
   }
 
   return parsed.toString()
