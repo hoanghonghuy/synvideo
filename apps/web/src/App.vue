@@ -56,7 +56,7 @@ async function handleSignOut() {
           type="button"
           @click="handleSignOut"
         >
-          Sign out
+          Đăng xuất
         </button>
       </nav>
     </header>
