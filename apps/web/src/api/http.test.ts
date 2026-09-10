@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { clearAccessToken, setAccessToken } from '@/auth/session'
+import { clearAccessToken, getAccessToken, setAccessToken } from '@/auth/session'
 import { apiFetch, apiUrl } from './http'
 
 describe('apiUrl', () => {
@@ -24,6 +24,7 @@ describe('apiFetch', () => {
     vi.unstubAllEnvs()
     clearAccessToken()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('attaches bearer authorization through the shared request layer', async () => {
@@ -44,5 +45,68 @@ describe('apiFetch', () => {
     expect(headers.get('Authorization')).toBe('Bearer memory-only-token')
     expect(localStorage.getItem('access_token')).toBeNull()
     expect(sessionStorage.getItem('access_token')).toBeNull()
+  })
+
+  it('clears an expired in-memory credential and routes 401 to bounded re-auth', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    setAccessToken('expired-token')
+    const assign = vi.fn()
+    vi.stubGlobal('location', {
+      origin: 'https://app.example',
+      pathname: '/projects/project-1',
+      search: '?tab=timeline',
+      hash: '#clip-3',
+      assign,
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }))
+
+    const response = await apiFetch('/api/v1/projects/project-1')
+
+    expect(response.status).toBe(401)
+    expect(getAccessToken()).toBeNull()
+    expect(assign).toHaveBeenCalledOnce()
+    expect(assign.mock.calls[0]?.[0]).toBe('/sign-in?reason=session-expired&returnTo=%2Fprojects%2Fproject-1%3Ftab%3Dtimeline%23clip-3')
+  })
+
+  it('does not reinterpret ownership 403 as an authentication failure', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    setAccessToken('valid-token')
+    const assign = vi.fn()
+    vi.stubGlobal('location', {
+      origin: 'https://app.example',
+      pathname: '/projects/project-1',
+      search: '',
+      hash: '',
+      assign,
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 403 }))
+
+    const response = await apiFetch('/api/v1/projects/project-1')
+
+    expect(response.status).toBe(403)
+    expect(getAccessToken()).toBe('valid-token')
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('does not create a redirect loop while already on an auth route', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    setAccessToken('expired-token')
+    const assign = vi.fn()
+    vi.stubGlobal('location', {
+      origin: 'https://app.example',
+      pathname: '/auth/callback',
+      search: '?code=x&state=y',
+      hash: '',
+      assign,
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }))
+
+    await apiFetch('/api/v1/projects')
+
+    expect(getAccessToken()).toBeNull()
+    expect(assign).not.toHaveBeenCalled()
   })
 })
