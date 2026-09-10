@@ -25,8 +25,8 @@ export function requireConfiguredApiBaseUrl(apiBaseUrl) {
   return trimmed
 }
 
-export function buildVercelSecurityHeaders(apiBaseUrl, oidcIssuer = '') {
-  const csp = buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer)
+export function buildVercelSecurityHeaders(apiBaseUrl, oidcIssuer = '', oidcConnectOrigins = '') {
+  const csp = buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer, oidcConnectOrigins)
   return [
     { key: 'X-Content-Type-Options', value: 'nosniff' },
     { key: 'X-Frame-Options', value: 'DENY' },
@@ -35,7 +35,10 @@ export function buildVercelSecurityHeaders(apiBaseUrl, oidcIssuer = '') {
   ]
 }
 
-export function buildVercelDeploymentConfig(apiBaseUrl, { requireApiBaseUrl = true, oidcIssuer = '' } = {}) {
+export function buildVercelDeploymentConfig(
+  apiBaseUrl,
+  { requireApiBaseUrl = true, oidcIssuer = '', oidcConnectOrigins = '' } = {},
+) {
   const resolved = requireApiBaseUrl
     ? requireConfiguredApiBaseUrl(apiBaseUrl)
     : String(apiBaseUrl ?? '').trim()
@@ -54,7 +57,7 @@ export function buildVercelDeploymentConfig(apiBaseUrl, { requireApiBaseUrl = tr
     headers: [
       {
         source: '/(.*)',
-        headers: buildVercelSecurityHeaders(resolved, oidcIssuer),
+        headers: buildVercelSecurityHeaders(resolved, oidcIssuer, oidcConnectOrigins),
       },
     ],
   }
