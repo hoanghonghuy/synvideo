@@ -3,12 +3,13 @@ import { nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { isOidcConfigured } from '@/auth/config'
-import { completeSignInFromCallback } from '@/auth/oidc'
+import { completeSignInFromCallback, pendingSignInReturnTo } from '@/auth/oidc'
 
 const route = useRoute()
 const router = useRouter()
 const errorMessage = ref('')
 const errorHeading = ref<HTMLElement | null>(null)
+const recoveryReturnTo = ref('/projects')
 
 async function showFailure(message: string) {
   errorMessage.value = message
@@ -19,7 +20,10 @@ async function showFailure(message: string) {
 async function recoverSignIn() {
   await router.replace({
     path: '/sign-in',
-    query: { reason: 'callback-failed' },
+    query: {
+      reason: 'callback-failed',
+      returnTo: recoveryReturnTo.value,
+    },
   })
 }
 
@@ -28,6 +32,8 @@ onMounted(async () => {
     await showFailure('Không thể hoàn tất đăng nhập vì OIDC chưa được cấu hình.')
     return
   }
+
+  recoveryReturnTo.value = pendingSignInReturnTo()
 
   try {
     const returnTo = await completeSignInFromCallback(route.fullPath.split('?')[1] ?? '')
