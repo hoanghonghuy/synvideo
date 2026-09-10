@@ -62,6 +62,12 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 				return paidgeneration.Reservation{}, fmt.Errorf("count paid generation replay concurrency: %w", err)
 			}
 			if inFlight >= policy.MaxInFlight {
+				if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "denied", "concurrency", now); err != nil {
+					return paidgeneration.Reservation{}, err
+				}
+				if err := tx.Commit(ctx); err != nil {
+					return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation concurrency denial: %w", err)
+				}
 				return paidgeneration.Reservation{}, paidgeneration.ErrConcurrencyExceeded
 			}
 
@@ -73,6 +79,13 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 			`, ownerID, projectID, string(operation), requestID, leaseToken, leaseExpiresAt); err != nil {
 				return paidgeneration.Reservation{}, fmt.Errorf("reacquire paid generation reservation: %w", err)
 			}
+			reason := "replay"
+			if expiredRecovery {
+				reason = "recovered"
+			}
+			if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "allowed", reason, now); err != nil {
+				return paidgeneration.Reservation{}, err
+			}
 			if err := tx.Commit(ctx); err != nil {
 				return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation replay recovery: %w", err)
 			}
@@ -83,6 +96,9 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 			}, nil
 		}
 
+		if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "allowed", "replay", now); err != nil {
+			return paidgeneration.Reservation{}, err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation replay: %w", err)
 		}
@@ -107,9 +123,21 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 		return paidgeneration.Reservation{}, fmt.Errorf("count paid generation usage: %w", err)
 	}
 	if inFlight >= policy.MaxInFlight {
+		if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "denied", "concurrency", now); err != nil {
+			return paidgeneration.Reservation{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation concurrency denial: %w", err)
+		}
 		return paidgeneration.Reservation{}, paidgeneration.ErrConcurrencyExceeded
 	}
 	if requestsInWindow >= policy.MaxRequests {
+		if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "denied", "quota", now); err != nil {
+			return paidgeneration.Reservation{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation quota denial: %w", err)
+		}
 		return paidgeneration.Reservation{}, paidgeneration.ErrQuotaExceeded
 	}
 
@@ -120,6 +148,9 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 		VALUES ($1, $2, $3, $4, 'reserved', $5, $6, $7)
 	`, ownerID, projectID, string(operation), requestID, now, leaseToken, leaseExpiresAt); err != nil {
 		return paidgeneration.Reservation{}, fmt.Errorf("insert paid generation reservation: %w", err)
+	}
+	if err := recordPaidGenerationDecision(ctx, tx, ownerID, projectID, operation, requestID, "allowed", "new", now); err != nil {
+		return paidgeneration.Reservation{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation reservation: %w", err)
@@ -168,6 +199,17 @@ func (g *PaidGenerationGuard) Release(ctx context.Context, reservation paidgener
 	`, reservation.OwnerID, reservation.ProjectID, string(reservation.Operation), reservation.RequestID, reservation.LeaseToken)
 	if err != nil {
 		return fmt.Errorf("release paid generation reservation: %w", err)
+	}
+	return nil
+}
+
+func recordPaidGenerationDecision(ctx context.Context, tx pgx.Tx, ownerID, projectID uuid.UUID, operation paidgeneration.Operation, requestID uuid.UUID, decision, reason string, decidedAt time.Time) error {
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO paid_generation_decisions
+			(owner_id, project_id, operation_kind, request_id, decision, reason, decided_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, ownerID, projectID, string(operation), requestID, decision, reason, decidedAt); err != nil {
+		return fmt.Errorf("record paid generation decision: %w", err)
 	}
 	return nil
 }
