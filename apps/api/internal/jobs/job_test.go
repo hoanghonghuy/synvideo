@@ -5,11 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 )
+
+type retryHintError struct {
+	delay time.Duration
+}
+
+func (e retryHintError) Error() string { return "retry later" }
+func (e retryHintError) RetryAfterDuration() time.Duration { return e.delay }
 
 func TestJobValidation(t *testing.T) {
 	ownerID := uuid.New()
@@ -110,6 +118,20 @@ func TestJobValidation(t *testing.T) {
 			t.Fatalf("expected ErrInvalidInput for long dedupe key, got %v", err)
 		}
 	})
+}
+
+func TestRetryableErrorUsesEmbeddedRetryHint(t *testing.T) {
+	delay := 45 * time.Second
+	err := jobs.NewRetryableError("ERR_LIMIT", retryHintError{delay: delay}, nil)
+	if err.RetryAfter == nil || *err.RetryAfter != delay {
+		t.Fatalf("expected retry hint %s, got %v", delay, err.RetryAfter)
+	}
+
+	explicit := 3 * time.Second
+	err = jobs.NewRetryableError("ERR_LIMIT", retryHintError{delay: delay}, &explicit)
+	if err.RetryAfter == nil || *err.RetryAfter != explicit {
+		t.Fatalf("explicit retry_after must win, got %v", err.RetryAfter)
+	}
 }
 
 func TestRegistry(t *testing.T) {
