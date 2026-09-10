@@ -48,7 +48,7 @@ func runWithCleanupTimeout(
 
 	reservation, err := guard.Reserve(ctx, ownerID, projectID, operation, requestID, policy)
 	if err != nil {
-		return err
+		return withPolicyRetryHint(err, policy)
 	}
 
 	workCtx, cancel := context.WithCancel(ctx)
