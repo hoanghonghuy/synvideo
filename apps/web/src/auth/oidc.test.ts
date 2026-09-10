@@ -50,7 +50,20 @@ describe('loadOidcConfig', () => {
       audience: 'synvideo-api',
       scopes: 'openid profile email',
       redirectUri: 'https://app.example/auth/callback',
+      allowedEndpointOrigins: [],
     })
+  })
+
+  it('parses a bounded HTTPS endpoint-origin allowlist', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    vi.stubEnv('VITE_OIDC_CONNECT_ORIGINS', 'https://login.example, https://keys.example/')
+    const { loadOidcConfig } = await import('./config')
+
+    expect(loadOidcConfig()?.allowedEndpointOrigins).toEqual([
+      'https://login.example',
+      'https://keys.example',
+    ])
   })
 })
 
