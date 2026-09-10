@@ -38,6 +38,20 @@ export function sanitizeReturnTo(returnTo: string | null | undefined): string {
   }
 }
 
+export function pendingSignInReturnTo(): string {
+  const pendingRaw = sessionStorage.getItem(FLOW_STATE_KEY)
+  if (!pendingRaw) {
+    return DEFAULT_RETURN_TO
+  }
+
+  try {
+    const pending = JSON.parse(pendingRaw) as Partial<PendingFlow>
+    return sanitizeReturnTo(typeof pending.returnTo === 'string' ? pending.returnTo : null)
+  } catch {
+    return DEFAULT_RETURN_TO
+  }
+}
+
 export async function beginSignIn(returnTo = DEFAULT_RETURN_TO): Promise<void> {
   const config = loadOidcConfig()
   if (!config) {
