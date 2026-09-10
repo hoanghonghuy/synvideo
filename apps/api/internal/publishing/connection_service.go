@@ -2,6 +2,7 @@ package publishing
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -23,11 +24,21 @@ func (s *ConnectionService) SaveConnectedChannel(ctx context.Context, connection
 	if err := connection.Validate(); err != nil || connection.State != ConnectionConnected || strings.TrimSpace(refreshToken) == "" {
 		return ChannelConnection{}, ErrInvalidModel
 	}
-	envelope, err := s.protector.Protect(connection.OwnerID, connection.ID, refreshToken)
+
+	canonical := connection
+	existing, err := s.repository.GetConnectionByRemoteChannel(ctx, connection.OwnerID, connection.Provider, connection.RemoteChannelID)
+	if err == nil {
+		canonical.ID = existing.ID
+		canonical.CreatedAt = existing.CreatedAt
+	} else if !errors.Is(err, ErrConnectionNotFound) {
+		return ChannelConnection{}, err
+	}
+
+	envelope, err := s.protector.Protect(canonical.OwnerID, canonical.ID, refreshToken)
 	if err != nil {
 		return ChannelConnection{}, err
 	}
-	return s.repository.UpsertConnection(ctx, connection, envelope.Ciphertext, envelope.Nonce, envelope.KeyID)
+	return s.repository.UpsertConnection(ctx, canonical, envelope.Ciphertext, envelope.Nonce, envelope.KeyID)
 }
 
 func (s *ConnectionService) RefreshToken(ctx context.Context, ownerID, connectionID uuid.UUID) (string, error) {
