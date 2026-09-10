@@ -68,6 +68,10 @@ describe('loadOidcConfig', () => {
 })
 
 describe('oidc discovery-backed flow', () => {
+  beforeEach(() => {
+    vi.stubGlobal('location', { origin: 'https://app.example', assign: vi.fn() })
+  })
+
   afterEach(() => {
     resetOidcDiscoveryCache()
     vi.unstubAllEnvs()
@@ -82,7 +86,7 @@ describe('oidc discovery-backed flow', () => {
     vi.stubEnv('VITE_OIDC_REDIRECT_URI', 'https://app.example/auth/callback')
 
     const assign = vi.fn()
-    vi.stubGlobal('location', { assign })
+    vi.stubGlobal('location', { origin: 'https://app.example', assign })
 
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       issuer: 'https://issuer.example',
@@ -92,11 +96,9 @@ describe('oidc discovery-backed flow', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { beginSignIn } = await import('./oidc')
-    beginSignIn('/projects')
+    await beginSignIn('/projects')
 
-    await vi.waitFor(() => {
-      expect(assign).toHaveBeenCalled()
-    })
+    expect(assign).toHaveBeenCalled()
 
     const redirectTarget = assign.mock.calls[0]?.[0]
     if (typeof redirectTarget !== 'string') {
@@ -136,5 +138,92 @@ describe('oidc discovery-backed flow', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toBe('https://issuer.example/connect/token')
     expect(localStorage.getItem('access_token')).toBeNull()
     expect(sessionStorage.getItem('access_token')).toBeNull()
+  })
+
+  it('restores a same-app destination including query and hash', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: '/projects/project-1/scene-editor?tab=timeline#clip-3',
+    }))
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        issuer: 'https://issuer.example',
+        authorization_endpoint: 'https://issuer.example/connect/authorize',
+        token_endpoint: 'https://issuer.example/connect/token',
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token' }), { status: 200 })))
+
+    const { completeSignInFromCallback } = await import('./oidc')
+    await expect(completeSignInFromCallback('?code=auth-code&state=state-123'))
+      .resolves.toBe('/projects/project-1/scene-editor?tab=timeline#clip-3')
+  })
+
+  it('preserves only a sanitized pending destination for callback recovery', async () => {
+    const { pendingSignInReturnTo } = await import('./oidc')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: '/projects/project-1/scene-editor?tab=timeline#clip-3',
+    }))
+    expect(pendingSignInReturnTo()).toBe('/projects/project-1/scene-editor?tab=timeline#clip-3')
+
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: 'https://evil.example/phish',
+    }))
+    expect(pendingSignInReturnTo()).toBe('/projects')
+  })
+
+  it('rejects external and callback return destinations', async () => {
+    const { sanitizeReturnTo } = await import('./oidc')
+    expect(sanitizeReturnTo('https://evil.example/phish')).toBe('/projects')
+    expect(sanitizeReturnTo('//evil.example/phish')).toBe('/projects')
+    expect(sanitizeReturnTo('/auth/callback?loop=1')).toBe('/projects')
+    expect(sanitizeReturnTo('/projects/new')).toBe('/projects/new')
+  })
+
+  it('surfaces provider cancellation and clears stale flow state', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: '/projects',
+    }))
+
+    const { completeSignInFromCallback } = await import('./oidc')
+    await expect(completeSignInFromCallback('?error=access_denied&state=state-123'))
+      .rejects.toThrow('sign-in was cancelled')
+    expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
+  })
+
+  it('fails closed on malformed saved oauth state and consumes the pending flow', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    sessionStorage.setItem('synvideo_oidc_flow_state', '{not-json')
+
+    const { completeSignInFromCallback } = await import('./oidc')
+    await expect(completeSignInFromCallback('?code=auth-code&state=state-123'))
+      .rejects.toThrow('invalid oauth flow state')
+    expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
+  })
+
+  it('fails closed on oauth state mismatch and consumes the pending flow', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'expected-state',
+      returnTo: '/projects',
+    }))
+
+    const { completeSignInFromCallback } = await import('./oidc')
+    await expect(completeSignInFromCallback('?code=auth-code&state=unexpected-state'))
+      .rejects.toThrow('oauth state mismatch')
+    expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
   })
 })

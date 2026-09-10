@@ -13,11 +13,14 @@ import StockMediaWorkspaceView from '@/features/media/StockMediaWorkspaceView.vu
 import SceneNarrationWorkspaceView from '@/features/scene-narration/SceneNarrationWorkspaceView.vue'
 import SceneVideoWorkspaceView from '@/features/scene-video/SceneVideoWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
+import { isOidcConfigured } from '@/auth/config'
+import { getAccessToken } from '@/auth/session'
 import AuthCallbackView from '@/views/AuthCallbackView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
 import ProjectDetailView from '@/views/ProjectDetailView.vue'
 import ProjectListView from '@/views/ProjectListView.vue'
+import SignInView from '@/views/SignInView.vue'
 import StatusView from '@/views/StatusView.vue'
 
 export const router = createRouter({
@@ -32,6 +35,11 @@ export const router = createRouter({
       path: '/status',
       name: 'status',
       component: StatusView,
+    },
+    {
+      path: '/sign-in',
+      name: 'sign-in',
+      component: SignInView,
     },
     {
       path: '/auth/callback',
@@ -119,4 +127,17 @@ export const router = createRouter({
       component: ProviderSettingsView,
     },
   ],
+})
+
+router.beforeEach((to) => {
+  const protectedCreatorRoute = to.path === '/projects' || to.path.startsWith('/projects/') || to.path.startsWith('/settings/')
+  if (!protectedCreatorRoute || !isOidcConfigured() || getAccessToken()) {
+    return true
+  }
+
+  return {
+    path: '/sign-in',
+    query: { returnTo: to.fullPath },
+    replace: true,
+  }
 })
