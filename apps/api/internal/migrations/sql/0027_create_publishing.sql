@@ -51,7 +51,9 @@ CREATE TABLE publishing_attempts (
     CHECK (remote_video_id IS NULL OR length(btrim(remote_video_id)) > 0),
     CHECK (resumable_session_uri IS NULL OR length(btrim(resumable_session_uri)) > 0),
     CHECK (last_error_code IS NULL OR length(btrim(last_error_code)) > 0),
-    CHECK (state <> 'scheduled' OR (scheduled_at IS NOT NULL AND remote_video_id IS NOT NULL)),
+    CHECK (state = 'scheduled' OR scheduled_at IS NULL),
+    CHECK (state <> 'scheduled' OR (scheduled_at IS NOT NULL AND scheduled_at > created_at)),
+    CHECK (state NOT IN ('upload_accepted','processing','private','scheduled','public') OR remote_video_id IS NOT NULL),
     UNIQUE (owner_id, project_id, connection_id, render_artifact_id, request_id)
 );
 
