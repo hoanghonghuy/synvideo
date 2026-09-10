@@ -28,19 +28,19 @@ const publishingConnectionFields = `
 	can_upload, can_publish, can_schedule, created_at, updated_at
 `
 
-func (r *PublishingRepository) UpsertConnection(ctx context.Context, connection publishing.ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (publishing.ChannelConnection, error) {
+func (r *PublishingRepository) UpsertConnection(ctx context.Context, connection publishing.ChannelConnection, encryptedRefreshToken, tokenNonce []byte, tokenKeyID string) (publishing.ChannelConnection, error) {
 	if err := connection.Validate(); err != nil {
 		return publishing.ChannelConnection{}, err
 	}
-	if len(encryptedRefreshToken) == 0 || strings.TrimSpace(tokenKeyID) == "" {
+	if len(encryptedRefreshToken) == 0 || len(tokenNonce) == 0 || strings.TrimSpace(tokenKeyID) == "" {
 		return publishing.ChannelConnection{}, publishing.ErrInvalidModel
 	}
 	query := fmt.Sprintf(`
 		INSERT INTO publishing_channel_connections (
 			id, owner_id, provider, remote_channel_id, display_name, state,
 			can_upload, can_publish, can_schedule, encrypted_refresh_token,
-			token_key_id, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			token_nonce, token_key_id, created_at, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		ON CONFLICT (owner_id, provider, remote_channel_id) DO UPDATE SET
 			display_name=EXCLUDED.display_name,
 			state=EXCLUDED.state,
@@ -48,6 +48,7 @@ func (r *PublishingRepository) UpsertConnection(ctx context.Context, connection 
 			can_publish=EXCLUDED.can_publish,
 			can_schedule=EXCLUDED.can_schedule,
 			encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,
+			token_nonce=EXCLUDED.token_nonce,
 			token_key_id=EXCLUDED.token_key_id,
 			updated_at=EXCLUDED.updated_at
 		RETURNING %s
@@ -56,7 +57,7 @@ func (r *PublishingRepository) UpsertConnection(ctx context.Context, connection 
 		connection.ID, connection.OwnerID, connection.Provider, connection.RemoteChannelID,
 		connection.DisplayName, connection.State, connection.Capabilities.CanUpload,
 		connection.Capabilities.CanPublish, connection.Capabilities.CanSchedule,
-		encryptedRefreshToken, strings.TrimSpace(tokenKeyID), connection.CreatedAt, connection.UpdatedAt,
+		encryptedRefreshToken, tokenNonce, strings.TrimSpace(tokenKeyID), connection.CreatedAt, connection.UpdatedAt,
 	))
 }
 
