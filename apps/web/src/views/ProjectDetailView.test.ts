@@ -112,7 +112,7 @@ describe('ProjectDetailView', () => {
     const narrationLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/narration`)
     expect(narrationLink?.text()).toContain('Thuyết minh phân cảnh')
     const sceneVideoLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/scene-video`)
-    expect(sceneVideoLink?.text()).toContain('Tạo video phân cảnh')
+    expect(sceneVideoLink?.text()).toBe(i18n.global.t('projects.detail.sceneVideoAction'))
 
     await briefLink?.trigger('click')
     await flushPromises()
