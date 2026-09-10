@@ -43,10 +43,11 @@ describe('App', () => {
     const signOutButton = wrapper.get('button.nav-auth-action')
     expect(signOutButton.text()).toBe('Sign out')
     await signOutButton.trigger('click')
-    await router.isReady()
 
     expect(getAccessToken()).toBeNull()
-    expect(router.currentRoute.value.path).toBe('/sign-in')
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.path).toBe('/sign-in')
+    })
     expect(router.currentRoute.value.query.reason).toBe('signed-out')
   })
 })
