@@ -23,6 +23,47 @@ var (
 	ErrLeaseLost           = errors.New("paid generation reservation lease lost")
 )
 
+// RetryableLimitError preserves the stable sentinel used by handlers while
+// carrying a deterministic backoff hint to the generic job executor. The hint
+// is intentionally conservative: callers may retry later, but never earlier
+// than the guard's own policy window/lease budget suggests.
+type RetryableLimitError struct {
+	Err        error
+	RetryAfter time.Duration
+}
+
+func (e *RetryableLimitError) Error() string {
+	if e == nil || e.Err == nil {
+		return "paid generation limit exceeded"
+	}
+	return e.Err.Error()
+}
+
+func (e *RetryableLimitError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (e *RetryableLimitError) RetryAfterDuration() time.Duration {
+	if e == nil {
+		return 0
+	}
+	return e.RetryAfter
+}
+
+func withPolicyRetryHint(err error, policy Policy) error {
+	switch {
+	case errors.Is(err, ErrQuotaExceeded):
+		return &RetryableLimitError{Err: err, RetryAfter: policy.Window}
+	case errors.Is(err, ErrConcurrencyExceeded):
+		return &RetryableLimitError{Err: err, RetryAfter: policy.LeaseDuration}
+	default:
+		return err
+	}
+}
+
 type Policy struct {
 	MaxRequests   int
 	Window        time.Duration
