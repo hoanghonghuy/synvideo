@@ -69,6 +69,15 @@ func (r *PublishingRepository) GetConnection(ctx context.Context, ownerID, conne
 	return scanPublishingConnection(r.pool.QueryRow(ctx, query, ownerID, connectionID))
 }
 
+func (r *PublishingRepository) GetConnectionByRemoteChannel(ctx context.Context, ownerID uuid.UUID, provider publishing.Provider, remoteChannelID string) (publishing.ChannelConnection, error) {
+	remoteChannelID = strings.TrimSpace(remoteChannelID)
+	if ownerID == uuid.Nil || provider == "" || remoteChannelID == "" {
+		return publishing.ChannelConnection{}, publishing.ErrInvalidModel
+	}
+	query := fmt.Sprintf(`SELECT %s FROM publishing_channel_connections WHERE owner_id=$1 AND provider=$2 AND remote_channel_id=$3`, publishingConnectionFields)
+	return scanPublishingConnection(r.pool.QueryRow(ctx, query, ownerID, provider, remoteChannelID))
+}
+
 func (r *PublishingRepository) ListConnections(ctx context.Context, ownerID uuid.UUID) ([]publishing.ChannelConnection, error) {
 	if ownerID == uuid.Nil {
 		return nil, publishing.ErrInvalidModel
