@@ -161,6 +161,23 @@ describe('oidc discovery-backed flow', () => {
       .resolves.toBe('/projects/project-1/scene-editor?tab=timeline#clip-3')
   })
 
+  it('preserves only a sanitized pending destination for callback recovery', async () => {
+    const { pendingSignInReturnTo } = await import('./oidc')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: '/projects/project-1/scene-editor?tab=timeline#clip-3',
+    }))
+    expect(pendingSignInReturnTo()).toBe('/projects/project-1/scene-editor?tab=timeline#clip-3')
+
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'state-123',
+      returnTo: 'https://evil.example/phish',
+    }))
+    expect(pendingSignInReturnTo()).toBe('/projects')
+  })
+
   it('rejects external and callback return destinations', async () => {
     const { sanitizeReturnTo } = await import('./oidc')
     expect(sanitizeReturnTo('https://evil.example/phish')).toBe('/projects')
