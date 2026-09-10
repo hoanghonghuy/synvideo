@@ -3,6 +3,7 @@ package paidgeneration
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -41,7 +42,7 @@ func Run(
 		if interval <= 0 {
 			interval = policy.LeaseDuration
 		}
-		ticker := timeNewTicker(interval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
