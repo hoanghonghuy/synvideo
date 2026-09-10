@@ -38,32 +38,56 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 		return paidgeneration.Reservation{}, fmt.Errorf("lock paid generation budget: %w", err)
 	}
 
-	var reservedAt time.Time
+	now := g.now().UTC()
+	leaseExpiresAt := now.Add(policy.LeaseDuration)
+	var reservedAt, existingLeaseExpiresAt time.Time
+	var state string
+	var existingLeaseToken uuid.UUID
 	err = tx.QueryRow(ctx, `
-		SELECT reserved_at
+		SELECT reserved_at, state, lease_token, lease_expires_at
 		FROM paid_generation_reservations
 		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
-	`, ownerID, projectID, string(operation), requestID).Scan(&reservedAt)
+	`, ownerID, projectID, string(operation), requestID).Scan(&reservedAt, &state, &existingLeaseToken, &existingLeaseExpiresAt)
 	if err == nil {
+		if state == "reserved" && !existingLeaseExpiresAt.After(now) {
+			leaseToken := uuid.New()
+			if _, err := tx.Exec(ctx, `
+				UPDATE paid_generation_reservations
+				SET lease_token = $5, lease_expires_at = $6, released_at = NULL
+				WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
+			`, ownerID, projectID, string(operation), requestID, leaseToken, leaseExpiresAt); err != nil {
+				return paidgeneration.Reservation{}, fmt.Errorf("recover stale paid generation reservation: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return paidgeneration.Reservation{}, fmt.Errorf("commit stale paid generation recovery: %w", err)
+			}
+			return paidgeneration.Reservation{
+				OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID,
+				ReservedAt: reservedAt, LeaseToken: leaseToken, LeaseExpiresAt: leaseExpiresAt, Recovered: true,
+			}, nil
+		}
+
 		if err := tx.Commit(ctx); err != nil {
 			return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation replay: %w", err)
 		}
-		return paidgeneration.Reservation{OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID, ReservedAt: reservedAt, Replay: true}, nil
+		return paidgeneration.Reservation{
+			OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID,
+			ReservedAt: reservedAt, LeaseToken: existingLeaseToken, LeaseExpiresAt: existingLeaseExpiresAt, Replay: true,
+		}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return paidgeneration.Reservation{}, fmt.Errorf("load paid generation reservation: %w", err)
 	}
 
-	now := g.now().UTC()
 	windowStart := now.Add(-policy.Window)
 	var requestsInWindow, inFlight int
 	if err := tx.QueryRow(ctx, `
 		SELECT
 			COUNT(*) FILTER (WHERE reserved_at >= $4),
-			COUNT(*) FILTER (WHERE state = 'reserved')
+			COUNT(*) FILTER (WHERE state = 'reserved' AND lease_expires_at > $5)
 		FROM paid_generation_reservations
 		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3
-	`, ownerID, projectID, string(operation), windowStart).Scan(&requestsInWindow, &inFlight); err != nil {
+	`, ownerID, projectID, string(operation), windowStart, now).Scan(&requestsInWindow, &inFlight); err != nil {
 		return paidgeneration.Reservation{}, fmt.Errorf("count paid generation usage: %w", err)
 	}
 	if inFlight >= policy.MaxInFlight {
@@ -73,31 +97,59 @@ func (g *PaidGenerationGuard) Reserve(ctx context.Context, ownerID, projectID uu
 		return paidgeneration.Reservation{}, paidgeneration.ErrQuotaExceeded
 	}
 
+	leaseToken := uuid.New()
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO paid_generation_reservations
-			(owner_id, project_id, operation_kind, request_id, state, reserved_at)
-		VALUES ($1, $2, $3, $4, 'reserved', $5)
-	`, ownerID, projectID, string(operation), requestID, now); err != nil {
+			(owner_id, project_id, operation_kind, request_id, state, reserved_at, lease_token, lease_expires_at)
+		VALUES ($1, $2, $3, $4, 'reserved', $5, $6, $7)
+	`, ownerID, projectID, string(operation), requestID, now, leaseToken, leaseExpiresAt); err != nil {
 		return paidgeneration.Reservation{}, fmt.Errorf("insert paid generation reservation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return paidgeneration.Reservation{}, fmt.Errorf("commit paid generation reservation: %w", err)
 	}
-	return paidgeneration.Reservation{OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID, ReservedAt: now}, nil
+	return paidgeneration.Reservation{
+		OwnerID: ownerID, ProjectID: projectID, Operation: operation, RequestID: requestID,
+		ReservedAt: now, LeaseToken: leaseToken, LeaseExpiresAt: leaseExpiresAt,
+	}, nil
+}
+
+func (g *PaidGenerationGuard) Renew(ctx context.Context, reservation paidgeneration.Reservation, leaseDuration time.Duration) (paidgeneration.Reservation, error) {
+	if g == nil || g.pool == nil || reservation.Replay || leaseDuration <= 0 || reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || reservation.LeaseToken == uuid.Nil || !validOperation(reservation.Operation) {
+		return paidgeneration.Reservation{}, paidgeneration.ErrGuardUnavailable
+	}
+
+	now := g.now().UTC()
+	leaseExpiresAt := now.Add(leaseDuration)
+	commandTag, err := g.pool.Exec(ctx, `
+		UPDATE paid_generation_reservations
+		SET lease_expires_at = $6
+		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
+			AND state = 'reserved' AND lease_token = $5 AND lease_expires_at > $7
+	`, reservation.OwnerID, reservation.ProjectID, string(reservation.Operation), reservation.RequestID, reservation.LeaseToken, leaseExpiresAt, now)
+	if err != nil {
+		return paidgeneration.Reservation{}, fmt.Errorf("renew paid generation reservation: %w", err)
+	}
+	if commandTag.RowsAffected() != 1 {
+		return paidgeneration.Reservation{}, paidgeneration.ErrLeaseLost
+	}
+	reservation.LeaseExpiresAt = leaseExpiresAt
+	return reservation, nil
 }
 
 func (g *PaidGenerationGuard) Release(ctx context.Context, reservation paidgeneration.Reservation) error {
 	if g == nil || g.pool == nil || reservation.Replay {
 		return nil
 	}
-	if reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || !validOperation(reservation.Operation) {
+	if reservation.OwnerID == uuid.Nil || reservation.ProjectID == uuid.Nil || reservation.RequestID == uuid.Nil || reservation.LeaseToken == uuid.Nil || !validOperation(reservation.Operation) {
 		return paidgeneration.ErrGuardUnavailable
 	}
 	_, err := g.pool.Exec(ctx, `
 		UPDATE paid_generation_reservations
 		SET state = 'released', released_at = COALESCE(released_at, NOW())
-		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4 AND state = 'reserved'
-	`, reservation.OwnerID, reservation.ProjectID, string(reservation.Operation), reservation.RequestID)
+		WHERE owner_id = $1 AND project_id = $2 AND operation_kind = $3 AND request_id = $4
+			AND state = 'reserved' AND lease_token = $5
+	`, reservation.OwnerID, reservation.ProjectID, string(reservation.Operation), reservation.RequestID, reservation.LeaseToken)
 	if err != nil {
 		return fmt.Errorf("release paid generation reservation: %w", err)
 	}
