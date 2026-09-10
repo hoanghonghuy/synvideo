@@ -22,9 +22,9 @@ Browser traffic is intentionally **cross-origin**: Vercel web origin → Render 
 - **Output:** `apps/web/dist`
 - **Manifest:** `vercel.mjs` at repository root (dynamic Vercel deployment config: SPA rewrite + edge security headers)
 - **Client API base:** `VITE_API_BASE_URL` (configured API origin, no trailing slash)
-- **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.mjs`; `apps/web/scripts/vercel-config.mjs` builds the deployment config at Vercel config-evaluation time from `VITE_API_BASE_URL` using the shared builder (`production-csp.mjs`). The same shared builder also injects a matching meta CSP into built `index.html` for defense-in-depth.
+- **CSP:** `Content-Security-Policy` HTTP response header owned by Vercel via `vercel.mjs`; `apps/web/scripts/vercel-config.mjs` builds the deployment config at Vercel config-evaluation time from `VITE_API_BASE_URL`, `VITE_OIDC_ISSUER`, and optional `VITE_OIDC_CONNECT_ORIGINS` using the shared builder (`production-csp.mjs`). The same shared builder also injects a matching meta CSP into built `index.html` for defense-in-depth.
 
-Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same `VITE_API_BASE_URL` used by `apps/web/src/api/http.ts`; provider-specific host wildcards (for example `https://*.onrender.com`) are forbidden. `scripts/deploy/validate-deployment-config.sh` evaluates `vercel.mjs` with a fixture API URL, asserts the exported deployment-config CSP, and reproduces the documented repository-root `npm ci` + `npm run build:web` install/build path (not an `apps/web`-only lockfile context).
+Vercel owns web TLS termination and response security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`). CSP `connect-src` is derived from the same API/OIDC origin configuration enforced by browser runtime discovery. Cross-origin OIDC authorization/token endpoints advertised by discovery are supported only when their exact HTTPS origin appears in `VITE_OIDC_CONNECT_ORIGINS`; provider-specific host wildcards are forbidden. `scripts/deploy/validate-deployment-config.sh` evaluates `vercel.mjs` with fixture URLs, asserts the exported deployment-config CSP, and reproduces the documented repository-root `npm ci` + `npm run build:web` install/build path.
 
 ### API (Render)
 
@@ -54,19 +54,21 @@ See `.env.production.example` for the full variable list. Required API variables
 | `SYNVIDEO_MEDIA_STORAGE_*` | AWS / ops | S3 bucket + credentials (never in Vite) |
 | `SYNVIDEO_CREDENTIAL_ENCRYPTION_KEY` | Render secret | BYOK credential encryption |
 | `VITE_API_BASE_URL` | Vercel env | Cross-origin API origin for browser fetch |
-| `VITE_OIDC_ISSUER` | Vercel env | OIDC issuer for Authorization Code + PKCE browser sign-in |
+| `VITE_OIDC_ISSUER` | Vercel env | HTTPS OIDC issuer for Authorization Code + PKCE browser sign-in |
+| `VITE_OIDC_CONNECT_ORIGINS` | Vercel env (optional) | Comma-separated exact HTTPS origins for discovery-advertised auth/token endpoints hosted away from issuer; also materialized into CSP `connect-src` |
 | `VITE_OIDC_CLIENT_ID` | Vercel env | Public OIDC client id for the SPA |
 | `VITE_OIDC_AUDIENCE` | Vercel env | API audience presented during sign-in and verified by the API |
 | `VITE_OIDC_REDIRECT_URI` | Vercel env | SPA callback route (`/auth/callback`) registered with the IdP |
-| `SYNVIDEO_OIDC_ISSUER` | Render env | Issuer URL verified on API JWTs (must match `VITE_OIDC_ISSUER`) |
+| `SYNVIDEO_OIDC_ISSUER` | Render env | HTTPS issuer URL verified on API JWTs (must match `VITE_OIDC_ISSUER`) |
 | `SYNVIDEO_OIDC_AUDIENCE` | Render env | Required JWT `aud` claim for API authentication |
-| `SYNVIDEO_OIDC_JWKS_URL` | Render env (optional) | Explicit JWKS URL; defaults to issuer OIDC discovery |
+| `SYNVIDEO_OIDC_JWKS_URL` | Render env (optional) | Explicit HTTPS JWKS URL; defaults to issuer OIDC discovery |
 | `SYNVIDEO_OIDC_JWKS_FETCH_TIMEOUT` | Render env | Bounded JWKS/discovery fetch timeout |
 | `SYNVIDEO_OIDC_JWKS_CACHE_TTL` | Render env | JWKS cache refresh interval |
 
 Forbidden in production:
 
 - `SYNVIDEO_LOCAL_ACTOR_ID` (config validation rejects it)
+- Plaintext HTTP for OIDC issuer, discovered auth/token endpoints, or explicit JWKS transport
 - Any object-storage secret in Vite/client configuration
 
 Connection pool numeric limits remain TASK-048; this document does not invent Neon pool ceilings.
@@ -143,6 +145,7 @@ Checks:
 | `SYNVIDEO_MEDIA_STORAGE_*` | Render secret | AWS IAM key rotation |
 | `SYNVIDEO_CREDENTIAL_ENCRYPTION_KEY` | Render secret | Planned re-encryption workflow (TASK-040 area) |
 | `VITE_API_BASE_URL` | Vercel env | Update on API domain change + redeploy web |
+| `VITE_OIDC_ISSUER` / `VITE_OIDC_CONNECT_ORIGINS` | Vercel env | Update on IdP endpoint-origin change + redeploy web so CSP stays synchronized |
 | `SYNVIDEO_CORS_ALLOWED_ORIGINS` | Render env | Update when web origin changes |
 
 ## Diagnostics
@@ -152,6 +155,8 @@ Checks:
 | `503` on `readyz` | Neon connectivity, S3 credentials/bucket, Render logs |
 | Browser CORS failure | `SYNVIDEO_CORS_ALLOWED_ORIGINS` matches exact Vercel origin (scheme + host) |
 | Browser API blocked with no network error detail | Built `index.html` CSP `connect-src` must include the same origin as `VITE_API_BASE_URL`; redeploy web after API URL changes |
+| OIDC discovery succeeds but token exchange is CSP-blocked | Add the provider-advertised token endpoint's exact HTTPS origin to `VITE_OIDC_CONNECT_ORIGINS`, then redeploy; do not use wildcards |
+| OIDC config fails closed in production | Verify issuer, discovered endpoints and explicit JWKS URL use HTTPS and configured cross-origin endpoints are allowlisted |
 | Migration deploy failure | Render pre-deploy logs for `synvideo-migrate`; do not restart API hoping it migrates |
 | Missing FFmpeg | `GET /api/v1/runtime/toolchain` and Dockerfile build logs |
 | Upload failures | `SYNVIDEO_MEDIA_MAX_UPLOAD_BYTES`, reverse-proxy limits per `docs/operations/http-resource-bounds.md` |
