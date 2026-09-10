@@ -14,14 +14,14 @@ var (
 )
 
 type ConnectionRepository interface {
-	Upsert(ctx context.Context, connection ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (ChannelConnection, error)
-	Get(ctx context.Context, ownerID, connectionID uuid.UUID) (ChannelConnection, error)
-	List(ctx context.Context, ownerID uuid.UUID) ([]ChannelConnection, error)
+	UpsertConnection(ctx context.Context, connection ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (ChannelConnection, error)
+	GetConnection(ctx context.Context, ownerID, connectionID uuid.UUID) (ChannelConnection, error)
+	ListConnections(ctx context.Context, ownerID uuid.UUID) ([]ChannelConnection, error)
 }
 
 type AttemptRepository interface {
-	Create(ctx context.Context, attempt PublishAttempt) (PublishAttempt, error)
-	Get(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (PublishAttempt, error)
-	GetByRequest(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID) (PublishAttempt, error)
-	SaveProgress(ctx context.Context, attempt PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (PublishAttempt, error)
+	CreateAttempt(ctx context.Context, attempt PublishAttempt) (PublishAttempt, error)
+	GetAttempt(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (PublishAttempt, error)
+	GetAttemptByRequest(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID) (PublishAttempt, error)
+	SaveAttemptProgress(ctx context.Context, attempt PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (PublishAttempt, error)
 }
