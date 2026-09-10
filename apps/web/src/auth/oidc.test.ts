@@ -184,7 +184,7 @@ describe('oidc discovery-backed flow', () => {
     expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
   })
 
-  it('fails closed on malformed saved oauth state', async () => {
+  it('fails closed on malformed saved oauth state and consumes the pending flow', async () => {
     vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
     vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
     sessionStorage.setItem('synvideo_oidc_flow_state', '{not-json')
@@ -192,5 +192,21 @@ describe('oidc discovery-backed flow', () => {
     const { completeSignInFromCallback } = await import('./oidc')
     await expect(completeSignInFromCallback('?code=auth-code&state=state-123'))
       .rejects.toThrow('invalid oauth flow state')
+    expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
+  })
+
+  it('fails closed on oauth state mismatch and consumes the pending flow', async () => {
+    vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
+    vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
+    sessionStorage.setItem('synvideo_oidc_flow_state', JSON.stringify({
+      codeVerifier: 'verifier-123',
+      state: 'expected-state',
+      returnTo: '/projects',
+    }))
+
+    const { completeSignInFromCallback } = await import('./oidc')
+    await expect(completeSignInFromCallback('?code=auth-code&state=unexpected-state'))
+      .rejects.toThrow('oauth state mismatch')
+    expect(sessionStorage.getItem('synvideo_oidc_flow_state')).toBeNull()
   })
 })
