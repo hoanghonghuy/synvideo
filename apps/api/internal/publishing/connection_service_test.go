@@ -26,6 +26,13 @@ func (f *fakeConnectionRepository) GetConnection(_ context.Context, ownerID, con
 	return f.connection, nil
 }
 
+func (f *fakeConnectionRepository) GetConnectionByRemoteChannel(_ context.Context, ownerID uuid.UUID, provider Provider, remoteChannelID string) (ChannelConnection, error) {
+	if f.connection.OwnerID != ownerID || f.connection.Provider != provider || f.connection.RemoteChannelID != remoteChannelID {
+		return ChannelConnection{}, ErrConnectionNotFound
+	}
+	return f.connection, nil
+}
+
 func (f *fakeConnectionRepository) GetRefreshTokenEnvelope(_ context.Context, ownerID, connectionID uuid.UUID) (RefreshTokenEnvelope, error) {
 	if f.connection.OwnerID != ownerID || f.connection.ID != connectionID {
 		return RefreshTokenEnvelope{}, ErrConnectionNotFound
@@ -71,6 +78,55 @@ func TestConnectionServiceStoresOnlyProtectedRefreshTokenAndRevealsIt(t *testing
 	}
 	if _, err := service.RefreshToken(context.Background(), uuid.New(), connection.ID); err != ErrConnectionNotFound {
 		t.Fatalf("cross-owner lookup error = %v", err)
+	}
+}
+
+func TestConnectionServiceReconnectKeepsCanonicalIDAndRotatesCredential(t *testing.T) {
+	protector, err := NewAESGCMRefreshTokenProtector("v1", map[string][]byte{"v1": []byte("0123456789abcdef0123456789abcdef")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceRepository := &fakeConnectionRepository{}
+	service, err := NewConnectionService(serviceRepository, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	ownerID := uuid.New()
+	canonicalID := uuid.New()
+	initial := ChannelConnection{
+		ID: canonicalID, OwnerID: ownerID, Provider: ProviderYouTube,
+		RemoteChannelID: "UC-reconnect", DisplayName: "Channel", State: ConnectionConnected,
+		Capabilities: Capabilities{CanUpload: true, CanPublish: true}, CreatedAt: now, UpdatedAt: now,
+	}
+	if _, err := service.SaveConnectedChannel(context.Background(), initial, "refresh-v1"); err != nil {
+		t.Fatalf("initial save: %v", err)
+	}
+
+	reconnect := initial
+	reconnect.ID = uuid.New()
+	reconnect.DisplayName = "Channel renamed"
+	reconnect.UpdatedAt = now.Add(time.Minute)
+	saved, err := service.SaveConnectedChannel(context.Background(), reconnect, "refresh-v2")
+	if err != nil {
+		t.Fatalf("reconnect save: %v", err)
+	}
+	if saved.ID != canonicalID {
+		t.Fatalf("canonical id changed: got %s want %s", saved.ID, canonicalID)
+	}
+	if !saved.CreatedAt.Equal(now) {
+		t.Fatalf("created at changed: got %s want %s", saved.CreatedAt, now)
+	}
+	token, err := service.RefreshToken(context.Background(), ownerID, canonicalID)
+	if err != nil {
+		t.Fatalf("refresh rotated token: %v", err)
+	}
+	if token != "refresh-v2" {
+		t.Fatalf("rotated token = %q", token)
+	}
+	if _, err := service.RefreshToken(context.Background(), ownerID, reconnect.ID); err != ErrConnectionNotFound {
+		t.Fatalf("new transient id lookup error = %v", err)
 	}
 }
 
