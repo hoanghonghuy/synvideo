@@ -14,7 +14,7 @@ var (
 )
 
 type ConnectionRepository interface {
-	UpsertConnection(ctx context.Context, connection ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (ChannelConnection, error)
+	UpsertConnection(ctx context.Context, connection ChannelConnection, encryptedRefreshToken, tokenNonce []byte, tokenKeyID string) (ChannelConnection, error)
 	GetConnection(ctx context.Context, ownerID, connectionID uuid.UUID) (ChannelConnection, error)
 	ListConnections(ctx context.Context, ownerID uuid.UUID) ([]ChannelConnection, error)
 }
