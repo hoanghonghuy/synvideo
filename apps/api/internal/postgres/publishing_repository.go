@@ -28,7 +28,7 @@ const publishingConnectionFields = `
 	can_upload, can_publish, can_schedule, created_at, updated_at
 `
 
-func (r *PublishingRepository) Upsert(ctx context.Context, connection publishing.ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (publishing.ChannelConnection, error) {
+func (r *PublishingRepository) UpsertConnection(ctx context.Context, connection publishing.ChannelConnection, encryptedRefreshToken []byte, tokenKeyID string) (publishing.ChannelConnection, error) {
 	if err := connection.Validate(); err != nil {
 		return publishing.ChannelConnection{}, err
 	}
@@ -60,7 +60,7 @@ func (r *PublishingRepository) Upsert(ctx context.Context, connection publishing
 	))
 }
 
-func (r *PublishingRepository) Get(ctx context.Context, ownerID, connectionID uuid.UUID) (publishing.ChannelConnection, error) {
+func (r *PublishingRepository) GetConnection(ctx context.Context, ownerID, connectionID uuid.UUID) (publishing.ChannelConnection, error) {
 	if ownerID == uuid.Nil || connectionID == uuid.Nil {
 		return publishing.ChannelConnection{}, publishing.ErrInvalidModel
 	}
@@ -68,7 +68,7 @@ func (r *PublishingRepository) Get(ctx context.Context, ownerID, connectionID uu
 	return scanPublishingConnection(r.pool.QueryRow(ctx, query, ownerID, connectionID))
 }
 
-func (r *PublishingRepository) List(ctx context.Context, ownerID uuid.UUID) ([]publishing.ChannelConnection, error) {
+func (r *PublishingRepository) ListConnections(ctx context.Context, ownerID uuid.UUID) ([]publishing.ChannelConnection, error) {
 	if ownerID == uuid.Nil {
 		return nil, publishing.ErrInvalidModel
 	}
@@ -98,7 +98,7 @@ const publishingAttemptFields = `
 	created_at, updated_at
 `
 
-func (r *PublishingRepository) Create(ctx context.Context, attempt publishing.PublishAttempt) (publishing.PublishAttempt, error) {
+func (r *PublishingRepository) CreateAttempt(ctx context.Context, attempt publishing.PublishAttempt) (publishing.PublishAttempt, error) {
 	if err := attempt.Validate(); err != nil {
 		return publishing.PublishAttempt{}, err
 	}
@@ -132,7 +132,7 @@ func (r *PublishingRepository) Create(ctx context.Context, attempt publishing.Pu
 		return created, nil
 	}
 	if errors.Is(err, publishing.ErrAttemptNotFound) {
-		existing, existingErr := r.GetByRequest(ctx, attempt.OwnerID, attempt.ProjectID, attempt.ConnectionID, attempt.RenderArtifactID, attempt.RequestID)
+		existing, existingErr := r.GetAttemptByRequest(ctx, attempt.OwnerID, attempt.ProjectID, attempt.ConnectionID, attempt.RenderArtifactID, attempt.RequestID)
 		if existingErr == nil {
 			return publishing.PublishAttempt{}, publishing.ErrAttemptConflict
 		}
@@ -148,7 +148,15 @@ func (r *PublishingRepository) Create(ctx context.Context, attempt publishing.Pu
 	return publishing.PublishAttempt{}, err
 }
 
-func (r *PublishingRepository) GetByRequest(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID) (publishing.PublishAttempt, error) {
+func (r *PublishingRepository) GetAttempt(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (publishing.PublishAttempt, error) {
+	if ownerID == uuid.Nil || projectID == uuid.Nil || attemptID == uuid.Nil {
+		return publishing.PublishAttempt{}, publishing.ErrInvalidModel
+	}
+	query := fmt.Sprintf(`SELECT %s FROM publishing_attempts WHERE id=$1 AND owner_id=$2 AND project_id=$3`, publishingAttemptFields)
+	return scanPublishingAttempt(r.pool.QueryRow(ctx, query, attemptID, ownerID, projectID))
+}
+
+func (r *PublishingRepository) GetAttemptByRequest(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID) (publishing.PublishAttempt, error) {
 	if ownerID == uuid.Nil || projectID == uuid.Nil || connectionID == uuid.Nil || renderArtifactID == uuid.Nil || requestID == uuid.Nil {
 		return publishing.PublishAttempt{}, publishing.ErrInvalidModel
 	}
@@ -156,7 +164,7 @@ func (r *PublishingRepository) GetByRequest(ctx context.Context, ownerID, projec
 	return scanPublishingAttempt(r.pool.QueryRow(ctx, query, ownerID, projectID, connectionID, renderArtifactID, requestID))
 }
 
-func (r *PublishingRepository) SaveProgress(ctx context.Context, attempt publishing.PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (publishing.PublishAttempt, error) {
+func (r *PublishingRepository) SaveAttemptProgress(ctx context.Context, attempt publishing.PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (publishing.PublishAttempt, error) {
 	if err := attempt.Validate(); err != nil || uploadedBytes < 0 {
 		if err != nil {
 			return publishing.PublishAttempt{}, err
