@@ -41,7 +41,7 @@ describe('App', () => {
     })
 
     const signOutButton = wrapper.get('button.nav-auth-action')
-    expect(signOutButton.text()).toBe('Sign out')
+    expect(signOutButton.text()).toBe('Đăng xuất')
     await signOutButton.trigger('click')
 
     expect(getAccessToken()).toBeNull()
