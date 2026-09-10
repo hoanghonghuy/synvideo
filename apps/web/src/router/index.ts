@@ -13,6 +13,7 @@ import StockMediaWorkspaceView from '@/features/media/StockMediaWorkspaceView.vu
 import SceneNarrationWorkspaceView from '@/features/scene-narration/SceneNarrationWorkspaceView.vue'
 import SceneVideoWorkspaceView from '@/features/scene-video/SceneVideoWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
+import AuthCallbackView from '@/views/AuthCallbackView.vue'
 import HomeView from '@/views/HomeView.vue'
 import ProjectCreateView from '@/views/ProjectCreateView.vue'
 import ProjectDetailView from '@/views/ProjectDetailView.vue'
@@ -31,6 +32,11 @@ export const router = createRouter({
       path: '/status',
       name: 'status',
       component: StatusView,
+    },
+    {
+      path: '/auth/callback',
+      name: 'auth-callback',
+      component: AuthCallbackView,
     },
     {
       path: '/projects',

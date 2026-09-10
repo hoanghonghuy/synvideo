@@ -1,6 +1,7 @@
 /**
  * Build-time production CSP for the Vite web app.
- * connect-src is derived from VITE_API_BASE_URL so browser fetch targets stay aligned.
+ * connect-src is derived from the API origin and the same bounded OIDC origin
+ * allowlist used by runtime discovery validation.
  */
 
 export function parseConfiguredApiOrigin(apiBaseUrl) {
@@ -32,11 +33,67 @@ export function parseConfiguredApiOrigin(apiBaseUrl) {
   return parsed.origin
 }
 
-export function buildProductionContentSecurityPolicy(apiBaseUrl) {
+export function parseConfiguredOidcIssuer(oidcIssuer) {
+  const trimmed = String(oidcIssuer ?? '').trim().replace(/\/$/, '')
+  if (trimmed === '') {
+    return ''
+  }
+
+  let parsed
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw new Error('VITE_OIDC_ISSUER must be an absolute https issuer URL')
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error('VITE_OIDC_ISSUER must use https in production')
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('VITE_OIDC_ISSUER must not include credentials, query, or fragment')
+  }
+
+  return parsed.origin
+}
+
+export function parseConfiguredOidcConnectOrigins(rawOrigins) {
+  const raw = String(rawOrigins ?? '').trim()
+  if (raw === '') {
+    return []
+  }
+
+  return raw.split(',').map((entry) => {
+    const trimmed = entry.trim()
+    let parsed
+    try {
+      parsed = new URL(trimmed)
+    } catch {
+      throw new Error('VITE_OIDC_CONNECT_ORIGINS entries must be absolute https origins')
+    }
+    if (parsed.protocol !== 'https:') {
+      throw new Error('VITE_OIDC_CONNECT_ORIGINS entries must use https')
+    }
+    if (parsed.username || parsed.password || (parsed.pathname !== '' && parsed.pathname !== '/') || parsed.search || parsed.hash) {
+      throw new Error('VITE_OIDC_CONNECT_ORIGINS entries must be origins without path, credentials, query, or fragment')
+    }
+    return parsed.origin
+  })
+}
+
+export function buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer = '', oidcConnectOrigins = '') {
   const connectSources = ["'self'"]
   const apiOrigin = parseConfiguredApiOrigin(apiBaseUrl)
   if (apiOrigin) {
     connectSources.push(apiOrigin)
+  }
+  const issuerOrigin = parseConfiguredOidcIssuer(oidcIssuer)
+  if (issuerOrigin) {
+    connectSources.push(issuerOrigin)
+  }
+  for (const origin of parseConfiguredOidcConnectOrigins(oidcConnectOrigins)) {
+    if (!connectSources.includes(origin)) {
+      connectSources.push(origin)
+    }
   }
 
   return [
@@ -52,7 +109,7 @@ export function buildProductionContentSecurityPolicy(apiBaseUrl) {
   ].join('; ')
 }
 
-export function productionCspMetaTag(apiBaseUrl) {
-  const content = buildProductionContentSecurityPolicy(apiBaseUrl)
+export function productionCspMetaTag(apiBaseUrl, oidcIssuer = '', oidcConnectOrigins = '') {
+  const content = buildProductionContentSecurityPolicy(apiBaseUrl, oidcIssuer, oidcConnectOrigins)
   return `<meta http-equiv="Content-Security-Policy" content="${content}" />`
 }
