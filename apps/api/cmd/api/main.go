@@ -125,6 +125,11 @@ func main() {
 			logger.Error("database ping failed", "error", err)
 			os.Exit(1)
 		}
+		paidGeneration, err := loadPaidGenerationWiring(cfg.Environment, pool)
+		if err != nil {
+			logger.Error("paid generation guard initialization failed", "error", err)
+			os.Exit(1)
+		}
 		identityMapper := postgres.NewIdentityMappingRepository(pool)
 		actorResolver, err = actor.NewResolver(cfg, identityMapper)
 		if err != nil {
@@ -237,6 +242,9 @@ func main() {
 		if mediaAssetService != nil && sceneMediaService != nil {
 			generatedAssetStore := generatedimagejob.NewAssetStore(mediaAssetService, mediaAssetRepo)
 			generatedImageJobHandler := generatedimagejob.NewHandler(providerSettingsService, generatedAssetStore, sceneMediaService)
+			if paidGeneration.Enabled {
+				generatedImageJobHandler = generatedimagejob.NewGuardedHandler(providerSettingsService, generatedAssetStore, sceneMediaService, paidGeneration.Guard, paidGeneration.Policy)
+			}
 			if err := jobsRegistry.Register(generatedimagejob.JobKind, generatedImageJobHandler); err != nil {
 				logger.Error("register generated image job handler failed", "error", err)
 				os.Exit(1)
@@ -244,6 +252,9 @@ func main() {
 
 			generatedVideoAssetStore := scenevideojob.NewAssetStore(mediaAssetService, mediaAssetRepo)
 			generatedVideoJobHandler := scenevideojob.NewHandler(providerSettingsService, videoOperationRepo, generatedVideoAssetStore, sceneMediaService)
+			if paidGeneration.Enabled {
+				generatedVideoJobHandler = scenevideojob.NewGuardedHandler(providerSettingsService, videoOperationRepo, generatedVideoAssetStore, sceneMediaService, paidGeneration.Guard, paidGeneration.Policy)
+			}
 			if err := jobsRegistry.Register(scenevideojob.JobKind, generatedVideoJobHandler); err != nil {
 				logger.Error("register generated video job handler failed", "error", err)
 				os.Exit(1)
@@ -253,6 +264,9 @@ func main() {
 			narrationAssetStore := scenenarrationjob.NewAssetStore(mediaAssetService, mediaAssetRepo)
 			narrationChunkStore := scenenarrationjob.NewObjectStorageChunkStore(storage, temporaryObjectRepo)
 			narrationJobHandler := scenenarrationjob.NewHandler(providerSettingsService, narrationAssetStore, sceneNarrationService, narrationChunkStore)
+			if paidGeneration.Enabled {
+				narrationJobHandler = scenenarrationjob.NewGuardedHandler(providerSettingsService, narrationAssetStore, sceneNarrationService, narrationChunkStore, paidGeneration.Guard, paidGeneration.Policy)
+			}
 			if err := jobsRegistry.Register(scenenarrationjob.JobKind, narrationJobHandler); err != nil {
 				logger.Error("register scene narration job handler failed", "error", err)
 				os.Exit(1)

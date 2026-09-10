@@ -11,6 +11,7 @@ import (
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/jobs"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/mediaasset"
+	"github.com/hoanghonghuy/synvideo/apps/api/internal/paidgeneration"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/providers"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/scenemedia"
@@ -25,6 +26,9 @@ const (
 	ErrorPollingPending      = "ERR_VIDEO_OPERATION_PENDING"
 	ErrorAmbiguousSubmit     = "ERR_VIDEO_SUBMIT_AMBIGUOUS"
 	ErrorCheckpointFailed    = "ERR_VIDEO_CHECKPOINT_FAILED"
+	ErrorQuotaExceeded       = "ERR_VIDEO_QUOTA_EXCEEDED"
+	ErrorConcurrencyExceeded = "ERR_VIDEO_CONCURRENCY_EXCEEDED"
+	ErrorGuardUnavailable    = "ERR_VIDEO_GUARD_UNAVAILABLE"
 )
 
 var defaultPollDelay = 5 * time.Second
@@ -54,10 +58,19 @@ type Handler struct {
 	operations OperationRepository
 	assets     GeneratedAssetStore
 	bindings   SceneBinder
+	guard      paidgeneration.Guard
+	policy     paidgeneration.Policy
 }
 
 func NewHandler(runtime VideoProviderRuntime, operations OperationRepository, assets GeneratedAssetStore, bindings SceneBinder) *Handler {
 	return &Handler{runtime: runtime, operations: operations, assets: assets, bindings: bindings}
+}
+
+// NewGuardedHandler protects only the paid provider submission. Polling and
+// result acquisition reuse the durable external-operation checkpoint and must
+// not consume another quota reservation.
+func NewGuardedHandler(runtime VideoProviderRuntime, operations OperationRepository, assets GeneratedAssetStore, bindings SceneBinder, guard paidgeneration.Guard, policy paidgeneration.Policy) *Handler {
+	return &Handler{runtime: runtime, operations: operations, assets: assets, bindings: bindings, guard: guard, policy: policy}
 }
 
 func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
@@ -93,33 +106,43 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, jobs.NewRetryableError(ErrorCheckpointFailed, err, nil)
 	}
 	if errors.Is(err, ErrCheckpointNotFound) {
-		operation, startErr := generator.StartVideo(ctx, providers.VideoGenerationRequest{
-			Prompt:          payload.Prompt,
-			AspectRatio:     payload.AspectRatio,
-			DurationSeconds: payload.DurationSeconds,
-		})
-		if startErr != nil {
-			if errors.Is(startErr, providers.ErrAmbiguousSubmit) {
-				if _, saveErr := h.operations.SaveAmbiguous(ctx, principal, projectID, job.ID); saveErr != nil {
-					return nil, jobs.NewTerminalError(ErrorCheckpointFailed, saveErr)
+		var submitted providers.VideoOperation
+		work := func(workCtx context.Context) error {
+			operation, startErr := generator.StartVideo(workCtx, providers.VideoGenerationRequest{
+				Prompt:          payload.Prompt,
+				AspectRatio:     payload.AspectRatio,
+				DurationSeconds: payload.DurationSeconds,
+			})
+			if startErr != nil {
+				if errors.Is(startErr, providers.ErrAmbiguousSubmit) {
+					if _, saveErr := h.operations.SaveAmbiguous(workCtx, principal, projectID, job.ID); saveErr != nil {
+						return jobs.NewTerminalError(ErrorCheckpointFailed, saveErr)
+					}
+					return jobs.NewTerminalError(ErrorAmbiguousSubmit, startErr)
 				}
-				return nil, jobs.NewTerminalError(ErrorAmbiguousSubmit, startErr)
+				return classifyVideoProviderError(startErr)
 			}
-			return nil, classifyVideoProviderError(startErr)
+			if validateErr := operation.Validate(); validateErr != nil {
+				return jobs.NewTerminalError(ErrorProviderFailed, validateErr)
+			}
+			saved, saveErr := h.operations.SaveSubmitted(workCtx, principal, projectID, job.ID, operation.ID)
+			if saveErr != nil {
+				// The provider may already have accepted paid work. Automatic retry here could
+				// submit again, so fail closed for manual-safe recovery instead of retrying.
+				return jobs.NewTerminalError(ErrorCheckpointFailed, saveErr)
+			}
+			checkpoint = saved
+			submitted = operation
+			return nil
 		}
-		if err := operation.Validate(); err != nil {
-			return nil, jobs.NewTerminalError(ErrorProviderFailed, err)
+
+		if guardErr := h.runPaidSubmit(ctx, principal, projectID, job.ID, work); guardErr != nil {
+			return nil, guardErr
 		}
-		checkpoint, err = h.operations.SaveSubmitted(ctx, principal, projectID, job.ID, operation.ID)
-		if err != nil {
-			// The provider may already have accepted paid work. Automatic retry here could
-			// submit again, so fail closed for manual-safe recovery instead of retrying.
-			return nil, jobs.NewTerminalError(ErrorCheckpointFailed, err)
-		}
-		if operation.State == providers.VideoOperationFailed {
+		if submitted.State == providers.VideoOperationFailed {
 			return nil, jobs.NewTerminalError(ErrorProviderFailed, providers.NewVideoOperationFailedError(errors.New("video operation failed during submit")))
 		}
-		if operation.State != providers.VideoOperationSucceeded {
+		if submitted.State != providers.VideoOperationSucceeded {
 			return nil, jobs.NewRetryableError(ErrorPollingPending, errors.New("video operation is still running"), &defaultPollDelay)
 		}
 	}
@@ -192,6 +215,31 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
 	}
 	return h.finish(ctx, principal, projectID, job.ID, payload, asset)
+}
+
+func (h *Handler) runPaidSubmit(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID, work func(context.Context) error) error {
+	if h.guard == nil {
+		if h.policy.Valid() {
+			return jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+		}
+		return work(ctx)
+	}
+	if !h.policy.Valid() {
+		return jobs.NewTerminalError(ErrorGuardUnavailable, paidgeneration.ErrGuardUnavailable)
+	}
+	if err := paidgeneration.Run(ctx, h.guard, principal.OwnerID, projectID, paidgeneration.OperationVideo, jobID, h.policy, work); err != nil {
+		switch {
+		case errors.Is(err, paidgeneration.ErrQuotaExceeded):
+			return jobs.NewRetryableError(ErrorQuotaExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrConcurrencyExceeded):
+			return jobs.NewRetryableError(ErrorConcurrencyExceeded, err, nil)
+		case errors.Is(err, paidgeneration.ErrGuardUnavailable), errors.Is(err, paidgeneration.ErrLeaseLost):
+			return jobs.NewRetryableError(ErrorGuardUnavailable, err, nil)
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) finish(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID, payload Payload, asset mediaasset.MediaAsset) (json.RawMessage, error) {

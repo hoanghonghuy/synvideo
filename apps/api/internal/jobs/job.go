@@ -136,7 +136,19 @@ func (e *RetryableJobError) Unwrap() error {
 	return e.Err
 }
 
+type retryAfterProvider interface {
+	RetryAfterDuration() time.Duration
+}
+
 func NewRetryableError(code string, err error, retryAfter *time.Duration) *RetryableJobError {
+	if retryAfter == nil && err != nil {
+		var provider retryAfterProvider
+		if errors.As(err, &provider) {
+			if hinted := provider.RetryAfterDuration(); hinted > 0 {
+				retryAfter = &hinted
+			}
+		}
+	}
 	return &RetryableJobError{
 		Code:       code,
 		Err:        err,
