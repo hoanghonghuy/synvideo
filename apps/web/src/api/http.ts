@@ -37,16 +37,23 @@ function transitionToReauth(): void {
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const accessToken = getAccessToken()
-  const headers = new Headers(init.headers ?? {})
-  if (accessToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${accessToken}`)
-  }
-
-  const response = await fetch(apiUrl(path), {
+  let requestInit: RequestInit = {
     credentials: 'include',
     ...init,
-    headers,
-  })
+  }
+
+  if (accessToken) {
+    const headers = new Headers(init.headers ?? {})
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${accessToken}`)
+    }
+    requestInit = {
+      ...requestInit,
+      headers,
+    }
+  }
+
+  const response = await fetch(apiUrl(path), requestInit)
 
   if (response.status === 401 && accessToken) {
     clearAccessToken()
