@@ -22,6 +22,7 @@ type RefreshTokenEnvelope struct {
 type ConnectionRepository interface {
 	UpsertConnection(ctx context.Context, connection ChannelConnection, encryptedRefreshToken, tokenNonce []byte, tokenKeyID string) (ChannelConnection, error)
 	GetConnection(ctx context.Context, ownerID, connectionID uuid.UUID) (ChannelConnection, error)
+	GetConnectionByRemoteChannel(ctx context.Context, ownerID uuid.UUID, provider Provider, remoteChannelID string) (ChannelConnection, error)
 	GetRefreshTokenEnvelope(ctx context.Context, ownerID, connectionID uuid.UUID) (RefreshTokenEnvelope, error)
 	ListConnections(ctx context.Context, ownerID uuid.UUID) ([]ChannelConnection, error)
 }
