@@ -14,6 +14,22 @@ beforeEach(() => {
 })
 
 describe('ProjectListView', () => {
+  it('renders accessible skeleton cards while the initial project request is pending', async () => {
+    fetchMock.mockImplementation(() => new Promise(() => undefined))
+
+    const wrapper = mount(ProjectListView, {
+      global: {
+        plugins: [i18n, testRouter()],
+      },
+    })
+
+    const loadingState = wrapper.get('[role="status"]')
+    expect(loadingState.text()).toContain('Đang tải')
+    expect(loadingState.attributes('aria-live')).toBe('polite')
+    expect(wrapper.findAll('.project-card-skeleton')).toHaveLength(3)
+    expect(wrapper.get('.project-library-grid').attributes('aria-hidden')).toBe('true')
+  })
+
   it('renders an empty state when no projects exist', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ projects: [] }))
 
@@ -29,21 +45,33 @@ describe('ProjectListView', () => {
     expect(wrapper.text()).toContain('Tạo dự án')
   })
 
-  it('renders persisted projects returned by the API', async () => {
+  it('renders project library metadata and distinct status labels returned by the API', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         projects: [
           {
             id: '11111111-1111-4111-8111-111111111111',
             title: 'Video ra mat',
-            description: '',
+            description: 'Video giới thiệu sản phẩm mới với phần mở đầu ngắn gọn.',
             content_format: 'short',
             aspect_ratio: '9:16',
             target_duration_seconds: 60,
             locale: 'vi',
             status: 'active',
             created_at: '2026-08-31T08:00:00Z',
-            updated_at: '2026-08-31T08:00:00Z',
+            updated_at: '2026-09-10T08:00:00Z',
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            title: 'Video cu',
+            description: '',
+            content_format: 'long',
+            aspect_ratio: '16:9',
+            target_duration_seconds: null,
+            locale: 'vi',
+            status: 'archived',
+            created_at: '2026-08-01T08:00:00Z',
+            updated_at: '2026-08-02T08:00:00Z',
           },
         ],
       }),
@@ -58,7 +86,15 @@ describe('ProjectListView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Video ra mat')
+    expect(wrapper.text()).toContain('Video giới thiệu sản phẩm mới')
+    expect(wrapper.text()).toContain('Ngắn · 9:16')
     expect(wrapper.text()).toContain('Đang hoạt động')
+    expect(wrapper.text()).toContain('Dài · 16:9')
+    expect(wrapper.text()).toContain('Đã lưu trữ')
+    expect(wrapper.text()).toContain('Cập nhật lần cuối:')
+    expect(wrapper.findAll('.project-card')).toHaveLength(2)
+    expect(wrapper.find('.project-status-active').exists()).toBe(true)
+    expect(wrapper.find('.project-status-archived').exists()).toBe(true)
   })
 })
 
