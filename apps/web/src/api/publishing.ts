@@ -31,6 +31,15 @@ export interface ChannelConnection {
   updated_at: string
 }
 
+export interface PublishArtifactSummary {
+  id: string
+  byte_size: number
+  duration_ms: number
+  width: number
+  height: number
+  created_at: string
+}
+
 export interface PublishAttempt {
   id: string
   project_id: string
@@ -59,6 +68,16 @@ export interface CreatePublishAttemptPayload {
 
 export async function listPublishingConnections(): Promise<ChannelConnection[]> {
   const response = await request<{ items: ChannelConnection[] }>('/api/v1/publishing/connections')
+  return response.items
+}
+
+export async function listPublishArtifacts(projectID: string): Promise<PublishArtifactSummary[]> {
+  const response = await request<{ items: PublishArtifactSummary[] }>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/artifacts`)
+  return response.items
+}
+
+export async function listPublishAttempts(projectID: string): Promise<PublishAttempt[]> {
+  const response = await request<{ items: PublishAttempt[] }>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts`)
   return response.items
 }
 
