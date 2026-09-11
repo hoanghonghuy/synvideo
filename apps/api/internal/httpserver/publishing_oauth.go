@@ -1,8 +1,12 @@
 package httpserver
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -10,6 +14,8 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/publishing"
 )
+
+const youtubeOAuthStateCookie = "synvideo_youtube_oauth_state"
 
 type publishingOAuthHandler struct {
 	service       *publishing.YouTubeConnectService
@@ -32,11 +38,24 @@ func (h publishingOAuthHandler) start(w http.ResponseWriter, r *http.Request) {
 		writeProjectJSON(w, http.StatusServiceUnavailable, errorEnvelope{Error: apiError{Code: "youtube_oauth_unavailable", Message: "YouTube authorization is not available."}})
 		return
 	}
+	parsedAuthorizationURL, err := url.Parse(authorizationURL)
+	if err != nil || strings.TrimSpace(parsedAuthorizationURL.Query().Get("state")) == "" {
+		writeProjectJSON(w, http.StatusServiceUnavailable, errorEnvelope{Error: apiError{Code: "youtube_oauth_unavailable", Message: "YouTube authorization is not available."}})
+		return
+	}
+	setYouTubeOAuthCookie(w, r, oauthStateCookieValue(parsedAuthorizationURL.Query().Get("state")), 600)
 	writeProjectJSON(w, http.StatusOK, map[string]string{"authorization_url": authorizationURL})
 }
 
 func (h publishingOAuthHandler) callback(w http.ResponseWriter, r *http.Request) {
 	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	cookie, err := r.Cookie(youtubeOAuthStateCookie)
+	if err != nil || !constantTimeStringEqual(cookie.Value, oauthStateCookieValue(state)) {
+		writeOAuthFailure(w)
+		return
+	}
+	setYouTubeOAuthCookie(w, r, "", -1)
+
 	projectID, stateErr := h.service.ProjectFromState(state)
 	if stateErr != nil {
 		writeOAuthFailure(w)
@@ -52,6 +71,31 @@ func (h publishingOAuthHandler) callback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	http.Redirect(w, r, h.service.ReturnURL(completedProjectID, "connected"), http.StatusSeeOther)
+}
+
+func oauthStateCookieValue(state string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(state)))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func constantTimeStringEqual(left, right string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+func setYouTubeOAuthCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	secure := r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     youtubeOAuthStateCookie,
+		Value:    value,
+		Path:     "/api/v1/publishing/youtube/oauth/callback",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func writeOAuthFailure(w http.ResponseWriter) {
