@@ -63,14 +63,14 @@ export async function listPublishingConnections(): Promise<ChannelConnection[]> 
 }
 
 export async function createPublishAttempt(projectID: string, payload: CreatePublishAttemptPayload): Promise<PublishAttempt> {
-  return request<PublishAttempt>(`/api/v1/projects/${projectID}/publishing/attempts`, {
+  return request<PublishAttempt>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export async function getPublishAttempt(projectID: string, attemptID: string): Promise<PublishAttempt> {
-  return request<PublishAttempt>(`/api/v1/projects/${projectID}/publishing/attempts/${attemptID}`)
+  return request<PublishAttempt>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts/${encodeURIComponent(attemptID)}`)
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
