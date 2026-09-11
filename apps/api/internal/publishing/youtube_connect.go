@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	ErrOAuthState   = errors.New("invalid oauth state")
+	ErrOAuthState     = errors.New("invalid oauth state")
 	ErrYouTubeChannel = errors.New("youtube channel lookup failed")
 )
 
@@ -66,13 +66,21 @@ func (s *YouTubeConnectService) Start(ownerID, projectID uuid.UUID) (string, err
 	payload := youtubeStatePayload{
 		OwnerID: ownerID, ProjectID: projectID,
 		ExpiresAt: s.now().UTC().Add(10 * time.Minute).Unix(),
-		Nonce: base64.RawURLEncoding.EncodeToString(nonce),
+		Nonce:     base64.RawURLEncoding.EncodeToString(nonce),
 	}
 	state, err := s.signState(payload)
 	if err != nil {
 		return "", err
 	}
 	return s.oauth.AuthorizationURL(state)
+}
+
+func (s *YouTubeConnectService) ProjectFromState(rawState string) (uuid.UUID, error) {
+	payload, err := s.verifyState(rawState)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return payload.ProjectID, nil
 }
 
 func (s *YouTubeConnectService) Complete(ctx context.Context, rawState, code string) (ChannelConnection, uuid.UUID, error) {
@@ -177,8 +185,10 @@ func (s *YouTubeConnectService) lookupChannel(ctx context.Context, accessToken s
 	}
 	var payload struct {
 		Items []struct {
-			ID string `json:"id"`
-			Snippet struct{ Title string `json:"title"` } `json:"snippet"`
+			ID      string `json:"id"`
+			Snippet struct {
+				Title string `json:"title"`
+			} `json:"snippet"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil || len(payload.Items) != 1 {
