@@ -20,6 +20,7 @@ func RegisterPublishingRoutes(mux *http.ServeMux, service PublishingService, act
 	mux.HandleFunc("GET /api/v1/projects/{id}/publishing/attempts", handler.listAttempts)
 	mux.HandleFunc("POST /api/v1/projects/{id}/publishing/attempts", handler.createAttempt)
 	mux.HandleFunc("GET /api/v1/projects/{id}/publishing/attempts/{attempt_id}", handler.getAttempt)
+	mux.HandleFunc("POST /api/v1/projects/{id}/publishing/attempts/{attempt_id}/retry", handler.retryAttempt)
 }
 
 // WithPublishingRoutes layers publishing endpoints over an existing server handler so
@@ -39,6 +40,7 @@ func WithPublishingRoutes(logger *slog.Logger, base http.Handler, service Publis
 	mux.Handle("GET /api/v1/projects/{id}/publishing/attempts", requestLogger(logger, http.HandlerFunc(handler.listAttempts)))
 	mux.Handle("POST /api/v1/projects/{id}/publishing/attempts", requestLogger(logger, http.HandlerFunc(handler.createAttempt)))
 	mux.Handle("GET /api/v1/projects/{id}/publishing/attempts/{attempt_id}", requestLogger(logger, http.HandlerFunc(handler.getAttempt)))
+	mux.Handle("POST /api/v1/projects/{id}/publishing/attempts/{attempt_id}/retry", requestLogger(logger, http.HandlerFunc(handler.retryAttempt)))
 	mux.Handle("/", base)
 	return mux
 }
