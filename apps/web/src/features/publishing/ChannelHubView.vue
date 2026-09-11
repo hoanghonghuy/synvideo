@@ -9,6 +9,7 @@ import {
   listPublishArtifacts,
   listPublishAttempts,
   listPublishingConnections,
+  retryPublishAttempt,
   type ChannelConnection,
   type PublishArtifactSummary,
   type PublishAttempt,
@@ -27,10 +28,21 @@ const description = ref('')
 const loading = ref(true)
 const submitting = ref(false)
 const refreshing = ref(false)
+const retrying = ref(false)
 const errorMessage = ref('')
 const attempt = ref<PublishAttempt | null>(null)
 
 const selectedConnection = computed(() => connections.value.find((item) => item.id === selectedConnectionID.value) ?? null)
+const selectedAttemptArtifact = computed(() => {
+  if (!attempt.value) return null
+  return artifacts.value.find((item) => item.id === attempt.value?.render_artifact_id) ?? null
+})
+const uploadPercent = computed(() => {
+  const current = attempt.value
+  const artifact = selectedAttemptArtifact.value
+  if (!current || !artifact || artifact.byte_size <= 0) return null
+  return Math.max(0, Math.min(100, Math.round((current.uploaded_bytes / artifact.byte_size) * 100)))
+})
 const canSubmit = computed(() => {
   const connection = selectedConnection.value
   return Boolean(
@@ -112,6 +124,23 @@ async function refreshAttempt(item: PublishAttempt = attempt.value as PublishAtt
     errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh publish status.'
   } finally {
     refreshing.value = false
+  }
+}
+
+async function retryAttempt() {
+  if (!attempt.value || attempt.value.state !== 'retryable_failure' || retrying.value) {
+    return
+  }
+  retrying.value = true
+  errorMessage.value = ''
+  try {
+    const retried = await retryPublishAttempt(projectID.value, attempt.value.id)
+    attempt.value = retried
+    attempts.value = attempts.value.map((entry) => entry.id === retried.id ? retried : entry)
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : 'Could not queue the publish retry.'
+  } finally {
+    retrying.value = false
   }
 }
 
@@ -244,13 +273,25 @@ function formatDuration(durationMS: number): string {
         <div><span>Updated</span><strong>{{ new Date(attempt.updated_at).toLocaleString() }}</strong></div>
       </div>
 
+      <div v-if="uploadPercent !== null" class="progress-block">
+        <div class="progress-copy"><span>Upload progress</span><strong>{{ uploadPercent }}%</strong></div>
+        <progress :value="uploadPercent" max="100">{{ uploadPercent }}%</progress>
+        <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
+      </div>
+      <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">Upload progress is indeterminate because artifact total is not available in this workspace snapshot.</p>
+
       <div v-if="attempt.last_error_code" class="notice error">Upload requires attention: {{ attempt.last_error_code }}</div>
-      <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">This attempt can be retried once execution controls are available. Its durable progress is preserved.</p>
+      <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">Retry keeps this logical attempt and its durable resumable progress; it does not create another remote upload.</p>
       <p v-if="attempt.state === 'reconnect_required'" class="warning-copy">Reconnect this YouTube channel before resuming this attempt.</p>
       <a v-if="attempt.remote_video_id" class="text-link" :href="`https://www.youtube.com/watch?v=${attempt.remote_video_id}`" target="_blank" rel="noopener noreferrer">Open remote video</a>
-      <button class="secondary-button" type="button" :disabled="refreshing" @click="refreshAttempt()">
-        {{ refreshing ? 'Refreshing…' : 'Refresh status' }}
-      </button>
+      <div class="attempt-actions">
+        <button v-if="attempt.state === 'retryable_failure'" class="primary-button" type="button" :disabled="retrying" @click="retryAttempt">
+          {{ retrying ? 'Queueing retry…' : 'Retry upload' }}
+        </button>
+        <button class="secondary-button" type="button" :disabled="refreshing || retrying" @click="refreshAttempt()">
+          {{ refreshing ? 'Refreshing…' : 'Refresh status' }}
+        </button>
+      </div>
     </section>
 
     <section class="panel history-panel" aria-labelledby="history-title">
@@ -304,7 +345,7 @@ function formatDuration(durationMS: number): string {
 .publish-form label { display: grid; gap: 7px; font-weight: 700; }
 .publish-form input, .publish-form textarea, .publish-form select { width: 100%; box-sizing: border-box; min-height: 44px; padding: 11px 12px; border: 1px solid #aebdb6; border-radius: 8px; background: #fff; font: inherit; }
 .publish-form textarea { min-height: 120px; }
-.publish-form input:focus-visible, .publish-form textarea:focus-visible, .publish-form select:focus-visible, .connection-card:focus-within, .history-row:focus-visible { outline: 3px solid #7aa995; outline-offset: 2px; }
+.publish-form input:focus-visible, .publish-form textarea:focus-visible, .publish-form select:focus-visible, .connection-card:focus-within, .history-row:focus-visible, .attempt-actions button:focus-visible { outline: 3px solid #7aa995; outline-offset: 2px; }
 .publish-form small { color: #60716b; font-weight: 400; line-height: 1.45; }
 .primary-button, .secondary-button { min-height: 44px; }
 .attempt-panel, .history-panel { margin-top: 20px; }
@@ -312,7 +353,11 @@ function formatDuration(durationMS: number): string {
 .attempt-grid div { display: grid; gap: 4px; min-width: 0; padding: 12px; border-radius: 8px; background: #f5f8f7; }
 .attempt-grid span { color: #60716b; font-size: 0.82rem; }
 .attempt-grid strong { overflow-wrap: anywhere; }
-.attempt-panel .secondary-button { margin-top: 14px; }
+.progress-block { display: grid; gap: 8px; margin: 14px 0; }
+.progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.progress-block progress { width: 100%; height: 12px; }
+.progress-block small { color: #60716b; }
+.attempt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .history-row { display: flex; width: 100%; min-height: 58px; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid #d4ddd8; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .history-row:hover { background: #f8faf9; }
 .history-main { display: grid; gap: 4px; min-width: 0; }
@@ -324,6 +369,8 @@ function formatDuration(durationMS: number): string {
   .panel { padding: 16px; border-radius: 10px; }
   .attempt-grid { grid-template-columns: 1fr; }
   .hub-heading .secondary-button, .primary-button { width: 100%; }
+  .attempt-actions { display: grid; grid-template-columns: 1fr; }
+  .attempt-actions button { width: 100%; }
   .history-row { align-items: flex-start; flex-direction: column; }
 }
 </style>
