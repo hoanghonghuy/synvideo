@@ -35,7 +35,9 @@ func TestYouTubeOAuthExchangeAndRefresh(t *testing.T) {
 	var requests []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
-			t.Fatal(err)
+			t.Errorf("parse OAuth form: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 		copyValues := make(url.Values, len(r.Form))
 		for k, v := range r.Form {
