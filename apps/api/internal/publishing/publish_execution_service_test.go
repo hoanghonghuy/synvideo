@@ -40,7 +40,9 @@ func (r executionCredentialReader) RefreshToken(context.Context, uuid.UUID, uuid
 
 type executionOAuthRefresher struct{ token OAuthToken }
 
-func (r executionOAuthRefresher) Refresh(context.Context, string) (OAuthToken, error) { return r.token, nil }
+func (r executionOAuthRefresher) Refresh(context.Context, string) (OAuthToken, error) {
+	return r.token, nil
+}
 
 type executionUploader struct {
 	initiated      ResumableUploadResult
