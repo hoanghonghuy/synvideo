@@ -27,6 +27,10 @@ type publishingArtifactService interface {
 	ListPublishArtifacts(ctx context.Context, ownerID, projectID uuid.UUID) ([]publishing.PublishArtifactSummary, error)
 }
 
+type publishingRetryService interface {
+	RetryAttempt(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (publishing.PublishAttempt, error)
+}
+
 type publishingActorResolver interface {
 	Resolve(*http.Request) (project.Principal, error)
 }
@@ -122,6 +126,32 @@ func (h publishingHandler) getAttempt(w http.ResponseWriter, r *http.Request) {
 	writeProjectJSON(w, http.StatusOK, attempt)
 }
 
+func (h publishingHandler) retryAttempt(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+	projectID, ok := parsePublishingUUID(w, r.PathValue("id"), "project_id")
+	if !ok {
+		return
+	}
+	attemptID, ok := parsePublishingUUID(w, r.PathValue("attempt_id"), "attempt_id")
+	if !ok {
+		return
+	}
+	service, ok := h.service.(publishingRetryService)
+	if !ok {
+		writePublishingAPIError(w, publishing.ErrInvalidModel)
+		return
+	}
+	attempt, err := service.RetryAttempt(r.Context(), principal.OwnerID, projectID, attemptID)
+	if err != nil {
+		writePublishingAPIError(w, err)
+		return
+	}
+	writeProjectJSON(w, http.StatusOK, attempt)
+}
+
 func (h publishingHandler) createAttempt(w http.ResponseWriter, r *http.Request) {
 	principal, ok := h.resolvePrincipal(w, r)
 	if !ok {
@@ -192,8 +222,8 @@ func writePublishingAPIError(w http.ResponseWriter, err error) {
 		writeProjectJSON(w, http.StatusNotFound, errorEnvelope{Error: apiError{Code: "publishing_connection_not_found", Message: "Publishing connection was not found or is unavailable."}})
 	case errors.Is(err, publishing.ErrAttemptNotFound):
 		writeProjectJSON(w, http.StatusNotFound, errorEnvelope{Error: apiError{Code: "publishing_attempt_not_found", Message: "Publishing attempt was not found."}})
-	case errors.Is(err, publishing.ErrAttemptConflict):
-		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "publishing_attempt_conflict", Message: "A conflicting publish request already exists."}})
+	case errors.Is(err, publishing.ErrAttemptConflict), errors.Is(err, publishing.ErrPublishExecution):
+		writeProjectJSON(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "publishing_attempt_conflict", Message: "The publish attempt cannot perform that action in its current state."}})
 	case errors.Is(err, publishing.ErrInvalidModel):
 		writePublishingValidationError(w, map[string]string{"request": "invalid"})
 	default:
