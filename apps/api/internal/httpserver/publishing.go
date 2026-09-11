@@ -19,6 +19,14 @@ type PublishingService interface {
 	CreateAttempt(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID, title, description string) (publishing.PublishAttempt, error)
 }
 
+type publishingHistoryService interface {
+	ListAttempts(ctx context.Context, ownerID, projectID uuid.UUID) ([]publishing.PublishAttempt, error)
+}
+
+type publishingArtifactService interface {
+	ListPublishArtifacts(ctx context.Context, ownerID, projectID uuid.UUID) ([]publishing.PublishArtifactSummary, error)
+}
+
 type publishingActorResolver interface {
 	Resolve(*http.Request) (project.Principal, error)
 }
@@ -42,6 +50,50 @@ func (h publishingHandler) listConnections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	items, err := h.service.ListConnections(r.Context(), principal.OwnerID)
+	if err != nil {
+		writePublishingAPIError(w, err)
+		return
+	}
+	writeProjectJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h publishingHandler) listArtifacts(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+	projectID, ok := parsePublishingUUID(w, r.PathValue("id"), "project_id")
+	if !ok {
+		return
+	}
+	service, ok := h.service.(publishingArtifactService)
+	if !ok {
+		writePublishingAPIError(w, publishing.ErrInvalidModel)
+		return
+	}
+	items, err := service.ListPublishArtifacts(r.Context(), principal.OwnerID, projectID)
+	if err != nil {
+		writePublishingAPIError(w, err)
+		return
+	}
+	writeProjectJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h publishingHandler) listAttempts(w http.ResponseWriter, r *http.Request) {
+	principal, ok := h.resolvePrincipal(w, r)
+	if !ok {
+		return
+	}
+	projectID, ok := parsePublishingUUID(w, r.PathValue("id"), "project_id")
+	if !ok {
+		return
+	}
+	service, ok := h.service.(publishingHistoryService)
+	if !ok {
+		writePublishingAPIError(w, publishing.ErrInvalidModel)
+		return
+	}
+	items, err := service.ListAttempts(r.Context(), principal.OwnerID, projectID)
 	if err != nil {
 		writePublishingAPIError(w, err)
 		return
