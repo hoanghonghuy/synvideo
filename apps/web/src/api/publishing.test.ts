@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPublishAttempt, getPublishAttempt, listPublishingConnections, retryPublishAttempt } from './publishing'
+import { createPublishAttempt, getPublishAttempt, listPublishingConnections, retryPublishAttempt, startYouTubeOAuth } from './publishing'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -16,6 +16,18 @@ describe('publishing API', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/publishing/connections',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('starts YouTube OAuth with encoded project identity', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ authorization_url: 'https://accounts.example/auth' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(startYouTubeOAuth('project/one')).resolves.toBe('https://accounts.example/auth')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/publishing/youtube/oauth/start?project_id=project%2Fone',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
