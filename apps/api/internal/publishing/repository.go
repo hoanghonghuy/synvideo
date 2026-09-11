@@ -33,3 +33,17 @@ type AttemptRepository interface {
 	GetAttemptByRequest(ctx context.Context, ownerID, projectID, connectionID, renderArtifactID, requestID uuid.UUID) (PublishAttempt, error)
 	SaveAttemptProgress(ctx context.Context, attempt PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (PublishAttempt, error)
 }
+
+// AttemptHistoryRepository is an optional read contract used by Channel Hub.
+// It deliberately remains separate from AttemptRepository so existing lifecycle
+// test doubles do not need to grow merely to support a read-only UI concern.
+type AttemptHistoryRepository interface {
+	ListAttempts(ctx context.Context, ownerID, projectID uuid.UUID) ([]PublishAttempt, error)
+}
+
+// PublishArtifactRepository exposes only safe immutable render metadata required
+// for selecting an owned project artifact. Storage identity and integrity details
+// remain server-side.
+type PublishArtifactRepository interface {
+	ListPublishArtifacts(ctx context.Context, ownerID, projectID uuid.UUID) ([]PublishArtifactSummary, error)
+}
