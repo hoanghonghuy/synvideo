@@ -186,16 +186,16 @@ func TestPublishExecutionSessionExpiredClearsSessionAndNextRetryReinitiates(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if expired.State != PublishRetryableFailure || expired.ResumableSessionURI != "" || expired.LastErrorCode != "youtube_session_expired" {
+	if expired.State != PublishRetryableFailure || expired.ResumableSessionURI != "" || expired.UploadedBytes != 0 || expired.LastErrorCode != "youtube_session_expired" {
 		t.Fatalf("expired session was not invalidated: %+v", expired)
 	}
 
-	got, err := service.ExecuteChunk(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID, "video/mp4", 4, 2, bytes.NewBufferString("cd"))
+	got, err := service.ExecuteChunk(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID, "video/mp4", 4, 4, bytes.NewBufferString("data"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uploader.initiateCalls != 1 || uploader.uploadSession != "https://upload.test/fresh" {
-		t.Fatalf("expected retry to initiate and use a fresh session: %+v", uploader)
+	if uploader.initiateCalls != 1 || uploader.uploadSession != "https://upload.test/fresh" || uploader.uploadStart != 0 {
+		t.Fatalf("expected retry to initiate and use a fresh session from byte zero: %+v", uploader)
 	}
 	if got.State != PublishUploadAccepted || got.RemoteVideoID != "video-fresh" || got.ResumableSessionURI != "https://upload.test/fresh" {
 		t.Fatalf("unexpected retried attempt: %+v", got)
