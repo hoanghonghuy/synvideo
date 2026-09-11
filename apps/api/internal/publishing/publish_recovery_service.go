@@ -36,7 +36,7 @@ func NewPublishRecoveryService(attempts AttemptRepository, connections Connectio
 		return nil, ErrInvalidModel
 	}
 	return &PublishRecoveryService{
-		attempts:     attempts,
+		attempts:    attempts,
 		connections: connections,
 		oauth:       oauth,
 		uploader:    uploader,
