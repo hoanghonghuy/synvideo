@@ -104,8 +104,8 @@ func (r *PublishingRepository) ListConnections(ctx context.Context, ownerID uuid
 
 const publishingAttemptFields = `
 	id, owner_id, project_id, connection_id, render_artifact_id, request_id,
-	provider, state, remote_video_id, title, description, scheduled_at,
-	created_at, updated_at
+	provider, state, remote_video_id, resumable_session_uri, uploaded_bytes,
+	last_error_code, title, description, scheduled_at, created_at, updated_at
 `
 
 func (r *PublishingRepository) CreateAttempt(ctx context.Context, attempt publishing.PublishAttempt) (publishing.PublishAttempt, error) {
@@ -175,11 +175,11 @@ func (r *PublishingRepository) GetAttemptByRequest(ctx context.Context, ownerID,
 }
 
 func (r *PublishingRepository) SaveAttemptProgress(ctx context.Context, attempt publishing.PublishAttempt, resumableSessionURI string, uploadedBytes int64, lastErrorCode string) (publishing.PublishAttempt, error) {
-	if err := attempt.Validate(); err != nil || uploadedBytes < 0 {
-		if err != nil {
-			return publishing.PublishAttempt{}, err
-		}
-		return publishing.PublishAttempt{}, publishing.ErrInvalidModel
+	attempt.ResumableSessionURI = strings.TrimSpace(resumableSessionURI)
+	attempt.UploadedBytes = uploadedBytes
+	attempt.LastErrorCode = strings.TrimSpace(lastErrorCode)
+	if err := attempt.Validate(); err != nil {
+		return publishing.PublishAttempt{}, err
 	}
 	query := fmt.Sprintf(`
 		UPDATE publishing_attempts SET
@@ -191,8 +191,8 @@ func (r *PublishingRepository) SaveAttemptProgress(ctx context.Context, attempt 
 	`, publishingAttemptFields)
 	return scanPublishingAttempt(r.pool.QueryRow(ctx, query,
 		attempt.ID, attempt.OwnerID, attempt.ProjectID, attempt.State,
-		attempt.RemoteVideoID, attempt.ScheduledAt, strings.TrimSpace(resumableSessionURI),
-		uploadedBytes, strings.TrimSpace(lastErrorCode), attempt.UpdatedAt,
+		attempt.RemoteVideoID, attempt.ScheduledAt, attempt.ResumableSessionURI,
+		attempt.UploadedBytes, attempt.LastErrorCode, attempt.UpdatedAt,
 	))
 }
 
@@ -219,7 +219,8 @@ func scanPublishingAttempt(row publishingRow) (publishing.PublishAttempt, error)
 	if err := row.Scan(
 		&attempt.ID, &attempt.OwnerID, &attempt.ProjectID, &attempt.ConnectionID,
 		&attempt.RenderArtifactID, &attempt.RequestID, &attempt.Provider, &attempt.State,
-		&attempt.RemoteVideoID, &attempt.Title, &attempt.Description, &attempt.ScheduledAt,
+		&attempt.RemoteVideoID, &attempt.ResumableSessionURI, &attempt.UploadedBytes,
+		&attempt.LastErrorCode, &attempt.Title, &attempt.Description, &attempt.ScheduledAt,
 		&attempt.CreatedAt, &attempt.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
