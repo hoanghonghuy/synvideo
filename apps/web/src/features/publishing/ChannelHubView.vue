@@ -6,8 +6,11 @@ import { ApiError } from '@/api/projects'
 import {
   createPublishAttempt,
   getPublishAttempt,
+  listPublishArtifacts,
+  listPublishAttempts,
   listPublishingConnections,
   type ChannelConnection,
+  type PublishArtifactSummary,
   type PublishAttempt,
 } from '@/api/publishing'
 
@@ -15,6 +18,8 @@ const route = useRoute()
 const projectID = computed(() => String(route.params.id ?? ''))
 
 const connections = ref<ChannelConnection[]>([])
+const artifacts = ref<PublishArtifactSummary[]>([])
+const attempts = ref<PublishAttempt[]>([])
 const selectedConnectionID = ref('')
 const renderArtifactID = ref('')
 const title = ref('')
@@ -31,25 +36,40 @@ const canSubmit = computed(() => {
   return Boolean(
     connection?.state === 'connected'
       && connection.capabilities.can_upload
-      && renderArtifactID.value.trim()
+      && renderArtifactID.value
       && title.value.trim()
       && !submitting.value,
   )
 })
 
 onMounted(() => {
-  void loadConnections()
+  void loadWorkspace()
 })
 
-async function loadConnections() {
+async function loadWorkspace() {
   loading.value = true
   errorMessage.value = ''
   try {
-    connections.value = await listPublishingConnections()
+    const [connectionItems, artifactItems, historyItems] = await Promise.all([
+      listPublishingConnections(),
+      listPublishArtifacts(projectID.value),
+      listPublishAttempts(projectID.value),
+    ])
+    connections.value = connectionItems
+    artifacts.value = artifactItems
+    attempts.value = historyItems
     const firstUsable = connections.value.find((item) => item.state === 'connected' && item.capabilities.can_upload)
-    selectedConnectionID.value = firstUsable?.id ?? connections.value[0]?.id ?? ''
+    if (!connections.value.some((item) => item.id === selectedConnectionID.value)) {
+      selectedConnectionID.value = firstUsable?.id ?? connections.value[0]?.id ?? ''
+    }
+    if (!artifacts.value.some((item) => item.id === renderArtifactID.value)) {
+      renderArtifactID.value = artifacts.value[0]?.id ?? ''
+    }
+    if (attempt.value) {
+      attempt.value = attempts.value.find((item) => item.id === attempt.value?.id) ?? attempt.value
+    }
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not load publishing connections.'
+    errorMessage.value = error instanceof ApiError ? error.message : 'Could not load the Channel Hub workspace.'
   } finally {
     loading.value = false
   }
@@ -62,13 +82,15 @@ async function submit() {
   submitting.value = true
   errorMessage.value = ''
   try {
-    attempt.value = await createPublishAttempt(projectID.value, {
+    const created = await createPublishAttempt(projectID.value, {
       connection_id: selectedConnectionID.value,
-      render_artifact_id: renderArtifactID.value.trim(),
+      render_artifact_id: renderArtifactID.value,
       request_id: crypto.randomUUID(),
       title: title.value.trim(),
       description: description.value.trim(),
     })
+    attempt.value = created
+    attempts.value = [created, ...attempts.value.filter((item) => item.id !== created.id)]
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : 'Could not create the publish attempt.'
   } finally {
@@ -76,14 +98,16 @@ async function submit() {
   }
 }
 
-async function refreshAttempt() {
-  if (!attempt.value) {
+async function refreshAttempt(item: PublishAttempt = attempt.value as PublishAttempt) {
+  if (!item) {
     return
   }
   refreshing.value = true
   errorMessage.value = ''
   try {
-    attempt.value = await getPublishAttempt(projectID.value, attempt.value.id)
+    const refreshed = await getPublishAttempt(projectID.value, item.id)
+    attempt.value = refreshed
+    attempts.value = attempts.value.map((entry) => entry.id === refreshed.id ? refreshed : entry)
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh publish status.'
   } finally {
@@ -91,12 +115,32 @@ async function refreshAttempt() {
   }
 }
 
+function inspectAttempt(item: PublishAttempt) {
+  attempt.value = item
+}
+
 function connectionTone(connection: ChannelConnection): string {
   return connection.state === 'connected' ? 'good' : connection.state === 'reconnect_required' ? 'warn' : 'bad'
 }
 
+function attemptTone(item: PublishAttempt): string {
+  return item.state === 'rejected' ? 'bad' : item.state.includes('failure') || item.state === 'reconnect_required' ? 'warn' : 'good'
+}
+
 function stateLabel(state: string): string {
   return state.split('_').join(' ')
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString()} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDuration(durationMS: number): string {
+  const totalSeconds = Math.round(durationMS / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 </script>
 
@@ -109,8 +153,8 @@ function stateLabel(state: string): string {
         <h1>Channel Hub</h1>
         <p class="body-copy">Publish an immutable rendered video to a connected YouTube channel with recoverable upload state.</p>
       </div>
-      <button class="secondary-button" type="button" :disabled="loading" @click="loadConnections">
-        {{ loading ? 'Refreshing…' : 'Refresh channels' }}
+      <button class="secondary-button" type="button" :disabled="loading" @click="loadWorkspace">
+        {{ loading ? 'Refreshing…' : 'Refresh workspace' }}
       </button>
     </div>
 
@@ -159,9 +203,15 @@ function stateLabel(state: string): string {
         <h2 id="publish-title">Publish rendered video</h2>
         <form class="publish-form" @submit.prevent="submit">
           <label>
-            <span>Render artifact ID</span>
-            <input v-model="renderArtifactID" required autocomplete="off" inputmode="text" placeholder="UUID of a successful immutable render artifact">
-            <small>The API verifies owner, project, media type and immutable render lineage before accepting it.</small>
+            <span>Rendered video</span>
+            <select v-model="renderArtifactID" required :disabled="loading || artifacts.length === 0">
+              <option value="" disabled>{{ artifacts.length === 0 ? 'No successful renders available' : 'Select a render' }}</option>
+              <option v-for="artifact in artifacts" :key="artifact.id" :value="artifact.id">
+                {{ artifact.width }}×{{ artifact.height }} · {{ formatDuration(artifact.duration_ms) }} · {{ formatBytes(artifact.byte_size) }} · {{ new Date(artifact.created_at).toLocaleString() }}
+              </option>
+            </select>
+            <small v-if="artifacts.length">Only owned immutable MP4 render artifacts for this project are listed.</small>
+            <small v-else>Create a successful render before publishing.</small>
           </label>
           <label>
             <span>Video title</span>
@@ -181,12 +231,10 @@ function stateLabel(state: string): string {
     <section v-if="attempt" class="panel attempt-panel" aria-live="polite">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">Latest attempt</p>
+          <p class="eyebrow">Selected attempt</p>
           <h2>{{ attempt.title }}</h2>
         </div>
-        <span class="status-pill" :class="attempt.state === 'rejected' ? 'bad' : attempt.state.includes('failure') || attempt.state === 'reconnect_required' ? 'warn' : 'good'">
-          {{ stateLabel(attempt.state) }}
-        </span>
+        <span class="status-pill" :class="attemptTone(attempt)">{{ stateLabel(attempt.state) }}</span>
       </div>
 
       <div class="attempt-grid">
@@ -197,10 +245,36 @@ function stateLabel(state: string): string {
       </div>
 
       <div v-if="attempt.last_error_code" class="notice error">Upload requires attention: {{ attempt.last_error_code }}</div>
+      <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">This attempt can be retried once execution controls are available. Its durable progress is preserved.</p>
+      <p v-if="attempt.state === 'reconnect_required'" class="warning-copy">Reconnect this YouTube channel before resuming this attempt.</p>
       <a v-if="attempt.remote_video_id" class="text-link" :href="`https://www.youtube.com/watch?v=${attempt.remote_video_id}`" target="_blank" rel="noopener noreferrer">Open remote video</a>
-      <button class="secondary-button" type="button" :disabled="refreshing" @click="refreshAttempt">
+      <button class="secondary-button" type="button" :disabled="refreshing" @click="refreshAttempt()">
         {{ refreshing ? 'Refreshing…' : 'Refresh status' }}
       </button>
+    </section>
+
+    <section class="panel history-panel" aria-labelledby="history-title">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Durable history</p>
+          <h2 id="history-title">Publish attempts</h2>
+        </div>
+        <span class="count-badge">{{ attempts.length }}</span>
+      </div>
+      <p v-if="loading" class="state-text">Loading publish history…</p>
+      <div v-else-if="attempts.length === 0" class="empty-state">
+        <strong>No publish attempts yet</strong>
+        <p>Create an attempt above; it will remain visible here after refresh or restart.</p>
+      </div>
+      <div v-else class="history-list">
+        <button v-for="item in attempts" :key="item.id" type="button" class="history-row" @click="inspectAttempt(item)">
+          <span class="history-main">
+            <strong>{{ item.title }}</strong>
+            <span>{{ new Date(item.created_at).toLocaleString() }} · {{ item.uploaded_bytes.toLocaleString() }} bytes</span>
+          </span>
+          <span class="status-pill" :class="attemptTone(item)">{{ stateLabel(item.state) }}</span>
+        </button>
+      </div>
     </section>
   </section>
 </template>
@@ -212,7 +286,7 @@ function stateLabel(state: string): string {
 .panel { padding: 22px; border: 1px solid #d4ddd8; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(20, 61, 54, 0.05); }
 .panel h2 { margin-top: 4px; }
 .count-badge { min-width: 32px; padding: 6px 10px; border-radius: 999px; background: #edf3f0; text-align: center; font-weight: 700; }
-.connection-list { display: grid; gap: 10px; margin-top: 18px; }
+.connection-list, .history-list { display: grid; gap: 10px; margin-top: 18px; }
 .connection-card { display: flex; min-height: 64px; gap: 12px; align-items: flex-start; padding: 14px; border: 1px solid #cbd6d0; border-radius: 10px; cursor: pointer; }
 .connection-card.selected { border-color: #2f695c; box-shadow: 0 0 0 2px rgba(47, 105, 92, 0.12); }
 .connection-card input { margin-top: 4px; }
@@ -228,21 +302,28 @@ function stateLabel(state: string): string {
 .warning-copy { color: #775300; font-weight: 600; }
 .publish-form { display: grid; gap: 16px; margin-top: 18px; }
 .publish-form label { display: grid; gap: 7px; font-weight: 700; }
-.publish-form input, .publish-form textarea { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #aebdb6; border-radius: 8px; font: inherit; }
-.publish-form input:focus-visible, .publish-form textarea:focus-visible, .connection-card:focus-within { outline: 3px solid #7aa995; outline-offset: 2px; }
+.publish-form input, .publish-form textarea, .publish-form select { width: 100%; box-sizing: border-box; min-height: 44px; padding: 11px 12px; border: 1px solid #aebdb6; border-radius: 8px; background: #fff; font: inherit; }
+.publish-form textarea { min-height: 120px; }
+.publish-form input:focus-visible, .publish-form textarea:focus-visible, .publish-form select:focus-visible, .connection-card:focus-within, .history-row:focus-visible { outline: 3px solid #7aa995; outline-offset: 2px; }
 .publish-form small { color: #60716b; font-weight: 400; line-height: 1.45; }
 .primary-button, .secondary-button { min-height: 44px; }
-.attempt-panel { margin-top: 20px; }
+.attempt-panel, .history-panel { margin-top: 20px; }
 .attempt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
 .attempt-grid div { display: grid; gap: 4px; min-width: 0; padding: 12px; border-radius: 8px; background: #f5f8f7; }
 .attempt-grid span { color: #60716b; font-size: 0.82rem; }
 .attempt-grid strong { overflow-wrap: anywhere; }
 .attempt-panel .secondary-button { margin-top: 14px; }
+.history-row { display: flex; width: 100%; min-height: 58px; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid #d4ddd8; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
+.history-row:hover { background: #f8faf9; }
+.history-main { display: grid; gap: 4px; min-width: 0; }
+.history-main strong { overflow-wrap: anywhere; }
+.history-main span { color: #60716b; font-size: 0.88rem; }
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
   .hub-heading, .panel-heading { flex-direction: column; align-items: stretch; }
   .panel { padding: 16px; border-radius: 10px; }
   .attempt-grid { grid-template-columns: 1fr; }
   .hub-heading .secondary-button, .primary-button { width: 100%; }
+  .history-row { align-items: flex-start; flex-direction: column; }
 }
 </style>
