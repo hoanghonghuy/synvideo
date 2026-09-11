@@ -120,7 +120,7 @@ func TestPublishRecoveryMapsReconnectWithoutLosingProgress(t *testing.T) {
 	}
 }
 
-func TestPublishRecoverySessionExpiredClearsDeadSession(t *testing.T) {
+func TestPublishRecoverySessionExpiredClearsDeadSessionAndProgress(t *testing.T) {
 	now := time.Now().UTC()
 	attempt := validAttempt(now)
 	attempt.State = PublishUploading
@@ -138,8 +138,8 @@ func TestPublishRecoverySessionExpiredClearsDeadSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recover attempt: %v", err)
 	}
-	if got.State != PublishRetryableFailure || got.ResumableSessionURI != "" || got.UploadedBytes != 256 {
-		t.Fatalf("expected expired provider session to be invalidated without losing progress: %+v", got)
+	if got.State != PublishRetryableFailure || got.ResumableSessionURI != "" || got.UploadedBytes != 0 {
+		t.Fatalf("expected expired provider session and session-bound progress to be invalidated: %+v", got)
 	}
 	if got.LastErrorCode != "youtube_session_expired" {
 		t.Fatalf("unexpected error code %q", got.LastErrorCode)
