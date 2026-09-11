@@ -31,6 +31,28 @@ func (s *PublishService) ListConnections(ctx context.Context, ownerID uuid.UUID)
 	return s.connections.ListConnections(ctx, ownerID)
 }
 
+func (s *PublishService) ListAttempts(ctx context.Context, ownerID, projectID uuid.UUID) ([]PublishAttempt, error) {
+	if ownerID == uuid.Nil || projectID == uuid.Nil {
+		return nil, ErrInvalidModel
+	}
+	repo, ok := s.attempts.(AttemptHistoryRepository)
+	if !ok {
+		return nil, ErrInvalidModel
+	}
+	return repo.ListAttempts(ctx, ownerID, projectID)
+}
+
+func (s *PublishService) ListPublishArtifacts(ctx context.Context, ownerID, projectID uuid.UUID) ([]PublishArtifactSummary, error) {
+	if ownerID == uuid.Nil || projectID == uuid.Nil {
+		return nil, ErrInvalidModel
+	}
+	repo, ok := s.attempts.(PublishArtifactRepository)
+	if !ok {
+		return nil, ErrInvalidModel
+	}
+	return repo.ListPublishArtifacts(ctx, ownerID, projectID)
+}
+
 func (s *PublishService) GetAttempt(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (PublishAttempt, error) {
 	if ownerID == uuid.Nil || projectID == uuid.Nil || attemptID == uuid.Nil {
 		return PublishAttempt{}, ErrInvalidModel
