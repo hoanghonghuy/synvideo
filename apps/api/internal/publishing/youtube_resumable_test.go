@@ -57,7 +57,7 @@ func TestYouTubeResumableInitiateUsesPrivateUploadAndReturnsSession(t *testing.T
 func TestYouTubeResumableQueryUsesProviderRangeAsSourceOfTruth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || r.Header.Get("Content-Range") != "bytes */2000000" || r.ContentLength != 0 {
-			t.Fatalf("unexpected status request: method=%s range=%q length=%d", r.Method, r.Header.Get("Content-Range"), r.ContentLength)
+			t.Errorf("unexpected status request: method=%s range=%q length=%d", r.Method, r.Header.Get("Content-Range"), r.ContentLength)
 		}
 		w.Header().Set("Range", "bytes=0-999999")
 		w.Header().Set("Retry-After", "7")
@@ -96,11 +96,11 @@ func TestYouTubeResumableUploadChunkSendsExactRangeAndCompletes(t *testing.T) {
 	payload := []byte("world")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Range") != "bytes 5-9/10" || r.ContentLength != 5 || r.Header.Get("Content-Type") != "video/mp4" {
-			t.Fatalf("unexpected chunk headers: range=%q length=%d type=%q", r.Header.Get("Content-Range"), r.ContentLength, r.Header.Get("Content-Type"))
+			t.Errorf("unexpected chunk headers: range=%q length=%d type=%q", r.Header.Get("Content-Range"), r.ContentLength, r.Header.Get("Content-Type"))
 		}
 		body, _ := io.ReadAll(r.Body)
 		if !bytes.Equal(body, payload) {
-			t.Fatalf("unexpected chunk body: %q", body)
+			t.Errorf("unexpected chunk body: %q", body)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
