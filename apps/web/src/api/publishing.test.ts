@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPublishAttempt, getPublishAttempt, listPublishingConnections } from './publishing'
+import { createPublishAttempt, getPublishAttempt, listPublishingConnections, retryPublishAttempt } from './publishing'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -48,6 +48,18 @@ describe('publishing API', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project%2Fone/publishing/attempts/attempt%2Ftwo',
       expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('retries the exact durable attempt without creating a new request identity', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'attempt-1', state: 'queued' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await retryPublishAttempt('project/one', 'attempt/two')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project%2Fone/publishing/attempts/attempt%2Ftwo/retry',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
     )
   })
 })
