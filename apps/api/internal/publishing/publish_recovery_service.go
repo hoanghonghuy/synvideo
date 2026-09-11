@@ -101,6 +101,8 @@ func (s *PublishRecoveryService) persistProviderResult(ctx context.Context, atte
 		attempt.LastErrorCode = "youtube_retryable"
 	case UploadFailureSessionExpired:
 		attempt.State = PublishRetryableFailure
+		attempt.ResumableSessionURI = ""
+		sessionURI = ""
 		attempt.LastErrorCode = "youtube_session_expired"
 	case UploadFailureRejected:
 		attempt.State = PublishRejected
