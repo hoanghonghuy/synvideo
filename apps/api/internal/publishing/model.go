@@ -66,6 +66,15 @@ func (c ChannelConnection) Validate() error {
 	return nil
 }
 
+type PublishArtifactSummary struct {
+	ID         uuid.UUID `json:"id"`
+	ByteSize   int64     `json:"byte_size"`
+	DurationMS int64     `json:"duration_ms"`
+	Width      int       `json:"width"`
+	Height     int       `json:"height"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type PublishState string
 
 const (
