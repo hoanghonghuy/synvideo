@@ -33,9 +33,13 @@ func TestYouTubeOAuthAuthorizationURL(t *testing.T) {
 
 func TestYouTubeOAuthExchangeAndRefresh(t *testing.T) {
 	var requests []url.Values
+	handlerErr := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse OAuth form: %v", err)
+			select {
+			case handlerErr <- err:
+			default:
+			}
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -75,6 +79,11 @@ func TestYouTubeOAuthExchangeAndRefresh(t *testing.T) {
 	}
 	if refreshed.AccessToken != "access-2" || refreshed.RefreshToken != "refresh-1" || !refreshed.ExpiresAt.Equal(now.Add(30*time.Minute)) {
 		t.Fatalf("unexpected refreshed token: %+v", refreshed)
+	}
+	select {
+	case err := <-handlerErr:
+		t.Fatalf("parse OAuth form: %v", err)
+	default:
 	}
 	if len(requests) != 2 || requests[0].Get("client_secret") != "secret" || requests[0].Get("code") != "auth-code" || requests[1].Get("refresh_token") != "refresh-1" {
 		t.Fatalf("unexpected token requests: %#v", requests)
