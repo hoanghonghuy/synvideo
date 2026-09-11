@@ -37,17 +37,21 @@ func (h publishingOAuthHandler) start(w http.ResponseWriter, r *http.Request) {
 
 func (h publishingOAuthHandler) callback(w http.ResponseWriter, r *http.Request) {
 	state := strings.TrimSpace(r.URL.Query().Get("state"))
-	code := strings.TrimSpace(r.URL.Query().Get("code"))
-	if strings.TrimSpace(r.URL.Query().Get("error")) != "" || state == "" || code == "" {
+	projectID, stateErr := h.service.ProjectFromState(state)
+	if stateErr != nil {
 		writeOAuthFailure(w)
 		return
 	}
-	_, projectID, err := h.service.Complete(r.Context(), state, code)
+	if strings.TrimSpace(r.URL.Query().Get("error")) != "" || strings.TrimSpace(r.URL.Query().Get("code")) == "" {
+		http.Redirect(w, r, h.service.ReturnURL(projectID, "failed"), http.StatusSeeOther)
+		return
+	}
+	_, completedProjectID, err := h.service.Complete(r.Context(), state, r.URL.Query().Get("code"))
 	if err != nil {
-		writeOAuthFailure(w)
+		http.Redirect(w, r, h.service.ReturnURL(projectID, "failed"), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, h.service.ReturnURL(projectID, "connected"), http.StatusSeeOther)
+	http.Redirect(w, r, h.service.ReturnURL(completedProjectID, "connected"), http.StatusSeeOther)
 }
 
 func writeOAuthFailure(w http.ResponseWriter) {
