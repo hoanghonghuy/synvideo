@@ -161,7 +161,12 @@ func (c *YouTubeResumableClient) UploadChunk(ctx context.Context, accessToken, s
 }
 
 func (c *YouTubeResumableClient) doResumable(req *http.Request, sessionURI string, totalBytes int64) (ResumableUploadResult, error) {
-	resp, err := c.client.Do(req)
+	client := *c.client
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return ResumableUploadResult{SessionURI: sessionURI, Failure: UploadFailureRetryable}, fmt.Errorf("%w: transport", ErrResumableRequest)
 	}
