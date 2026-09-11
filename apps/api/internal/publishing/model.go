@@ -82,20 +82,23 @@ const (
 )
 
 type PublishAttempt struct {
-	ID               uuid.UUID    `json:"id"`
-	OwnerID          uuid.UUID    `json:"-"`
-	ProjectID        uuid.UUID    `json:"project_id"`
-	ConnectionID     uuid.UUID    `json:"connection_id"`
-	RenderArtifactID uuid.UUID    `json:"render_artifact_id"`
-	RequestID        uuid.UUID    `json:"request_id"`
-	Provider         Provider     `json:"provider"`
-	State            PublishState `json:"state"`
-	RemoteVideoID    string       `json:"remote_video_id,omitempty"`
-	Title            string       `json:"title"`
-	Description      string       `json:"description,omitempty"`
-	ScheduledAt      *time.Time   `json:"scheduled_at,omitempty"`
-	CreatedAt        time.Time    `json:"created_at"`
-	UpdatedAt        time.Time    `json:"updated_at"`
+	ID                  uuid.UUID    `json:"id"`
+	OwnerID             uuid.UUID    `json:"-"`
+	ProjectID           uuid.UUID    `json:"project_id"`
+	ConnectionID        uuid.UUID    `json:"connection_id"`
+	RenderArtifactID    uuid.UUID    `json:"render_artifact_id"`
+	RequestID           uuid.UUID    `json:"request_id"`
+	Provider            Provider     `json:"provider"`
+	State               PublishState `json:"state"`
+	RemoteVideoID       string       `json:"remote_video_id,omitempty"`
+	ResumableSessionURI string       `json:"-"`
+	UploadedBytes       int64        `json:"uploaded_bytes"`
+	LastErrorCode       string       `json:"last_error_code,omitempty"`
+	Title               string       `json:"title"`
+	Description         string       `json:"description,omitempty"`
+	ScheduledAt         *time.Time   `json:"scheduled_at,omitempty"`
+	CreatedAt           time.Time    `json:"created_at"`
+	UpdatedAt           time.Time    `json:"updated_at"`
 }
 
 func (a PublishAttempt) Validate() error {
@@ -103,6 +106,12 @@ func (a PublishAttempt) Validate() error {
 		return ErrInvalidModel
 	}
 	if a.Provider != ProviderYouTube || strings.TrimSpace(a.Title) == "" || a.CreatedAt.IsZero() || a.UpdatedAt.IsZero() || a.UpdatedAt.Before(a.CreatedAt) {
+		return ErrInvalidModel
+	}
+	if a.UploadedBytes < 0 {
+		return ErrInvalidModel
+	}
+	if strings.TrimSpace(a.ResumableSessionURI) == "" && a.UploadedBytes > 0 {
 		return ErrInvalidModel
 	}
 	switch a.State {
