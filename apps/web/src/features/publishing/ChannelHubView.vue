@@ -96,7 +96,7 @@ function connectionTone(connection: ChannelConnection): string {
 }
 
 function stateLabel(state: string): string {
-  return state.replaceAll('_', ' ')
+  return state.split('_').join(' ')
 }
 </script>
 
