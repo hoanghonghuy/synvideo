@@ -11,6 +11,10 @@ import (
 
 var ErrPublishRecovery = errors.New("publishing recovery failed")
 
+type ConnectionCredentialReader interface {
+	RefreshToken(ctx context.Context, ownerID, connectionID uuid.UUID) (string, error)
+}
+
 type OAuthTokenRefresher interface {
 	Refresh(ctx context.Context, refreshToken string) (OAuthToken, error)
 }
@@ -21,13 +25,13 @@ type ResumableProgressQuerier interface {
 
 type PublishRecoveryService struct {
 	attempts    AttemptRepository
-	connections *ConnectionService
+	connections ConnectionCredentialReader
 	oauth       OAuthTokenRefresher
 	uploader    ResumableProgressQuerier
 	now         func() time.Time
 }
 
-func NewPublishRecoveryService(attempts AttemptRepository, connections *ConnectionService, oauth OAuthTokenRefresher, uploader ResumableProgressQuerier) (*PublishRecoveryService, error) {
+func NewPublishRecoveryService(attempts AttemptRepository, connections ConnectionCredentialReader, oauth OAuthTokenRefresher, uploader ResumableProgressQuerier) (*PublishRecoveryService, error) {
 	if attempts == nil || connections == nil || oauth == nil || uploader == nil {
 		return nil, ErrInvalidModel
 	}
@@ -88,7 +92,6 @@ func (s *PublishRecoveryService) persistProviderResult(ctx context.Context, atte
 		if result.Complete {
 			attempt.State = PublishUploadAccepted
 			attempt.RemoteVideoID = strings.TrimSpace(result.RemoteVideoID)
-			attempt.UploadedBytes = result.UploadedBytes
 		}
 	case UploadFailureReconnectRequired:
 		attempt.State = PublishReconnectRequired
