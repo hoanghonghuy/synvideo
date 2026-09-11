@@ -92,6 +92,12 @@ export async function getPublishAttempt(projectID: string, attemptID: string): P
   return request<PublishAttempt>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts/${encodeURIComponent(attemptID)}`)
 }
 
+export async function retryPublishAttempt(projectID: string, attemptID: string): Promise<PublishAttempt> {
+  return request<PublishAttempt>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts/${encodeURIComponent(attemptID)}/retry`, {
+    method: 'POST',
+  })
+}
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await apiFetch(url, {
     ...init,
