@@ -103,7 +103,10 @@ func (s *YouTubeConnectService) Complete(ctx context.Context, rawState, code str
 	connection := ChannelConnection{
 		ID: uuid.New(), OwnerID: payload.OwnerID, Provider: ProviderYouTube,
 		RemoteChannelID: remoteID, DisplayName: displayName, State: ConnectionConnected,
-		Capabilities: Capabilities{CanUpload: true, CanPublish: true, CanSchedule: true},
+		// A successful OAuth grant proves upload authorization, not that the API
+		// project may publish publicly or schedule. Those capabilities remain
+		// conservative until a separately verified provider/project policy enables them.
+		Capabilities: Capabilities{CanUpload: true},
 		CreatedAt:    now, UpdatedAt: now,
 	}
 	saved, err := s.connections.SaveConnectedChannel(ctx, connection, token.RefreshToken)
