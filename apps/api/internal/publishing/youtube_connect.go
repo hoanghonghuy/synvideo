@@ -104,7 +104,7 @@ func (s *YouTubeConnectService) Complete(ctx context.Context, rawState, code str
 		ID: uuid.New(), OwnerID: payload.OwnerID, Provider: ProviderYouTube,
 		RemoteChannelID: remoteID, DisplayName: displayName, State: ConnectionConnected,
 		Capabilities: Capabilities{CanUpload: true, CanPublish: true, CanSchedule: true},
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:    now, UpdatedAt: now,
 	}
 	saved, err := s.connections.SaveConnectedChannel(ctx, connection, token.RefreshToken)
 	if err != nil {
