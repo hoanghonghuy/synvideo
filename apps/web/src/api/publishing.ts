@@ -71,6 +71,11 @@ export async function listPublishingConnections(): Promise<ChannelConnection[]> 
   return response.items
 }
 
+export async function startYouTubeOAuth(projectID: string): Promise<string> {
+  const response = await request<{ authorization_url: string }>(`/api/v1/publishing/youtube/oauth/start?project_id=${encodeURIComponent(projectID)}`)
+  return response.authorization_url
+}
+
 export async function listPublishArtifacts(projectID: string): Promise<PublishArtifactSummary[]> {
   const response = await request<{ items: PublishArtifactSummary[] }>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/artifacts`)
   return response.items
