@@ -92,3 +92,31 @@ func (s *PublishService) CreateAttempt(ctx context.Context, ownerID, projectID, 
 	}
 	return s.attempts.CreateAttempt(ctx, attempt)
 }
+
+// RetryAttempt requeues the same durable logical attempt. It intentionally preserves
+// resumable session identity and uploaded byte progress so execution resumes instead
+// of creating a duplicate remote upload after a transient failure.
+func (s *PublishService) RetryAttempt(ctx context.Context, ownerID, projectID, attemptID uuid.UUID) (PublishAttempt, error) {
+	if ownerID == uuid.Nil || projectID == uuid.Nil || attemptID == uuid.Nil {
+		return PublishAttempt{}, ErrInvalidModel
+	}
+	attempt, err := s.attempts.GetAttempt(ctx, ownerID, projectID, attemptID)
+	if err != nil {
+		return PublishAttempt{}, err
+	}
+	if attempt.State != PublishRetryableFailure {
+		return PublishAttempt{}, ErrPublishExecution
+	}
+	connection, err := s.connections.GetConnection(ctx, ownerID, attempt.ConnectionID)
+	if err != nil {
+		return PublishAttempt{}, err
+	}
+	if connection.State != ConnectionConnected || !connection.Capabilities.CanUpload {
+		return PublishAttempt{}, ErrConnectionNotFound
+	}
+
+	attempt.State = PublishQueued
+	attempt.LastErrorCode = ""
+	attempt.UpdatedAt = s.now().UTC()
+	return s.attempts.SaveAttemptProgress(ctx, attempt, attempt.ResumableSessionURI, attempt.UploadedBytes, "")
+}
