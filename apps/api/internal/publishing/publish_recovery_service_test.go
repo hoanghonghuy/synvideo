@@ -119,3 +119,29 @@ func TestPublishRecoveryMapsReconnectWithoutLosingProgress(t *testing.T) {
 		t.Fatalf("unexpected error code %q", got.LastErrorCode)
 	}
 }
+
+func TestPublishRecoverySessionExpiredClearsDeadSession(t *testing.T) {
+	now := time.Now().UTC()
+	attempt := validAttempt(now)
+	attempt.State = PublishUploading
+	attempt.ResumableSessionURI = "https://upload.example/expired"
+	attempt.UploadedBytes = 256
+
+	repo := &recoveryAttemptRepo{attempt: attempt}
+	uploader := &recoveryUploader{result: ResumableUploadResult{Failure: UploadFailureSessionExpired}}
+	service, err := NewPublishRecoveryService(repo, recoveryCredentials{token: "refresh"}, &recoveryOAuth{accessToken: "access"}, uploader)
+	if err != nil {
+		t.Fatalf("new recovery service: %v", err)
+	}
+
+	got, err := service.Recover(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID, 1024)
+	if err != nil {
+		t.Fatalf("recover attempt: %v", err)
+	}
+	if got.State != PublishRetryableFailure || got.ResumableSessionURI != "" || got.UploadedBytes != 256 {
+		t.Fatalf("expected expired provider session to be invalidated without losing progress: %+v", got)
+	}
+	if got.LastErrorCode != "youtube_session_expired" {
+		t.Fatalf("unexpected error code %q", got.LastErrorCode)
+	}
+}
