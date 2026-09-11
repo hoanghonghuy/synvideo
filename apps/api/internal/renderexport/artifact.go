@@ -55,5 +55,6 @@ func (a RenderArtifact) Validate() error {
 
 type ArtifactRepository interface {
 	CreateForLease(ctx context.Context, leaseToken uuid.UUID, artifact RenderArtifact) (RenderArtifact, error)
+	Get(ctx context.Context, ownerID, projectID, artifactID uuid.UUID) (RenderArtifact, error)
 	GetByJob(ctx context.Context, ownerID, projectID, jobID uuid.UUID) (RenderArtifact, error)
 }
