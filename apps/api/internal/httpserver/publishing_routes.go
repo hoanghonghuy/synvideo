@@ -16,6 +16,8 @@ func RegisterPublishingRoutes(mux *http.ServeMux, service PublishingService, act
 
 	handler := publishingHandler{service: service, actorResolver: actorResolver}
 	mux.HandleFunc("GET /api/v1/publishing/connections", handler.listConnections)
+	mux.HandleFunc("GET /api/v1/projects/{id}/publishing/artifacts", handler.listArtifacts)
+	mux.HandleFunc("GET /api/v1/projects/{id}/publishing/attempts", handler.listAttempts)
 	mux.HandleFunc("POST /api/v1/projects/{id}/publishing/attempts", handler.createAttempt)
 	mux.HandleFunc("GET /api/v1/projects/{id}/publishing/attempts/{attempt_id}", handler.getAttempt)
 }
@@ -33,6 +35,8 @@ func WithPublishingRoutes(logger *slog.Logger, base http.Handler, service Publis
 	handler := publishingHandler{service: service, actorResolver: resolver}
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/v1/publishing/connections", requestLogger(logger, http.HandlerFunc(handler.listConnections)))
+	mux.Handle("GET /api/v1/projects/{id}/publishing/artifacts", requestLogger(logger, http.HandlerFunc(handler.listArtifacts)))
+	mux.Handle("GET /api/v1/projects/{id}/publishing/attempts", requestLogger(logger, http.HandlerFunc(handler.listAttempts)))
 	mux.Handle("POST /api/v1/projects/{id}/publishing/attempts", requestLogger(logger, http.HandlerFunc(handler.createAttempt)))
 	mux.Handle("GET /api/v1/projects/{id}/publishing/attempts/{attempt_id}", requestLogger(logger, http.HandlerFunc(handler.getAttempt)))
 	mux.Handle("/", base)
