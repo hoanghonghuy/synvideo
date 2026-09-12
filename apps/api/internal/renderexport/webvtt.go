@@ -76,10 +76,11 @@ func normalizeWebVTTText(value string) string {
 }
 
 func escapeWebVTTText(value string) string {
-	value = strings.ReplaceAll(value, "&", "&amp;")
-	value = strings.ReplaceAll(value, "<", "&lt;")
-	return strings.ReplaceAll(value, ">", "&gt;")
-	return value
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+	).Replace(value)
 }
 
 func formatWebVTTTimestamp(ms int64) string {
