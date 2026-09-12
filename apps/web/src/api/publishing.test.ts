@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPublishAttempt, getPublishAttempt, listPublishingConnections, retryPublishAttempt, startYouTubeOAuth } from './publishing'
+import { createPublishAttempt, getPublishAttempt, listPublishingConnections, reconcilePublishAttempt, retryPublishAttempt, startYouTubeOAuth } from './publishing'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -71,6 +71,18 @@ describe('publishing API', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project%2Fone/publishing/attempts/attempt%2Ftwo/retry',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    )
+  })
+
+  it('reconciles the exact post-upload attempt without starting a new upload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'attempt-1', state: 'processing' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await reconcilePublishAttempt('project/one', 'attempt/two')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project%2Fone/publishing/attempts/attempt%2Ftwo/reconcile',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     )
   })
