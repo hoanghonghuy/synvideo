@@ -9,6 +9,7 @@ import {
   listPublishArtifacts,
   listPublishAttempts,
   listPublishingConnections,
+  reconcilePublishAttempt,
   retryPublishAttempt,
   startYouTubeOAuth,
   type ChannelConnection,
@@ -30,6 +31,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const refreshing = ref(false)
 const retrying = ref(false)
+const reconciling = ref(false)
 const connecting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -45,6 +47,11 @@ const uploadPercent = computed(() => {
   const artifact = selectedAttemptArtifact.value
   if (!current || !artifact || artifact.byte_size <= 0) return null
   return Math.max(0, Math.min(100, Math.round((current.uploaded_bytes / artifact.byte_size) * 100)))
+})
+const canReconcile = computed(() => {
+  const current = attempt.value
+  if (!current?.remote_video_id) return false
+  return ['upload_accepted', 'processing', 'private', 'scheduled', 'public'].includes(current.state)
 })
 const canSubmit = computed(() => {
   const connection = selectedConnection.value
@@ -134,12 +141,31 @@ async function refreshAttempt(item: PublishAttempt | null = attempt.value) {
   errorMessage.value = ''
   try {
     const refreshed = await getPublishAttempt(projectID.value, item.id)
-    attempt.value = refreshed
-    attempts.value = attempts.value.map((entry) => entry.id === refreshed.id ? refreshed : entry)
+    updateAttempt(refreshed)
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh publish status.'
+    errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh the persisted publish attempt.'
   } finally {
     refreshing.value = false
+  }
+}
+
+async function reconcileAttempt() {
+  if (!attempt.value || !canReconcile.value || reconciling.value) return
+  reconciling.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    const reconciled = await reconcilePublishAttempt(projectID.value, attempt.value.id)
+    updateAttempt(reconciled)
+    if (reconciled.last_error_code === 'youtube_status_retryable') {
+      errorMessage.value = 'YouTube status is temporarily unavailable. The remote video is preserved; retry this status check later.'
+    } else {
+      successMessage.value = 'YouTube processing and publication status refreshed.'
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : 'Could not check the current YouTube status.'
+  } finally {
+    reconciling.value = false
   }
 }
 
@@ -149,13 +175,17 @@ async function retryAttempt() {
   errorMessage.value = ''
   try {
     const retried = await retryPublishAttempt(projectID.value, attempt.value.id)
-    attempt.value = retried
-    attempts.value = attempts.value.map((entry) => entry.id === retried.id ? retried : entry)
+    updateAttempt(retried)
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : 'Could not queue the publish retry.'
   } finally {
     retrying.value = false
   }
+}
+
+function updateAttempt(updated: PublishAttempt) {
+  attempt.value = updated
+  attempts.value = attempts.value.map((entry) => entry.id === updated.id ? updated : entry)
 }
 
 function inspectAttempt(item: PublishAttempt) {
@@ -194,7 +224,7 @@ function formatDuration(durationMS: number): string {
         <RouterLink class="text-link" :to="`/projects/${projectID}`">Back to project</RouterLink>
         <p class="eyebrow">Publishing</p>
         <h1>Channel Hub</h1>
-        <p class="body-copy">Publish an immutable rendered video to YouTube with durable progress, retry and reconnect recovery.</p>
+        <p class="body-copy">Publish an immutable rendered video to YouTube with durable progress, retry, reconnect and post-upload status recovery.</p>
       </div>
       <button class="secondary-button" type="button" :disabled="loading" @click="loadWorkspace">
         {{ loading ? 'Refreshing…' : 'Refresh workspace' }}
@@ -303,7 +333,8 @@ function formatDuration(durationMS: number): string {
       </div>
       <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">Upload progress is indeterminate because artifact total is unavailable in this workspace snapshot.</p>
 
-      <div v-if="attempt.last_error_code" class="notice error">Upload requires attention: {{ attempt.last_error_code }}</div>
+      <div v-if="attempt.last_error_code" class="notice error">Publishing needs attention: {{ attempt.last_error_code }}</div>
+      <p v-if="attempt.last_error_code === 'youtube_status_retryable'" class="warning-copy">The remote video already exists. Retry only the YouTube status check; do not restart the upload.</p>
       <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">Retry preserves this logical attempt and resumable offset; it does not create a duplicate remote upload.</p>
       <div v-if="attempt.state === 'reconnect_required'" class="recovery-box">
         <p class="warning-copy">Reconnect YouTube, then refresh this attempt before continuing.</p>
@@ -313,11 +344,14 @@ function formatDuration(durationMS: number): string {
       </div>
       <a v-if="attempt.remote_video_id" class="text-link" :href="`https://www.youtube.com/watch?v=${attempt.remote_video_id}`" target="_blank" rel="noopener noreferrer">Open remote video</a>
       <div class="attempt-actions">
-        <button v-if="attempt.state === 'retryable_failure'" class="primary-button" type="button" :disabled="retrying" @click="retryAttempt">
+        <button v-if="attempt.state === 'retryable_failure'" class="primary-button" type="button" :disabled="retrying || reconciling" @click="retryAttempt">
           {{ retrying ? 'Queueing retry…' : 'Retry upload' }}
         </button>
-        <button class="secondary-button" type="button" :disabled="refreshing || retrying" @click="refreshAttempt()">
-          {{ refreshing ? 'Refreshing…' : 'Refresh status' }}
+        <button v-if="canReconcile" class="primary-button" type="button" :disabled="reconciling || refreshing || retrying" @click="reconcileAttempt">
+          {{ reconciling ? 'Checking YouTube…' : attempt.last_error_code === 'youtube_status_retryable' ? 'Retry YouTube status check' : 'Check YouTube status' }}
+        </button>
+        <button class="secondary-button" type="button" :disabled="refreshing || retrying || reconciling" @click="refreshAttempt()">
+          {{ refreshing ? 'Refreshing…' : 'Refresh saved state' }}
         </button>
       </div>
     </section>
