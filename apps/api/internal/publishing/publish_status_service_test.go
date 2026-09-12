@@ -34,6 +34,24 @@ func (r *task057AttemptRepo) SaveAttemptProgress(_ context.Context, attempt Publ
 	return attempt, nil
 }
 
+type task057CredentialReader struct{ token string }
+
+func (r task057CredentialReader) RefreshToken(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return r.token, nil
+}
+
+type task057OAuthRefresher struct{}
+
+func (task057OAuthRefresher) Refresh(context.Context, string) (OAuthToken, error) {
+	return OAuthToken{AccessToken: "access-token"}, nil
+}
+
+type task057RemoteReader struct{ err error }
+
+func (r task057RemoteReader) Get(context.Context, string, string) (YouTubeRemoteStatus, error) {
+	return YouTubeRemoteStatus{}, r.err
+}
+
 func task057Attempt(state PublishState) PublishAttempt {
 	now := time.Date(2026, 9, 12, 1, 0, 0, 0, time.UTC)
 	return PublishAttempt{
@@ -82,6 +100,40 @@ func TestPublishStatusServiceMapsProcessingAndPublicationState(t *testing.T) {
 				t.Fatalf("got state=%q error=%q, want state=%q error=%q", got.State, got.LastErrorCode, tt.wantState, tt.wantError)
 			}
 		})
+	}
+}
+
+func TestPublishStatusServicePersistsRetrySignalOnTransportFailure(t *testing.T) {
+	attempt := task057Attempt(PublishProcessing)
+	attempt.ResumableSessionURI = "https://upload.example/session"
+	repo := &task057AttemptRepo{attempt: attempt}
+	now := time.Date(2026, 9, 12, 3, 0, 0, 0, time.UTC)
+	service, err := NewPublishStatusService(
+		repo,
+		task057CredentialReader{token: "refresh-token"},
+		task057OAuthRefresher{},
+		task057RemoteReader{err: errors.New("temporary transport failure")},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+
+	got, err := service.Reconcile(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	if got.State != PublishProcessing {
+		t.Fatalf("state = %q, want %q", got.State, PublishProcessing)
+	}
+	if got.LastErrorCode != "youtube_status_retryable" {
+		t.Fatalf("last error = %q", got.LastErrorCode)
+	}
+	if got.ResumableSessionURI != attempt.ResumableSessionURI || got.UploadedBytes != attempt.UploadedBytes {
+		t.Fatalf("status retry mutated upload recovery identity: %+v", got)
+	}
+	if !got.UpdatedAt.Equal(now) {
+		t.Fatalf("updated at = %v, want %v", got.UpdatedAt, now)
 	}
 }
 
