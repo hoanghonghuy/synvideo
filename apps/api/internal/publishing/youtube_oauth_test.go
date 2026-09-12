@@ -26,7 +26,7 @@ func TestYouTubeOAuthAuthorizationURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := u.Query()
-	if q.Get("state") != "csrf-state" || q.Get("scope") != youtubeUploadScope || q.Get("access_type") != "offline" || q.Get("prompt") != "consent" {
+	if q.Get("state") != "csrf-state" || q.Get("scope") != youtubeAuthorizationScope || q.Get("access_type") != "offline" || q.Get("prompt") != "consent" {
 		t.Fatalf("unexpected authorization query: %v", q)
 	}
 }
