@@ -10,6 +10,7 @@ import SceneEditorWorkspaceView from '@/features/scene-editor/SceneEditorWorkspa
 import ScenePlanView from '@/features/scene-plan/ScenePlanView.vue'
 import MediaWorkspaceView from '@/features/media/MediaWorkspaceView.vue'
 import StockMediaWorkspaceView from '@/features/media/StockMediaWorkspaceView.vue'
+import ChannelHubView from '@/features/publishing/ChannelHubView.vue'
 import SceneNarrationWorkspaceView from '@/features/scene-narration/SceneNarrationWorkspaceView.vue'
 import SceneVideoWorkspaceView from '@/features/scene-video/SceneVideoWorkspaceView.vue'
 import ProviderSettingsView from '@/features/provider-settings/ProviderSettingsView.vue'
@@ -120,6 +121,11 @@ export const router = createRouter({
       path: '/projects/:id/scene-video',
       name: 'scene-video',
       component: SceneVideoWorkspaceView,
+    },
+    {
+      path: '/projects/:id/publishing',
+      name: 'channel-hub',
+      component: ChannelHubView,
     },
     {
       path: '/settings/ai-providers',

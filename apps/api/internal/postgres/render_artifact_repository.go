@@ -116,6 +116,15 @@ func (r *RenderArtifactRepository) renderCancelRequested(ctx context.Context, jo
 	return requested, nil
 }
 
+func (r *RenderArtifactRepository) Get(ctx context.Context, ownerID, projectID, artifactID uuid.UUID) (renderexport.RenderArtifact, error) {
+	if ownerID == uuid.Nil || projectID == uuid.Nil || artifactID == uuid.Nil {
+		return renderexport.RenderArtifact{}, renderexport.ErrInvalidRequest
+	}
+	query := fmt.Sprintf(`SELECT %s FROM render_artifacts
+		WHERE owner_id=$1 AND project_id=$2 AND id=$3`, renderArtifactFields)
+	return scanRenderArtifact(r.pool.QueryRow(ctx, query, ownerID, projectID, artifactID))
+}
+
 func (r *RenderArtifactRepository) GetByJob(ctx context.Context, ownerID, projectID, jobID uuid.UUID) (renderexport.RenderArtifact, error) {
 	if ownerID == uuid.Nil || projectID == uuid.Nil || jobID == uuid.Nil {
 		return renderexport.RenderArtifact{}, renderexport.ErrInvalidRequest

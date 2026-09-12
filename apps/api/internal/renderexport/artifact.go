@@ -57,3 +57,10 @@ type ArtifactRepository interface {
 	CreateForLease(ctx context.Context, leaseToken uuid.UUID, artifact RenderArtifact) (RenderArtifact, error)
 	GetByJob(ctx context.Context, ownerID, projectID, jobID uuid.UUID) (RenderArtifact, error)
 }
+
+// ArtifactLookup resolves an immutable render artifact by its public identifier
+// while preserving owner/project scoping. Publishing uses this narrower contract
+// without forcing render lifecycle repositories and their test doubles to grow.
+type ArtifactLookup interface {
+	Get(ctx context.Context, ownerID, projectID, artifactID uuid.UUID) (RenderArtifact, error)
+}

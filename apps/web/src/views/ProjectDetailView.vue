@@ -173,6 +173,12 @@ async function submit(payload: UpdateProjectPayload) {
           >
             {{ t('projects.detail.sceneVideoAction') }}
           </RouterLink>
+          <RouterLink
+            class="workspace-link"
+            :to="`/projects/${project.id}/publishing`"
+          >
+            Channel Hub
+          </RouterLink>
         </div>
       </nav>
 
