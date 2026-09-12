@@ -40,9 +40,12 @@ func (r task057CredentialReader) RefreshToken(context.Context, uuid.UUID, uuid.U
 	return r.token, nil
 }
 
-type task057OAuthRefresher struct{}
+type task057OAuthRefresher struct{ err error }
 
-func (task057OAuthRefresher) Refresh(context.Context, string) (OAuthToken, error) {
+func (r task057OAuthRefresher) Refresh(context.Context, string) (OAuthToken, error) {
+	if r.err != nil {
+		return OAuthToken{}, r.err
+	}
 	return OAuthToken{AccessToken: "access-token"}, nil
 }
 
@@ -134,6 +137,58 @@ func TestPublishStatusServicePersistsRetrySignalOnTransportFailure(t *testing.T)
 	}
 	if !got.UpdatedAt.Equal(now) {
 		t.Fatalf("updated at = %v, want %v", got.UpdatedAt, now)
+	}
+}
+
+func TestPublishStatusServicePersistsReconnectRequiredOnRevokedRefreshCredential(t *testing.T) {
+	attempt := task057Attempt(PublishProcessing)
+	attempt.ResumableSessionURI = "https://upload.example/session"
+	repo := &task057AttemptRepo{attempt: attempt}
+	service, err := NewPublishStatusService(
+		repo,
+		task057CredentialReader{token: "refresh-token"},
+		task057OAuthRefresher{err: errors.Join(ErrOAuthRefresh, ErrOAuthRefreshReconnect)},
+		task057RemoteReader{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := service.Reconcile(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	if got.State != PublishReconnectRequired || got.LastErrorCode != "youtube_reconnect_required" {
+		t.Fatalf("unexpected reconnect recovery: %+v", got)
+	}
+	if got.ResumableSessionURI != attempt.ResumableSessionURI || got.UploadedBytes != attempt.UploadedBytes {
+		t.Fatalf("reconnect recovery mutated upload identity: %+v", got)
+	}
+}
+
+func TestPublishStatusServicePersistsRetrySignalOnTransientOAuthRefreshFailure(t *testing.T) {
+	attempt := task057Attempt(PublishPrivate)
+	attempt.ResumableSessionURI = "https://upload.example/session"
+	repo := &task057AttemptRepo{attempt: attempt}
+	service, err := NewPublishStatusService(
+		repo,
+		task057CredentialReader{token: "refresh-token"},
+		task057OAuthRefresher{err: errors.New("temporary oauth transport failure")},
+		task057RemoteReader{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := service.Reconcile(context.Background(), attempt.OwnerID, attempt.ProjectID, attempt.ID)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	if got.State != PublishPrivate || got.LastErrorCode != "youtube_status_retryable" {
+		t.Fatalf("unexpected transient refresh recovery: %+v", got)
+	}
+	if got.ResumableSessionURI != attempt.ResumableSessionURI || got.UploadedBytes != attempt.UploadedBytes {
+		t.Fatalf("refresh retry mutated upload identity: %+v", got)
 	}
 }
 
