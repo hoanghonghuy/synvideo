@@ -18,7 +18,11 @@ var (
 	ErrOAuthRefresh       = errors.New("oauth token refresh failed")
 )
 
-const youtubeUploadScope = "https://www.googleapis.com/auth/youtube.upload"
+const (
+	youtubeUploadScope        = "https://www.googleapis.com/auth/youtube.upload"
+	youtubeReadonlyScope      = "https://www.googleapis.com/auth/youtube.readonly"
+	youtubeAuthorizationScope = youtubeUploadScope + " " + youtubeReadonlyScope
+)
 
 type YouTubeOAuthConfig struct {
 	ClientID     string
@@ -82,7 +86,11 @@ func (o *YouTubeOAuth) AuthorizationURL(state string) (string, error) {
 	q.Set("client_id", o.config.ClientID)
 	q.Set("redirect_uri", o.config.RedirectURL)
 	q.Set("response_type", "code")
-	q.Set("scope", youtubeUploadScope)
+	// youtube.upload is sufficient for videos.insert but does not authorize the
+	// channels.list(mine=true) identity read required to persist the canonical
+	// destination. youtube.readonly is the narrow read scope used only for that
+	// channel identity/capability lookup; no management scope is requested.
+	q.Set("scope", youtubeAuthorizationScope)
 	q.Set("access_type", "offline")
 	q.Set("include_granted_scopes", "true")
 	q.Set("prompt", "consent")
