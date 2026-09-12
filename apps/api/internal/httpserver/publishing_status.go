@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/actor"
-	"github.com/hoanghonghuy/synvideo/apps/api/internal/project"
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/publishing"
 )
 
@@ -65,5 +64,3 @@ func WithPublishingStatusRoutes(logger *slog.Logger, base http.Handler, service 
 	mux.Handle("/", base)
 	return mux
 }
-
-var _ project.Principal = project.Principal{}
