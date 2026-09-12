@@ -77,7 +77,7 @@ func TestYouTubeOAuthExchangeAndRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if refreshed.AccessToken != "access-2" || refreshed.RefreshToken != "refresh-1" || !refreshed.ExpiresAt.Equal(now.Add(30 * time.Minute)) {
+	if refreshed.AccessToken != "access-2" || refreshed.RefreshToken != "refresh-1" || !refreshed.ExpiresAt.Equal(now.Add(30*time.Minute)) {
 		t.Fatalf("unexpected refreshed token: %+v", refreshed)
 	}
 	select {
