@@ -16,11 +16,11 @@ type RemoteStatusReader interface {
 }
 
 type PublishStatusService struct {
-	attempts    AttemptRepository
+	attempts     AttemptRepository
 	connections ConnectionCredentialReader
-	oauth       OAuthTokenRefresher
-	remote      RemoteStatusReader
-	now         func() time.Time
+	oauth        OAuthTokenRefresher
+	remote       RemoteStatusReader
+	now          func() time.Time
 }
 
 func NewPublishStatusService(attempts AttemptRepository, connections ConnectionCredentialReader, oauth OAuthTokenRefresher, remote RemoteStatusReader) (*PublishStatusService, error) {
@@ -28,11 +28,11 @@ func NewPublishStatusService(attempts AttemptRepository, connections ConnectionC
 		return nil, ErrInvalidModel
 	}
 	return &PublishStatusService{
-		attempts:    attempts,
+		attempts:     attempts,
 		connections: connections,
-		oauth:       oauth,
-		remote:      remote,
-		now:         time.Now,
+		oauth:        oauth,
+		remote:       remote,
+		now:          time.Now,
 	}, nil
 }
 
@@ -54,7 +54,18 @@ func (s *PublishStatusService) Reconcile(ctx context.Context, ownerID, projectID
 	}
 	token, err := s.oauth.Refresh(ctx, refreshToken)
 	if err != nil {
-		return PublishAttempt{}, err
+		attempt.UpdatedAt = s.now().UTC()
+		if errors.Is(err, ErrOAuthRefreshReconnect) {
+			attempt.State = PublishReconnectRequired
+			attempt.ScheduledAt = nil
+			attempt.LastErrorCode = "youtube_reconnect_required"
+			return s.save(ctx, attempt)
+		}
+		// Refresh transport/provider failures occur after the remote video already
+		// exists. Preserve its last truthful publication state and expose only a
+		// retryable status-check signal; never fall back to upload retry.
+		attempt.LastErrorCode = "youtube_status_retryable"
+		return s.save(ctx, attempt)
 	}
 	status, err := s.remote.Get(ctx, token.AccessToken, attempt.RemoteVideoID)
 	if err != nil {
