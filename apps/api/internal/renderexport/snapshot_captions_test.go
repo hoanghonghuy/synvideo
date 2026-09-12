@@ -50,11 +50,11 @@ func TestResolveSnapshotCaptionsReadsPinnedRevision(t *testing.T) {
 		}},
 	}}
 	snapshot := sceneeditor.Snapshot{
-	ProjectID:        projectID,
-	ScenePlanVersion: 7,
-	Scenes: []sceneeditor.Scene{{
-		ID: sceneID, SceneKey: "intro", Caption: &sceneeditor.CaptionRef{DocumentID: documentID, Revision: 3, LineageID: uuid.New(), LastEndMS: 900},
-	}},
+		ProjectID:        projectID,
+		ScenePlanVersion: 7,
+		Scenes: []sceneeditor.Scene{{
+			ID: sceneID, SceneKey: "intro", Caption: &sceneeditor.CaptionRef{DocumentID: documentID, Revision: 3, LineageID: uuid.New(), LastEndMS: 900},
+		}},
 	}
 
 	got, err := ResolveSnapshotCaptions(context.Background(), reader, ownerID, projectID, snapshot)
@@ -86,11 +86,11 @@ func TestResolveSnapshotCaptionsRejectsRevisionIdentityMismatch(t *testing.T) {
 		Revision:         4,
 	}}
 	snapshot := sceneeditor.Snapshot{
-	ProjectID:        projectID,
-	ScenePlanVersion: 2,
-	Scenes: []sceneeditor.Scene{{
-		ID: uuid.New(), SceneKey: "scene-a", Caption: &sceneeditor.CaptionRef{DocumentID: pinnedDocumentID, Revision: 4, LineageID: uuid.New()},
-	}},
+		ProjectID:        projectID,
+		ScenePlanVersion: 2,
+		Scenes: []sceneeditor.Scene{{
+			ID: uuid.New(), SceneKey: "scene-a", Caption: &sceneeditor.CaptionRef{DocumentID: pinnedDocumentID, Revision: 4, LineageID: uuid.New()},
+		}},
 	}
 
 	_, err := ResolveSnapshotCaptions(context.Background(), reader, ownerID, projectID, snapshot)
