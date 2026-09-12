@@ -76,5 +76,17 @@ func withPublishingRoutes(logger *slog.Logger, base http.Handler, pool *pgxpool.
 		logger.Error("youtube connect service initialization failed", "error", err)
 		return base
 	}
-	return httpserver.WithPublishingOAuthRoutes(logger, base, connectService, resolver)
+	base = httpserver.WithPublishingOAuthRoutes(logger, base, connectService, resolver)
+
+	statusClient, err := publishing.NewYouTubeStatusClient("", http.DefaultClient)
+	if err != nil {
+		logger.Error("youtube status client initialization failed", "error", err)
+		return base
+	}
+	statusService, err := publishing.NewPublishStatusService(repo, connectionService, oauth, statusClient)
+	if err != nil {
+		logger.Error("publishing status service initialization failed", "error", err)
+		return base
+	}
+	return httpserver.WithPublishingStatusRoutes(logger, base, statusService, resolver)
 }

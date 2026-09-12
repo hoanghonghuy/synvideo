@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	ErrOAuthConfiguration = errors.New("invalid oauth configuration")
-	ErrOAuthExchange      = errors.New("oauth token exchange failed")
-	ErrOAuthRefresh       = errors.New("oauth token refresh failed")
+	ErrOAuthConfiguration    = errors.New("invalid oauth configuration")
+	ErrOAuthExchange         = errors.New("oauth token exchange failed")
+	ErrOAuthRefresh          = errors.New("oauth token refresh failed")
+	ErrOAuthRefreshReconnect = errors.New("oauth refresh credential rejected")
 )
 
 const (
@@ -152,6 +153,17 @@ func (o *YouTubeOAuth) requestToken(ctx context.Context, values url.Values, sent
 		return OAuthToken{}, fmt.Errorf("%w: read response", sentinel)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Google returns invalid_grant when a refresh credential was revoked,
+		// expired, or otherwise cannot be used anymore. Classify only that stable
+		// recovery signal; never surface provider payload/token details.
+		if errors.Is(sentinel, ErrOAuthRefresh) {
+			var providerError struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(body, &providerError) == nil && strings.EqualFold(strings.TrimSpace(providerError.Error), "invalid_grant") {
+				return OAuthToken{}, fmt.Errorf("%w: %w", sentinel, ErrOAuthRefreshReconnect)
+			}
+		}
 		return OAuthToken{}, fmt.Errorf("%w: provider status %d", sentinel, resp.StatusCode)
 	}
 	var payload struct {
