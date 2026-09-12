@@ -40,6 +40,38 @@ func (r *commandRunnerStub) Run(ctx context.Context, name string, args ...string
 	return response.output, response.err
 }
 
+func TestValidateWebVTTDocument(t *testing.T) {
+	validator := ingestvalidation.NewValidator(nil)
+	path := writeTempFile(t, []byte("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n"))
+	verified, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{Kind: ingestvalidation.KindDocument, MimeType: "text/vtt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verified.Kind != ingestvalidation.KindDocument || verified.MimeType != "text/vtt" {
+		t.Fatalf("verified = %#v", verified)
+	}
+}
+
+func TestValidateWebVTTDocumentRejectsMalformedOrOtherDocumentMIME(t *testing.T) {
+	validator := ingestvalidation.NewValidator(nil)
+	for _, tc := range []struct {
+		name string
+		data []byte
+		mime string
+	}{
+		{name: "missing header", data: []byte("hello"), mime: "text/vtt"},
+		{name: "nul", data: []byte("WEBVTT\n\x00"), mime: "text/vtt"},
+		{name: "unsupported document", data: []byte("WEBVTT\n"), mime: "text/plain"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTempFile(t, tc.data)
+			if _, err := validator.ValidateFile(context.Background(), path, ingestvalidation.DeclaredInput{Kind: ingestvalidation.KindDocument, MimeType: tc.mime}); err == nil {
+				t.Fatal("expected document validation failure")
+			}
+		})
+	}
+}
+
 func TestValidateImageFamiliesAcceptValidFixtures(t *testing.T) {
 	validator := ingestvalidation.NewValidator(nil)
 	cases := []struct {

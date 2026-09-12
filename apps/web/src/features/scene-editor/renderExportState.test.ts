@@ -21,6 +21,7 @@ function job(state: RenderExportJob['state']): RenderExportJob {
     max_attempts: 2,
     snapshot_digest: 'digest',
     profile_id: 'local_software_mp4_v1',
+    subtitle_mode: 'off',
     created_at: '2026-09-08T00:00:00Z',
     updated_at: '2026-09-08T00:00:00Z',
   }

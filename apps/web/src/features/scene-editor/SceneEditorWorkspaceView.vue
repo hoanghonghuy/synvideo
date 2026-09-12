@@ -20,6 +20,7 @@ import {
   retryRenderExport,
   updateSceneEditor,
   type RenderExportJob,
+  type RenderSubtitleMode,
   type SceneEditorCandidate,
   type SceneEditorReconcilePreview,
   type SceneEditorScene,
@@ -57,6 +58,7 @@ const draft = ref<SceneEditorView | null>(null)
 const renderJob = ref<RenderExportJob | null>(null)
 const renderHistory = ref<RenderExportJob[]>([])
 const renderHistoryCursor = ref<string | null>(null)
+const renderSubtitleMode = ref<RenderSubtitleMode>('off')
 const loading = ref(true)
 const acting = ref(false)
 const conflict = ref(false)
@@ -71,11 +73,20 @@ let renderPollTimer: ReturnType<typeof setInterval> | null = null
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
 const invalid = computed(() => hasEditorErrors(draft.value))
 const renderBusy = computed(() => renderJob.value !== null && !isRenderExportTerminal(renderJob.value))
+const hasSnapshotBoundCaptions = computed(() => composition.value?.scenes.some((scene) => scene.caption) ?? false)
 const snapshotBlocked = computed(() => composition.value?.state !== 'CURRENT' || dirty.value || invalid.value || conflict.value || renderBusy.value)
 const renderDownloadURL = computed(() => {
   const assetID = renderJob.value?.state === 'succeeded' ? renderJob.value.artifact?.media_asset_id : undefined
   return assetID ? mediaAssetContentURL(projectID.value, assetID) : ''
 })
+const subtitleDownloadURL = computed(() => {
+  const assetID = renderJob.value?.state === 'succeeded' ? renderJob.value.artifact?.subtitle_media_asset_id : undefined
+  return assetID ? mediaAssetContentURL(projectID.value, assetID) : ''
+})
+function subtitleURLFor(job: RenderExportJob) {
+  const assetID = job.state === 'succeeded' ? job.artifact?.subtitle_media_asset_id : undefined
+  return assetID ? mediaAssetContentURL(projectID.value, assetID) : ''
+}
 const saveStatus = computed(() => {
   if (loading.value) return 'Loading'
   if (conflict.value) return 'Conflict — authoritative state changed'
@@ -194,10 +205,10 @@ async function createSnapshot() {
   notice.value = ''
   try {
     const snapshot = await createSceneEditorSnapshot(projectID.value, composition.value.revision)
-    const job = await createRenderExport(projectID.value, snapshot.digest)
+    const job = await createRenderExport(projectID.value, snapshot.digest, renderSubtitleMode.value)
     renderJob.value = job
     persistRenderJobID(window.localStorage, projectID.value, job.id)
-    notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4 render.`
+    notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4${renderSubtitleMode.value === 'webvtt' ? ' + WebVTT' : ''} render.`
     startRenderPolling()
     void refreshRenderHistory()
   } catch (cause) {
@@ -543,8 +554,21 @@ async function applyUpstreamReconcile() {
             <p class="eyebrow">Snapshot-equivalent semantics</p>
             <h2 id="preview-heading">Composition preview</h2>
           </div>
-          <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Snapshot &amp; render MP4</button>
+          <div class="render-config">
+            <label>
+              Subtitles
+              <select v-model="renderSubtitleMode" :disabled="snapshotBlocked || acting || renderBusy" aria-describedby="subtitle-mode-help">
+                <option value="off">Off</option>
+                <option value="webvtt">WebVTT</option>
+              </select>
+            </label>
+            <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Snapshot &amp; render MP4</button>
+          </div>
         </div>
+        <p id="subtitle-mode-help" class="action-hint">
+          WebVTT uses only caption revisions pinned by this immutable snapshot. The download appears only after the sidecar is durably finalized.
+          <span v-if="renderSubtitleMode === 'webvtt' && !hasSnapshotBoundCaptions">No captions are currently bound, so this render will not create a subtitle sidecar.</span>
+        </p>
         <ol class="preview-timeline">
           <li v-for="scene in draft.scenes" :key="`preview-${scene.id}`">
             <strong>{{ scene.scene_key }}</strong>
@@ -557,7 +581,7 @@ async function applyUpstreamReconcile() {
         <div v-if="renderJob" class="render-status" aria-live="polite">
           <div>
             <strong>Render {{ renderJob.cancellation_pending ? 'cancelling' : renderJob.state }}</strong>
-            <span>Attempt {{ renderJob.attempt }}/{{ renderJob.max_attempts }} · {{ renderJob.profile_id }}</span>
+            <span>Attempt {{ renderJob.attempt }}/{{ renderJob.max_attempts }} · {{ renderJob.profile_id }} · subtitles {{ renderJob.subtitle_mode }}</span>
           </div>
           <p>Snapshot {{ renderJob.snapshot_digest.slice(0, 12) }}…</p>
           <p v-if="renderJob.retry_of_render_job_id">Retry of {{ renderJob.retry_of_render_job_id.slice(0, 8) }}…</p>
@@ -565,11 +589,15 @@ async function applyUpstreamReconcile() {
           <p v-if="renderJob.state === 'succeeded' && renderJob.artifact">
             MP4 ready · {{ renderJob.artifact.width }}×{{ renderJob.artifact.height }} · {{ seconds(renderJob.artifact.duration_ms) }} · {{ renderJob.artifact.byte_size }} bytes
           </p>
+          <p v-if="renderJob.state === 'succeeded' && renderJob.subtitle_mode === 'webvtt' && !renderJob.artifact?.subtitle_media_asset_id" class="action-hint">
+            WebVTT was requested, but this immutable snapshot had no enabled caption sidecar to export.
+          </p>
           <div class="render-actions">
             <button v-if="isRenderExportCancellable(renderJob)" type="button" :disabled="acting" @click="cancelActiveRender">Cancel render</button>
             <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">Retry render</button>
             <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
-            <button v-else-if="!isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
+            <a v-if="subtitleDownloadURL" :href="subtitleDownloadURL" download>Download WebVTT</a>
+            <button v-else-if="!renderDownloadURL && !isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
           </div>
         </div>
         <div v-if="renderHistory.length" class="render-history" aria-label="Render history">
@@ -580,11 +608,15 @@ async function applyUpstreamReconcile() {
           <ol>
             <li v-for="item in renderHistory" :key="item.id">
               <button type="button" class="history-item" :data-state="item.state" @click="selectRenderHistoryItem(item)">
-                <span>{{ item.state }}</span>
+                <span>{{ item.state }} · subtitles {{ item.subtitle_mode }}</span>
                 <span>{{ item.snapshot_digest.slice(0, 8) }}…</span>
+                <span>{{ item.subtitle_mode === 'webvtt' ? (item.artifact?.subtitle_media_asset_id ? 'WebVTT ready' : 'WebVTT requested') : 'Subtitles off' }}</span>
                 <span>{{ item.created_at }}</span>
               </button>
-              <button v-if="isRenderExportRetryable(item)" type="button" :disabled="acting" @click="retryTerminalRender(item)">Retry</button>
+              <div class="history-actions">
+                <a v-if="subtitleURLFor(item)" :href="subtitleURLFor(item)" download>Download WebVTT</a>
+                <button v-if="isRenderExportRetryable(item)" type="button" :disabled="acting" @click="retryTerminalRender(item)">Retry</button>
+              </div>
             </li>
           </ol>
           <button v-if="renderHistoryCursor" type="button" @click="refreshRenderHistory(true)">Load more history</button>
@@ -699,7 +731,9 @@ async function applyUpstreamReconcile() {
 .status-panel, .preview-panel, .render-status { display: grid; gap: .75rem; }
 .render-status { border-top: 1px solid currentColor; padding-top: .9rem; }
 .render-status p { margin: 0; overflow-wrap: anywhere; }
-.render-actions, .render-history-header { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.render-actions, .render-history-header, .render-config, .history-actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.render-config label { display: grid; gap: .25rem; font-weight: 600; }
+.render-config select { min-height: 2.75rem; padding: .45rem .6rem; }
 .render-history { display: grid; gap: .75rem; border-top: 1px solid currentColor; padding-top: .9rem; }
 .render-history ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 .render-history li { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }

@@ -20,9 +20,10 @@ func configureLocalRender(
 	queue renderexport.JobQueue,
 	reader renderexport.JobReader,
 	mediaService *mediaasset.Service,
+	captionReader renderexport.SnapshotCaptionRevisionReader,
 	registry *jobs.Registry,
 ) (httpserver.RenderExportService, error) {
-	if pool == nil || snapshots == nil || queue == nil || reader == nil || mediaService == nil || registry == nil {
+	if pool == nil || snapshots == nil || queue == nil || reader == nil || mediaService == nil || captionReader == nil || registry == nil {
 		return nil, fmt.Errorf("render runtime dependencies are incomplete")
 	}
 	profile, err := renderexport.ProbeLocalFFmpegProfile(ctx, nil)
@@ -32,7 +33,7 @@ func configureLocalRender(
 	artifactRepo := postgres.NewRenderArtifactRepository(pool)
 	mediaRepo := postgres.NewMediaAssetRepository(pool)
 	assetStore := renderexport.NewAssetStore(mediaService, mediaRepo)
-	handler := renderexport.NewHandler(snapshots, assetStore, artifactRepo, profile)
+	handler := renderexport.NewHandler(snapshots, assetStore, artifactRepo, profile, captionReader)
 	if err := registry.Register(renderexport.JobKind, handler); err != nil {
 		return nil, fmt.Errorf("register render export handler: %w", err)
 	}

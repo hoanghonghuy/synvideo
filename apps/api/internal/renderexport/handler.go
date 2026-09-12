@@ -1,6 +1,7 @@
 package renderexport
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,6 +27,7 @@ const (
 	LocalProfileFrameRate = 30
 	MaxRenderInputBytes   = 512 << 20
 	MaxFinalMP4Bytes      = 512 << 20
+	MaxFinalWebVTTBytes   = maxWebVTTBytes
 
 	ErrorInvalidPayload      = "ERR_RENDER_INVALID_PAYLOAD"
 	ErrorSnapshotInvalid     = "ERR_RENDER_SNAPSHOT_INVALID"
@@ -41,6 +43,7 @@ type RenderAssets interface {
 	Get(ctx context.Context, principal project.Principal, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error)
 	Open(ctx context.Context, principal project.Principal, projectID, assetID uuid.UUID) (io.ReadCloser, error)
 	FindFinalByJob(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID) (mediaasset.MediaAsset, error)
+	FindSubtitleByJob(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID) (mediaasset.MediaAsset, error)
 	Store(ctx context.Context, principal project.Principal, projectID uuid.UUID, input mediaasset.CreateInput) (mediaasset.MediaAsset, error)
 	Delete(ctx context.Context, principal project.Principal, projectID, assetID uuid.UUID) error
 }
@@ -49,6 +52,7 @@ type LocalRenderFunc func(context.Context, RenderProcessRunner, FFmpegProfile, P
 
 type Handler struct {
 	snapshots SnapshotStore
+	captions  SnapshotCaptionRevisionReader
 	assets    RenderAssets
 	artifacts ArtifactRepository
 	profile   FFmpegProfile
@@ -57,9 +61,14 @@ type Handler struct {
 	now       func() time.Time
 }
 
-func NewHandler(snapshots SnapshotStore, assets RenderAssets, artifacts ArtifactRepository, profile FFmpegProfile) *Handler {
+func NewHandler(snapshots SnapshotStore, assets RenderAssets, artifacts ArtifactRepository, profile FFmpegProfile, captionReaders ...SnapshotCaptionRevisionReader) *Handler {
+	var captionReader SnapshotCaptionRevisionReader
+	if len(captionReaders) > 0 {
+		captionReader = captionReaders[0]
+	}
 	return &Handler{
 		snapshots: snapshots,
+		captions:  captionReader,
 		assets:    assets,
 		artifacts: artifacts,
 		profile:   profile,
@@ -70,10 +79,11 @@ func NewHandler(snapshots SnapshotStore, assets RenderAssets, artifacts Artifact
 }
 
 type HandlerResult struct {
-	ArtifactID     uuid.UUID `json:"artifact_id"`
-	MediaAssetID   uuid.UUID `json:"media_asset_id"`
-	SnapshotDigest string    `json:"snapshot_digest"`
-	ProfileID      string    `json:"profile_id"`
+	ArtifactID           uuid.UUID  `json:"artifact_id"`
+	MediaAssetID         uuid.UUID  `json:"media_asset_id"`
+	SubtitleMediaAssetID *uuid.UUID `json:"subtitle_media_asset_id,omitempty"`
+	SnapshotDigest       string     `json:"snapshot_digest"`
+	ProfileID            string     `json:"profile_id"`
 }
 
 type renderOutputMetadata struct {
@@ -85,6 +95,14 @@ type renderOutputMetadata struct {
 	Width            int    `json:"width"`
 	Height           int    `json:"height"`
 	ToolchainVersion string `json:"toolchain_version"`
+}
+
+type renderSubtitleMetadata struct {
+	Source         string `json:"source"`
+	RenderJobID    string `json:"render_job_id"`
+	SnapshotDigest string `json:"snapshot_digest"`
+	ProfileID      string `json:"profile_id"`
+	OutputRole     string `json:"output_role"`
 }
 
 func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, error) {
@@ -121,8 +139,24 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, jobs.NewTerminalError(ErrorUnsupportedSnapshot, err)
 	}
 
+	var subtitlePayload []byte
+	subtitleRequired := false
+	if payload.SubtitleMode == SubtitleModeWebVTT && scene.Caption != nil {
+		if h.captions == nil {
+			return nil, jobs.NewTerminalError(ErrorSnapshotInvalid, errors.New("caption revision resolver unavailable"))
+		}
+		subtitlePayload, subtitleRequired, err = BuildSingleSceneSnapshotWebVTT(ctx, h.captions, job.OwnerID, projectID, snapshot)
+		if err != nil {
+			return nil, jobs.NewTerminalError(ErrorSnapshotInvalid, err)
+		}
+	}
+
 	if existing, findErr := h.assets.FindFinalByJob(ctx, principal, projectID, job.ID); findErr == nil {
-		artifact, finalizeErr := h.finalizeAsset(ctx, job, payload, existing)
+		subtitleAsset, subtitleErr := h.ensureSubtitleAsset(ctx, principal, projectID, job, payload, subtitlePayload, subtitleRequired)
+		if subtitleErr != nil {
+			return nil, subtitleErr
+		}
+		artifact, finalizeErr := h.finalizeAsset(ctx, job, payload, existing, subtitleAsset)
 		if finalizeErr != nil {
 			return nil, finalizeErr
 		}
@@ -204,7 +238,11 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 			return nil, err
 		}
 		if existing, findErr := h.assets.FindFinalByJob(ctx, principal, projectID, job.ID); findErr == nil {
-			artifact, finalizeErr := h.finalizeAsset(ctx, job, payload, existing)
+			subtitleAsset, subtitleErr := h.ensureSubtitleAsset(ctx, principal, projectID, job, payload, subtitlePayload, subtitleRequired)
+			if subtitleErr != nil {
+				return nil, subtitleErr
+			}
+			artifact, finalizeErr := h.finalizeAsset(ctx, job, payload, existing, subtitleAsset)
 			if finalizeErr != nil {
 				return nil, finalizeErr
 			}
@@ -217,7 +255,11 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, jobs.NewTerminalError(ErrorStorageFailed, errors.New("stored render output metadata mismatch"))
 	}
 
-	artifact, err := h.finalizeAsset(ctx, job, payload, finalAsset)
+	subtitleAsset, err := h.ensureSubtitleAsset(ctx, principal, projectID, job, payload, subtitlePayload, subtitleRequired)
+	if err != nil {
+		return nil, err
+	}
+	artifact, err := h.finalizeAsset(ctx, job, payload, finalAsset, subtitleAsset)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +270,9 @@ func validateRenderJob(job jobs.Job) (uuid.UUID, RenderPayload, error) {
 	if job.Kind != JobKind || job.OwnerID == uuid.Nil || job.ProjectID == nil || *job.ProjectID == uuid.Nil || job.LeaseToken == nil || *job.LeaseToken == uuid.Nil {
 		return uuid.Nil, RenderPayload{}, ErrInvalidRequest
 	}
-	var payload RenderPayload
-	if err := json.Unmarshal(job.Payload, &payload); err != nil || !validDigest(payload.SnapshotDigest) || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID {
-		return uuid.Nil, RenderPayload{}, ErrInvalidRequest
+	payload, err := decodeRenderPayload(job.Payload)
+	if err != nil {
+		return uuid.Nil, RenderPayload{}, err
 	}
 	return *job.ProjectID, payload, nil
 }
@@ -240,7 +282,7 @@ func supportedSingleVisualScene(snapshot sceneeditor.Snapshot) (sceneeditor.Scen
 		return sceneeditor.Scene{}, ErrUnsupportedRenderSemantics
 	}
 	scene := snapshot.Scenes[0]
-	if scene.Visual == nil || scene.Narration != nil || scene.Caption != nil || scene.DurationMS <= 0 || scene.DurationMS > MaxLocalRenderDuration.Milliseconds() {
+	if scene.Visual == nil || scene.Narration != nil || scene.DurationMS <= 0 || scene.DurationMS > MaxLocalRenderDuration.Milliseconds() {
 		return sceneeditor.Scene{}, ErrUnsupportedRenderSemantics
 	}
 	if scene.VisualTreatment.Fit != sceneeditor.FitContain || scene.VisualTreatment.Crop != nil || scene.VisualTreatment.PositionX != 0 || scene.VisualTreatment.PositionY != 0 || scene.VisualTreatment.Scale != 1 {
@@ -312,27 +354,90 @@ func copyContextBounded(ctx context.Context, dst io.Writer, src io.Reader, expec
 	}
 }
 
-func (h *Handler) finalizeAsset(ctx context.Context, job jobs.Job, payload RenderPayload, asset mediaasset.MediaAsset) (RenderArtifact, error) {
+func (h *Handler) ensureSubtitleAsset(ctx context.Context, principal project.Principal, projectID uuid.UUID, job jobs.Job, payload RenderPayload, webvtt []byte, required bool) (*mediaasset.MediaAsset, error) {
+	if !required {
+		return nil, nil
+	}
+	if payload.SubtitleMode != SubtitleModeWebVTT || len(webvtt) == 0 || len(webvtt) > MaxFinalWebVTTBytes {
+		return nil, jobs.NewTerminalError(ErrorStorageFailed, ErrInvalidWebVTT)
+	}
+	if existing, err := h.assets.FindSubtitleByJob(ctx, principal, projectID, job.ID); err == nil {
+		if _, metadataErr := parseRenderSubtitleMetadata(existing, job.ID, payload); metadataErr != nil {
+			return nil, jobs.NewTerminalError(ErrorStorageFailed, metadataErr)
+		}
+		return &existing, nil
+	} else if !errors.Is(err, mediaasset.ErrNotFound) {
+		return nil, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
+	}
+
+	metadata, err := json.Marshal(renderSubtitleMetadata{
+		Source: JobKind, RenderJobID: job.ID.String(), SnapshotDigest: payload.SnapshotDigest,
+		ProfileID: payload.ProfileID, OutputRole: "subtitle",
+	})
+	if err != nil {
+		return nil, jobs.NewTerminalError(ErrorInvalidPayload, err)
+	}
+	asset, err := h.assets.Store(ctx, principal, projectID, mediaasset.CreateInput{
+		Kind: mediaasset.KindDocument, Origin: mediaasset.OriginSystem, MimeType: "text/vtt",
+		OriginalFilename: "render.vtt", Metadata: metadata, Reader: bytes.NewReader(webvtt), MaxBytes: MaxFinalWebVTTBytes,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		return nil, jobs.NewRetryableError(ErrorStorageFailed, err, nil)
+	}
+	if _, err := parseRenderSubtitleMetadata(asset, job.ID, payload); err != nil {
+		_ = h.assets.Delete(context.Background(), principal, projectID, asset.ID)
+		return nil, jobs.NewTerminalError(ErrorStorageFailed, err)
+	}
+	return &asset, nil
+}
+
+func parseRenderSubtitleMetadata(asset mediaasset.MediaAsset, jobID uuid.UUID, payload RenderPayload) (renderSubtitleMetadata, error) {
+	if asset.Kind != mediaasset.KindDocument || asset.Origin != mediaasset.OriginSystem || asset.MimeType != "text/vtt" || asset.ByteSize <= 0 || asset.ByteSize > MaxFinalWebVTTBytes || !validDigest(asset.SHA256) {
+		return renderSubtitleMetadata{}, errors.New("render subtitle asset provenance is invalid")
+	}
+	var metadata renderSubtitleMetadata
+	if err := json.Unmarshal(asset.Metadata, &metadata); err != nil {
+		return renderSubtitleMetadata{}, errors.New("render subtitle metadata is invalid")
+	}
+	if metadata.Source != JobKind || metadata.RenderJobID != jobID.String() || metadata.SnapshotDigest != payload.SnapshotDigest || metadata.ProfileID != payload.ProfileID || metadata.OutputRole != "subtitle" || payload.SubtitleMode != SubtitleModeWebVTT {
+		return renderSubtitleMetadata{}, errors.New("render subtitle provenance does not match job")
+	}
+	return metadata, nil
+}
+
+func (h *Handler) finalizeAsset(ctx context.Context, job jobs.Job, payload RenderPayload, asset mediaasset.MediaAsset, subtitle *mediaasset.MediaAsset) (RenderArtifact, error) {
 	metadata, err := parseRenderOutputMetadata(asset, job.ID, payload)
 	if err != nil {
 		return RenderArtifact{}, jobs.NewTerminalError(ErrorStorageFailed, err)
 	}
+	var subtitleID *uuid.UUID
+	if subtitle != nil {
+		if _, err := parseRenderSubtitleMetadata(*subtitle, job.ID, payload); err != nil {
+			return RenderArtifact{}, jobs.NewTerminalError(ErrorStorageFailed, err)
+		}
+		id := subtitle.ID
+		subtitleID = &id
+	}
 	artifact := RenderArtifact{
-		ID:               h.newID(),
-		OwnerID:          job.OwnerID,
-		ProjectID:        *job.ProjectID,
-		JobID:            job.ID,
-		SnapshotDigest:   payload.SnapshotDigest,
-		ProfileID:        payload.ProfileID,
-		MediaAssetID:     asset.ID,
-		ByteSize:         asset.ByteSize,
-		SHA256:           asset.SHA256,
-		MimeType:         asset.MimeType,
-		DurationMS:       metadata.DurationMS,
-		Width:            metadata.Width,
-		Height:           metadata.Height,
-		ToolchainVersion: metadata.ToolchainVersion,
-		CreatedAt:        h.now(),
+		ID:                   h.newID(),
+		OwnerID:              job.OwnerID,
+		ProjectID:            *job.ProjectID,
+		JobID:                job.ID,
+		SnapshotDigest:       payload.SnapshotDigest,
+		ProfileID:            payload.ProfileID,
+		MediaAssetID:         asset.ID,
+		SubtitleMediaAssetID: subtitleID,
+		ByteSize:             asset.ByteSize,
+		SHA256:               asset.SHA256,
+		MimeType:             asset.MimeType,
+		DurationMS:           metadata.DurationMS,
+		Width:                metadata.Width,
+		Height:               metadata.Height,
+		ToolchainVersion:     metadata.ToolchainVersion,
+		CreatedAt:            h.now(),
 	}
 	created, createErr := h.artifacts.CreateForLease(ctx, *job.LeaseToken, artifact)
 	if createErr == nil {
@@ -343,15 +448,27 @@ func (h *Handler) finalizeAsset(ctx context.Context, job jobs.Job, payload Rende
 		if deleteErr := h.assets.Delete(context.Background(), principal, *job.ProjectID, asset.ID); deleteErr != nil {
 			return RenderArtifact{}, jobs.NewRetryableError(ErrorStorageFailed, deleteErr, nil)
 		}
+		if subtitle != nil {
+			if deleteErr := h.assets.Delete(context.Background(), principal, *job.ProjectID, subtitle.ID); deleteErr != nil {
+				return RenderArtifact{}, jobs.NewRetryableError(ErrorStorageFailed, deleteErr, nil)
+			}
+		}
 		return RenderArtifact{}, context.Canceled
 	}
 	if existing, getErr := h.artifacts.GetByJob(ctx, job.OwnerID, *job.ProjectID, job.ID); getErr == nil {
 		if existing.SnapshotDigest != payload.SnapshotDigest || existing.ProfileID != payload.ProfileID {
 			return RenderArtifact{}, jobs.NewTerminalError(ErrorFinalizeFailed, ErrSnapshotMismatch)
 		}
+		if (existing.SubtitleMediaAssetID == nil) != (subtitleID == nil) {
+			return RenderArtifact{}, jobs.NewTerminalError(ErrorFinalizeFailed, ErrSnapshotMismatch)
+		}
 		if existing.MediaAssetID != asset.ID {
 			principal := project.Principal{OwnerID: job.OwnerID}
 			_ = h.assets.Delete(context.Background(), principal, *job.ProjectID, asset.ID)
+		}
+		if subtitle != nil && (existing.SubtitleMediaAssetID == nil || *existing.SubtitleMediaAssetID != subtitle.ID) {
+			principal := project.Principal{OwnerID: job.OwnerID}
+			_ = h.assets.Delete(context.Background(), principal, *job.ProjectID, subtitle.ID)
 		}
 		return existing, nil
 	}
@@ -383,10 +500,11 @@ func (h *Handler) resultForArtifact(artifact RenderArtifact, payload RenderPaylo
 		return nil, jobs.NewTerminalError(ErrorFinalizeFailed, ErrSnapshotMismatch)
 	}
 	result, err := json.Marshal(HandlerResult{
-		ArtifactID:     artifact.ID,
-		MediaAssetID:   artifact.MediaAssetID,
-		SnapshotDigest: artifact.SnapshotDigest,
-		ProfileID:      artifact.ProfileID,
+		ArtifactID:           artifact.ID,
+		MediaAssetID:         artifact.MediaAssetID,
+		SubtitleMediaAssetID: artifact.SubtitleMediaAssetID,
+		SnapshotDigest:       artifact.SnapshotDigest,
+		ProfileID:            artifact.ProfileID,
 	})
 	if err != nil {
 		return nil, jobs.NewTerminalError(ErrorFinalizeFailed, err)

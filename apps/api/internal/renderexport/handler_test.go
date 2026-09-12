@@ -30,12 +30,15 @@ func (s handlerSnapshotStore) GetSnapshot(_ context.Context, ownerID, projectID 
 }
 
 type handlerAssets struct {
-	visual      mediaasset.MediaAsset
-	visualBytes []byte
-	final       *mediaasset.MediaAsset
-	deleteErr   error
-	stores      int
-	deletes     int
+	visual           mediaasset.MediaAsset
+	visualBytes      []byte
+	final            *mediaasset.MediaAsset
+	subtitle         *mediaasset.MediaAsset
+	subtitleBytes    []byte
+	subtitleStoreErr error
+	deleteErr        error
+	stores           int
+	deletes          int
 }
 
 func (s *handlerAssets) Get(_ context.Context, _ project.Principal, projectID, assetID uuid.UUID) (mediaasset.MediaAsset, error) {
@@ -63,14 +66,33 @@ func (s *handlerAssets) FindFinalByJob(_ context.Context, _ project.Principal, p
 	return *s.final, nil
 }
 
+func (s *handlerAssets) FindSubtitleByJob(_ context.Context, _ project.Principal, projectID, jobID uuid.UUID) (mediaasset.MediaAsset, error) {
+	if s.subtitle == nil || s.subtitle.ProjectID != projectID {
+		return mediaasset.MediaAsset{}, mediaasset.ErrNotFound
+	}
+	var metadata renderSubtitleMetadata
+	if json.Unmarshal(s.subtitle.Metadata, &metadata) != nil || metadata.RenderJobID != jobID.String() || metadata.OutputRole != "subtitle" {
+		return mediaasset.MediaAsset{}, mediaasset.ErrNotFound
+	}
+	return *s.subtitle, nil
+}
+
 func (s *handlerAssets) Store(_ context.Context, principal project.Principal, projectID uuid.UUID, input mediaasset.CreateInput) (mediaasset.MediaAsset, error) {
 	s.stores++
+	if input.Kind == mediaasset.KindDocument && s.subtitleStoreErr != nil {
+		err := s.subtitleStoreErr
+		s.subtitleStoreErr = nil
+		return mediaasset.MediaAsset{}, err
+	}
 	body, err := io.ReadAll(input.Reader)
 	if err != nil {
 		return mediaasset.MediaAsset{}, err
 	}
 	digest := sha256.Sum256(body)
 	now := time.Now().UTC()
+	if input.Kind == mediaasset.KindDocument && input.MimeType == "text/vtt" && s.subtitleStoreErr != nil {
+		return mediaasset.MediaAsset{}, s.subtitleStoreErr
+	}
 	asset := mediaasset.MediaAsset{
 		ID:               uuid.New(),
 		OwnerID:          principal.OwnerID,
@@ -86,7 +108,12 @@ func (s *handlerAssets) Store(_ context.Context, principal project.Principal, pr
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
-	s.final = &asset
+	if input.Kind == mediaasset.KindDocument {
+		s.subtitleBytes = append([]byte(nil), body...)
+		s.subtitle = &asset
+	} else {
+		s.final = &asset
+	}
 	return asset, nil
 }
 
@@ -97,6 +124,9 @@ func (s *handlerAssets) Delete(_ context.Context, _ project.Principal, _ uuid.UU
 	}
 	if s.final != nil && s.final.ID == assetID {
 		s.final = nil
+	}
+	if s.subtitle != nil && s.subtitle.ID == assetID {
+		s.subtitle = nil
 	}
 	return nil
 }

@@ -15,10 +15,15 @@ import (
 	"github.com/hoanghonghuy/synvideo/apps/api/internal/sceneeditor"
 )
 
+type SubtitleMode string
+
 const (
 	JobKind            = "render_export_v1"
 	LocalProfileID     = "local_software_mp4_v1"
 	DefaultMaxAttempts = 2
+
+	SubtitleModeOff    SubtitleMode = "off"
+	SubtitleModeWebVTT SubtitleMode = "webvtt"
 )
 
 var (
@@ -59,10 +64,11 @@ type Service struct {
 }
 
 type RenderPayload struct {
-	SnapshotDigest     string  `json:"snapshot_digest"`
-	SnapshotSchema     int     `json:"snapshot_schema"`
-	ProfileID          string  `json:"profile_id"`
-	RetryOfRenderJobID *string `json:"retry_of_render_job_id,omitempty"`
+	SnapshotDigest     string       `json:"snapshot_digest"`
+	SnapshotSchema     int          `json:"snapshot_schema"`
+	ProfileID          string       `json:"profile_id"`
+	SubtitleMode       SubtitleMode `json:"subtitle_mode"`
+	RetryOfRenderJobID *string      `json:"retry_of_render_job_id,omitempty"`
 }
 
 type JobView struct {
@@ -73,6 +79,7 @@ type JobView struct {
 	ErrorCode           *string         `json:"error_code,omitempty"`
 	SnapshotDigest      string          `json:"snapshot_digest"`
 	ProfileID           string          `json:"profile_id"`
+	SubtitleMode        SubtitleMode    `json:"subtitle_mode"`
 	RetryOfRenderJobID  *uuid.UUID      `json:"retry_of_render_job_id,omitempty"`
 	CancellationPending bool            `json:"cancellation_pending"`
 	Artifact            *RenderArtifact `json:"artifact,omitempty"`
@@ -96,12 +103,16 @@ func NewServiceWithRuntime(snapshots SnapshotStore, queue JobQueue, reader JobRe
 	return &Service{snapshots: snapshots, jobs: queue, reader: reader, artifacts: artifacts, newID: newID}
 }
 
-func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, snapshotDigest string) (jobs.Job, error) {
+func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, snapshotDigest string, requestedMode ...SubtitleMode) (jobs.Job, error) {
 	if ownerID == uuid.Nil {
 		return jobs.Job{}, ErrUnauthenticated
 	}
 	if projectID == uuid.Nil || !validDigest(snapshotDigest) {
 		return jobs.Job{}, ErrInvalidRequest
+	}
+	subtitleMode, err := normalizeSubtitleMode(requestedMode)
+	if err != nil {
+		return jobs.Job{}, err
 	}
 
 	snapshot, err := s.snapshots.GetSnapshot(ctx, ownerID, projectID, snapshotDigest)
@@ -116,12 +127,17 @@ func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, sna
 		SnapshotDigest: snapshot.Digest,
 		SnapshotSchema: snapshot.SchemaVersion,
 		ProfileID:      LocalProfileID,
+		SubtitleMode:   subtitleMode,
 	})
 	if err != nil {
 		return jobs.Job{}, fmt.Errorf("marshal render payload: %w", err)
 	}
 
-	dedupe := strings.Join([]string{"render", projectID.String(), snapshot.Digest, LocalProfileID}, ":")
+	dedupeParts := []string{"render", projectID.String(), snapshot.Digest, LocalProfileID}
+	if subtitleMode != SubtitleModeOff {
+		dedupeParts = append(dedupeParts, string(subtitleMode))
+	}
+	dedupe := strings.Join(dedupeParts, ":")
 	job, err := s.jobs.Enqueue(ctx, jobs.EnqueueInput{
 		ID:          s.newID(),
 		OwnerID:     ownerID,
@@ -227,6 +243,7 @@ func (s *Service) Retry(ctx context.Context, ownerID, projectID, sourceJobID, re
 		SnapshotDigest:     sourcePayload.SnapshotDigest,
 		SnapshotSchema:     sourcePayload.SnapshotSchema,
 		ProfileID:          sourcePayload.ProfileID,
+		SubtitleMode:       sourcePayload.SubtitleMode,
 		RetryOfRenderJobID: stringPtr(sourceJobID.String()),
 	})
 	if err != nil {
@@ -332,6 +349,7 @@ func (s *Service) jobToView(ctx context.Context, ownerID, projectID uuid.UUID, j
 		ErrorCode:           job.ErrorCode,
 		SnapshotDigest:      payload.SnapshotDigest,
 		ProfileID:           payload.ProfileID,
+		SubtitleMode:        payload.SubtitleMode,
 		CancellationPending: job.State == jobs.StateRunning && job.CancelRequestedAt != nil,
 		CreatedAt:           job.CreatedAt,
 		UpdatedAt:           job.UpdatedAt,
@@ -368,6 +386,11 @@ func decodeRenderPayload(raw json.RawMessage) (RenderPayload, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil || !validDigest(payload.SnapshotDigest) || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID {
 		return RenderPayload{}, ErrInvalidRequest
 	}
+	mode, err := normalizeSubtitleMode([]SubtitleMode{payload.SubtitleMode})
+	if err != nil {
+		return RenderPayload{}, err
+	}
+	payload.SubtitleMode = mode
 	if payload.RetryOfRenderJobID != nil {
 		retryID, err := uuid.Parse(*payload.RetryOfRenderJobID)
 		if err != nil || retryID == uuid.Nil {
@@ -375,6 +398,22 @@ func decodeRenderPayload(raw json.RawMessage) (RenderPayload, error) {
 		}
 	}
 	return payload, nil
+}
+
+func normalizeSubtitleMode(requested []SubtitleMode) (SubtitleMode, error) {
+	if len(requested) > 1 {
+		return "", ErrInvalidRequest
+	}
+	if len(requested) == 0 || strings.TrimSpace(string(requested[0])) == "" {
+		return SubtitleModeOff, nil
+	}
+	mode := SubtitleMode(strings.ToLower(strings.TrimSpace(string(requested[0]))))
+	switch mode {
+	case SubtitleModeOff, SubtitleModeWebVTT:
+		return mode, nil
+	default:
+		return "", ErrInvalidRequest
+	}
 }
 
 func stringPtr(value string) *string {

@@ -336,6 +336,67 @@ func TestRenderArtifactRepositoryIntegrationRejectsFinalizationAfterCancelReques
 	}
 }
 
+func TestRenderArtifactRepositoryIntegrationRejectsCrossProjectSubtitleSidecar(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	ownerA, ownerB := uuid.New(), uuid.New()
+	projects := NewProjectRepository(pool)
+	projectA, err := projects.Create(ctx, ownerA, validIntegrationCreateInput("Render sidecar A"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectB, err := projects.Create(ctx, ownerB, validIntegrationCreateInput("Render sidecar B"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jobsRepo := NewJobRepository(pool)
+	projectAID := projectA.ID
+	job, err := jobsRepo.Enqueue(ctx, jobs.EnqueueInput{
+		ID: uuid.New(), OwnerID: ownerA, ProjectID: &projectAID, Kind: renderexport.JobKind, MaxAttempts: 2,
+		Payload: json.RawMessage(`{"snapshot_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","profile_id":"local_software_mp4_v1","subtitle_mode":"webvtt"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed := claimRenderJob(t, jobsRepo)
+
+	now := time.Now().UTC()
+	videoID := uuid.New()
+	video := mediaasset.MediaAsset{
+		ID: videoID, OwnerID: ownerA, ProjectID: projectA.ID, Kind: mediaasset.KindVideo, Origin: mediaasset.OriginSystem,
+		ObjectKey: "projects/" + projectA.ID.String() + "/assets/" + videoID.String(), MimeType: "video/mp4", ByteSize: 2048,
+		SHA256: strings.Repeat("b", 64), OriginalFilename: "render.mp4", Metadata: json.RawMessage(`{"source":"render_export_v1"}`), CreatedAt: now, UpdatedAt: now,
+	}
+	subtitleID := uuid.New()
+	subtitleMetadata, _ := json.Marshal(map[string]string{
+		"source": renderexport.JobKind, "render_job_id": job.ID.String(), "snapshot_digest": strings.Repeat("a", 64),
+		"profile_id": renderexport.LocalProfileID, "output_role": "subtitle",
+	})
+	subtitle := mediaasset.MediaAsset{
+		ID: subtitleID, OwnerID: ownerB, ProjectID: projectB.ID, Kind: mediaasset.KindDocument, Origin: mediaasset.OriginSystem,
+		ObjectKey: "projects/" + projectB.ID.String() + "/assets/" + subtitleID.String(), MimeType: "text/vtt", ByteSize: 32,
+		SHA256: strings.Repeat("c", 64), OriginalFilename: "render.vtt", Metadata: subtitleMetadata, CreatedAt: now, UpdatedAt: now,
+	}
+	assets := NewMediaAssetRepository(pool)
+	if _, err := assets.Create(ctx, video); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := assets.Create(ctx, subtitle); err != nil {
+		t.Fatal(err)
+	}
+
+	candidate := renderexport.RenderArtifact{
+		ID: uuid.New(), OwnerID: ownerA, ProjectID: projectA.ID, JobID: job.ID, SnapshotDigest: strings.Repeat("a", 64),
+		ProfileID: renderexport.LocalProfileID, MediaAssetID: video.ID, SubtitleMediaAssetID: &subtitle.ID,
+		ByteSize: video.ByteSize, SHA256: video.SHA256, MimeType: video.MimeType, DurationMS: 1000, Width: 320, Height: 180,
+		ToolchainVersion: "ffmpeg version integration-test", CreatedAt: now,
+	}
+	if _, err := NewRenderArtifactRepository(pool).CreateForLease(ctx, *claimed.LeaseToken, candidate); !errors.Is(err, renderexport.ErrArtifactNotFound) {
+		t.Fatalf("cross-owner/project subtitle sidecar was accepted: %v", err)
+	}
+}
+
 func claimRenderJob(t *testing.T, repository *JobRepository) jobs.Job {
 	t.Helper()
 	claimed, err := repository.ClaimNext(context.Background(), jobs.ClaimOptions{

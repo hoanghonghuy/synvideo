@@ -273,7 +273,7 @@ func main() {
 			}
 		}
 		if storage != nil && mediaAssetService != nil && cfg.Environment != config.EnvironmentProduction {
-			renderExportService, err = configureLocalRender(ctx, pool, sceneEditorRepo, jobsRepo, jobsRepo, mediaAssetService, jobsRegistry)
+			renderExportService, err = configureLocalRender(ctx, pool, sceneEditorRepo, jobsRepo, jobsRepo, mediaAssetService, captionRepo, jobsRegistry)
 			if err != nil {
 				logger.Error("local render runtime initialization failed", "error", err)
 				os.Exit(1)
