@@ -58,7 +58,13 @@ func (s *PublishStatusService) Reconcile(ctx context.Context, ownerID, projectID
 	}
 	status, err := s.remote.Get(ctx, token.AccessToken, attempt.RemoteVideoID)
 	if err != nil {
-		return PublishAttempt{}, err
+		// A transport/provider read failure happens after the remote video already
+		// exists. Persist a status-check retry signal while preserving the last
+		// truthful publication state; never send the attempt back to upload retry,
+		// which could duplicate a YouTube video.
+		attempt.UpdatedAt = s.now().UTC()
+		attempt.LastErrorCode = "youtube_status_retryable"
+		return s.save(ctx, attempt)
 	}
 	return s.persistRemoteStatus(ctx, attempt, status)
 }
