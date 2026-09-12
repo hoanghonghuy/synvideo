@@ -73,6 +73,7 @@ let renderPollTimer: ReturnType<typeof setInterval> | null = null
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
 const invalid = computed(() => hasEditorErrors(draft.value))
 const renderBusy = computed(() => renderJob.value !== null && !isRenderExportTerminal(renderJob.value))
+const hasSnapshotBoundCaptions = computed(() => composition.value?.scenes.some((scene) => scene.caption) ?? false)
 const snapshotBlocked = computed(() => composition.value?.state !== 'CURRENT' || dirty.value || invalid.value || conflict.value || renderBusy.value)
 const renderDownloadURL = computed(() => {
   const assetID = renderJob.value?.state === 'succeeded' ? renderJob.value.artifact?.media_asset_id : undefined
@@ -564,7 +565,10 @@ async function applyUpstreamReconcile() {
             <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Snapshot &amp; render MP4</button>
           </div>
         </div>
-        <p id="subtitle-mode-help" class="action-hint">WebVTT uses only caption revisions pinned by this immutable snapshot. The download appears only after the sidecar is durably finalized.</p>
+        <p id="subtitle-mode-help" class="action-hint">
+          WebVTT uses only caption revisions pinned by this immutable snapshot. The download appears only after the sidecar is durably finalized.
+          <span v-if="renderSubtitleMode === 'webvtt' && !hasSnapshotBoundCaptions">No captions are currently bound, so this render will not create a subtitle sidecar.</span>
+        </p>
         <ol class="preview-timeline">
           <li v-for="scene in draft.scenes" :key="`preview-${scene.id}`">
             <strong>{{ scene.scene_key }}</strong>
@@ -606,6 +610,7 @@ async function applyUpstreamReconcile() {
               <button type="button" class="history-item" :data-state="item.state" @click="selectRenderHistoryItem(item)">
                 <span>{{ item.state }} · subtitles {{ item.subtitle_mode }}</span>
                 <span>{{ item.snapshot_digest.slice(0, 8) }}…</span>
+                <span>{{ item.subtitle_mode === 'webvtt' ? (item.artifact?.subtitle_media_asset_id ? 'WebVTT ready' : 'WebVTT requested') : 'Subtitles off' }}</span>
                 <span>{{ item.created_at }}</span>
               </button>
               <div class="history-actions">
