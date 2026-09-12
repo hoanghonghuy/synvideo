@@ -111,7 +111,6 @@ func (s *handlerAssets) Store(_ context.Context, principal project.Principal, pr
 	if input.Kind == mediaasset.KindDocument {
 		s.subtitleBytes = append([]byte(nil), body...)
 		s.subtitle = &asset
-		s.subtitleBytes = append([]byte(nil), body...)
 	} else {
 		s.final = &asset
 	}
