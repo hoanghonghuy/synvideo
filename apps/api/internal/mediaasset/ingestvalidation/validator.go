@@ -6,14 +6,16 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 )
 
 type Kind string
 
 const (
-	KindImage Kind = "image"
-	KindVideo Kind = "video"
-	KindAudio Kind = "audio"
+	KindImage    Kind = "image"
+	KindVideo    Kind = "video"
+	KindAudio    Kind = "audio"
+	KindDocument Kind = "document"
 )
 
 type DeclaredInput struct {
@@ -59,6 +61,8 @@ func (v *Validator) ValidateFile(ctx context.Context, path string, declared Decl
 		return v.validateImageFile(path, declared)
 	case KindVideo, KindAudio:
 		return v.validateProbeFile(ctx, path, declared)
+	case KindDocument:
+		return v.validateDocumentFile(path, declared)
 	default:
 		return VerifiedContent{}, ErrUnsupported
 	}
@@ -80,6 +84,30 @@ func (v *Validator) ValidateReader(ctx context.Context, reader io.Reader, declar
 		return VerifiedContent{}, nil, ErrInfrastructure
 	}
 	return verified, data, nil
+}
+
+func (v *Validator) validateDocumentFile(path string, declared DeclaredInput) (VerifiedContent, error) {
+	if declared.MimeType != "text/vtt" {
+		return VerifiedContent{}, ErrUnsupported
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return VerifiedContent{}, ErrInfrastructure
+	}
+	if len(payload) == 0 || !utf8.Valid(payload) || strings.IndexByte(string(payload), 0) >= 0 {
+		return VerifiedContent{}, ErrMalformed
+	}
+	text := strings.TrimPrefix(string(payload), "\uFEFF")
+	if !strings.HasPrefix(text, "WEBVTT") {
+		return VerifiedContent{}, ErrMalformed
+	}
+	if len(text) > len("WEBVTT") {
+		next := text[len("WEBVTT")]
+		if next != '\n' && next != '\r' && next != ' ' && next != '\t' {
+			return VerifiedContent{}, ErrMalformed
+		}
+	}
+	return reconcileDeclared(VerifiedContent{Kind: KindDocument, MimeType: "text/vtt"}, declared)
 }
 
 func (v *Validator) validateImageFile(path string, declared DeclaredInput) (VerifiedContent, error) {
