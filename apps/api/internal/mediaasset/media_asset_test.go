@@ -283,6 +283,25 @@ func TestServiceStoreCalculatesStreamingMetadataAndUsesScopedKey(t *testing.T) {
 	}
 }
 
+func TestServiceStoreAcceptsBoundedWebVTTDocument(t *testing.T) {
+	input := mediaasset.CreateInput{
+		Kind: mediaasset.KindDocument, Origin: mediaasset.OriginSystem, MimeType: "text/vtt",
+		OriginalFilename: "render.vtt", Metadata: []byte(`{"source":"render_export_v1"}`),
+		Reader: bytes.NewReader([]byte("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n")), MaxBytes: 1 << 20,
+	}
+	repository := &fakeMetadataRepository{}
+	storage := &fakeObjectStorage{}
+	service := mediaasset.NewService(fakeProjectRepository{item: validProject()}, repository, storage)
+
+	asset, err := service.Store(context.Background(), project.Principal{OwnerID: ownerID}, projectID, input)
+	if err != nil {
+		t.Fatalf("store WebVTT: %v", err)
+	}
+	if asset.Kind != mediaasset.KindDocument || asset.MimeType != "text/vtt" || repository.created.ID != asset.ID || storage.putCalls != 1 {
+		t.Fatalf("unexpected durable WebVTT asset: asset=%+v created=%+v puts=%d", asset, repository.created, storage.putCalls)
+	}
+}
+
 func TestServiceStoreRejectsOversizedReaderWithoutPersistingMetadata(t *testing.T) {
 	input := validCreateInput()
 	input.MaxBytes = int64(len(testfixtures.MinimalPNG) - 1)

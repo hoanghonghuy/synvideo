@@ -36,16 +36,17 @@ type createRenderExportRequest struct {
 }
 
 type renderArtifactResponse struct {
-	ID           string `json:"id"`
-	MediaAssetID string `json:"media_asset_id"`
-	ByteSize     int64  `json:"byte_size"`
-	SHA256       string `json:"sha256"`
-	MimeType     string `json:"mime_type"`
-	DurationMS   int64  `json:"duration_ms"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	Toolchain    string `json:"toolchain_version"`
-	CreatedAt    string `json:"created_at"`
+	ID                   string  `json:"id"`
+	MediaAssetID         string  `json:"media_asset_id"`
+	SubtitleMediaAssetID *string `json:"subtitle_media_asset_id,omitempty"`
+	ByteSize             int64   `json:"byte_size"`
+	SHA256               string  `json:"sha256"`
+	MimeType             string  `json:"mime_type"`
+	DurationMS           int64   `json:"duration_ms"`
+	Width                int     `json:"width"`
+	Height               int     `json:"height"`
+	Toolchain            string  `json:"toolchain_version"`
+	CreatedAt            string  `json:"created_at"`
 }
 
 type renderExportResponse struct {
@@ -242,7 +243,7 @@ func toRenderExportResponse(view renderexport.JobView) renderExportResponse {
 		response.RetryOfRenderJobID = &retryID
 	}
 	if view.Artifact != nil {
-		response.Artifact = &renderArtifactResponse{
+		artifactResponse := &renderArtifactResponse{
 			ID:           view.Artifact.ID.String(),
 			MediaAssetID: view.Artifact.MediaAssetID.String(),
 			ByteSize:     view.Artifact.ByteSize,
@@ -254,6 +255,11 @@ func toRenderExportResponse(view renderexport.JobView) renderExportResponse {
 			Toolchain:    view.Artifact.ToolchainVersion,
 			CreatedAt:    view.Artifact.CreatedAt.UTC().Format(time.RFC3339Nano),
 		}
+		if view.Artifact.SubtitleMediaAssetID != nil {
+			subtitleID := view.Artifact.SubtitleMediaAssetID.String()
+			artifactResponse.SubtitleMediaAssetID = &subtitleID
+		}
+		response.Artifact = artifactResponse
 	}
 	return response
 }

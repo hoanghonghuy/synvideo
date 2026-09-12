@@ -19,6 +19,7 @@ type renderMediaService interface {
 
 type renderMediaRepository interface {
 	FindSystemRenderByJob(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (mediaasset.MediaAsset, error)
+	FindSystemRenderSubtitleByJob(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (mediaasset.MediaAsset, error)
 }
 
 type AssetStore struct {
@@ -43,6 +44,13 @@ func (s *AssetStore) FindFinalByJob(ctx context.Context, principal project.Princ
 		return mediaasset.MediaAsset{}, mediaasset.ErrUnauthenticated
 	}
 	return s.repo.FindSystemRenderByJob(ctx, principal.OwnerID, projectID, jobID)
+}
+
+func (s *AssetStore) FindSubtitleByJob(ctx context.Context, principal project.Principal, projectID, jobID uuid.UUID) (mediaasset.MediaAsset, error) {
+	if principal.OwnerID == uuid.Nil {
+		return mediaasset.MediaAsset{}, mediaasset.ErrUnauthenticated
+	}
+	return s.repo.FindSystemRenderSubtitleByJob(ctx, principal.OwnerID, projectID, jobID)
 }
 
 func (s *AssetStore) Store(ctx context.Context, principal project.Principal, projectID uuid.UUID, input mediaasset.CreateInput) (mediaasset.MediaAsset, error) {

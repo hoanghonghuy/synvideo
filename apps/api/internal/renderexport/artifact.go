@@ -20,25 +20,29 @@ var (
 var artifactSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type RenderArtifact struct {
-	ID               uuid.UUID `json:"id"`
-	OwnerID          uuid.UUID `json:"-"`
-	ProjectID        uuid.UUID `json:"project_id"`
-	JobID            uuid.UUID `json:"job_id"`
-	SnapshotDigest   string    `json:"snapshot_digest"`
-	ProfileID        string    `json:"profile_id"`
-	MediaAssetID     uuid.UUID `json:"media_asset_id"`
-	ByteSize         int64     `json:"byte_size"`
-	SHA256           string    `json:"sha256"`
-	MimeType         string    `json:"mime_type"`
-	DurationMS       int64     `json:"duration_ms"`
-	Width            int       `json:"width"`
-	Height           int       `json:"height"`
-	ToolchainVersion string    `json:"toolchain_version"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                   uuid.UUID  `json:"id"`
+	OwnerID              uuid.UUID  `json:"-"`
+	ProjectID            uuid.UUID  `json:"project_id"`
+	JobID                uuid.UUID  `json:"job_id"`
+	SnapshotDigest       string     `json:"snapshot_digest"`
+	ProfileID            string     `json:"profile_id"`
+	MediaAssetID         uuid.UUID  `json:"media_asset_id"`
+	SubtitleMediaAssetID *uuid.UUID `json:"subtitle_media_asset_id,omitempty"`
+	ByteSize             int64      `json:"byte_size"`
+	SHA256               string     `json:"sha256"`
+	MimeType             string     `json:"mime_type"`
+	DurationMS           int64      `json:"duration_ms"`
+	Width                int        `json:"width"`
+	Height               int        `json:"height"`
+	ToolchainVersion     string     `json:"toolchain_version"`
+	CreatedAt            time.Time  `json:"created_at"`
 }
 
 func (a RenderArtifact) Validate() error {
 	if a.ID == uuid.Nil || a.OwnerID == uuid.Nil || a.ProjectID == uuid.Nil || a.JobID == uuid.Nil || a.MediaAssetID == uuid.Nil {
+		return ErrInvalidRequest
+	}
+	if a.SubtitleMediaAssetID != nil && *a.SubtitleMediaAssetID == uuid.Nil {
 		return ErrInvalidRequest
 	}
 	if !validDigest(a.SnapshotDigest) || a.ProfileID != LocalProfileID {

@@ -12,7 +12,7 @@ import (
 
 var ErrSnapshotCaptionMismatch = errors.New("render export snapshot caption mismatch")
 
-type snapshotCaptionRevisionReader interface {
+type SnapshotCaptionRevisionReader interface {
 	GetRevision(ctx context.Context, ownerID, projectID uuid.UUID, scenePlanVersion int, sceneKey string, revision int) (captions.Document, error)
 }
 
@@ -25,7 +25,7 @@ type SnapshotCaption struct {
 // ResolveSnapshotCaptions hydrates only the caption revisions pinned by an
 // immutable composition snapshot. It deliberately has no latest-revision read
 // path: edits made after enqueue must not mutate queued/running/retried output.
-func ResolveSnapshotCaptions(ctx context.Context, reader snapshotCaptionRevisionReader, ownerID, projectID uuid.UUID, snapshot sceneeditor.Snapshot) ([]SnapshotCaption, error) {
+func ResolveSnapshotCaptions(ctx context.Context, reader SnapshotCaptionRevisionReader, ownerID, projectID uuid.UUID, snapshot sceneeditor.Snapshot) ([]SnapshotCaption, error) {
 	if reader == nil || ownerID == uuid.Nil || projectID == uuid.Nil || snapshot.ProjectID != projectID || snapshot.ScenePlanVersion < 1 {
 		return nil, ErrSnapshotCaptionMismatch
 	}

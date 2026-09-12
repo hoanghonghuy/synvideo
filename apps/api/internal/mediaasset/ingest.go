@@ -34,6 +34,8 @@ func toIngestKind(kind Kind) ingestvalidation.Kind {
 		return ingestvalidation.KindVideo
 	case KindAudio:
 		return ingestvalidation.KindAudio
+	case KindDocument:
+		return ingestvalidation.KindDocument
 	default:
 		return ""
 	}
@@ -47,6 +49,8 @@ func fromIngestKind(kind ingestvalidation.Kind) Kind {
 		return KindVideo
 	case ingestvalidation.KindAudio:
 		return KindAudio
+	case ingestvalidation.KindDocument:
+		return KindDocument
 	default:
 		return KindOther
 	}

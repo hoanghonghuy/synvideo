@@ -11,6 +11,7 @@ import (
 const (
 	maxWebVTTCues      = 10_000
 	maxWebVTTCueRunes  = 2_000
+	maxWebVTTBytes     = 8 << 20
 	maxWebVTTTimestamp = int64(99*60*60*1000 + 59*60*1000 + 59*1000 + 999)
 )
 
@@ -64,6 +65,9 @@ func BuildWebVTT(input []WebVTTCue) ([]byte, error) {
 		out.WriteByte('\n')
 		out.WriteString(escapeWebVTTText(cue.Text))
 		out.WriteString("\n\n")
+	}
+	if out.Len() > maxWebVTTBytes {
+		return nil, ErrInvalidWebVTT
 	}
 	return []byte(out.String()), nil
 }

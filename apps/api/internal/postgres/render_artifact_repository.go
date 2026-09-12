@@ -23,7 +23,7 @@ var _ renderexport.ArtifactRepository = (*RenderArtifactRepository)(nil)
 
 const renderArtifactFields = `
 	id, owner_id, project_id, job_id, snapshot_digest, profile_id,
-	media_asset_id, byte_size, sha256, mime_type, duration_ms, width,
+	media_asset_id, subtitle_media_asset_id, byte_size, sha256, mime_type, duration_ms, width,
 	height, toolchain_version, created_at
 `
 
@@ -37,24 +37,35 @@ func (r *RenderArtifactRepository) CreateForLease(ctx context.Context, leaseToke
 	query := fmt.Sprintf(`
 		INSERT INTO render_artifacts (
 			id, owner_id, project_id, job_id, snapshot_digest, profile_id,
-			media_asset_id, byte_size, sha256, mime_type, duration_ms, width,
+			media_asset_id, subtitle_media_asset_id, byte_size, sha256, mime_type, duration_ms, width,
 			height, toolchain_version, created_at
 		)
-		SELECT $1,$2,$3,$4,$5::char(64),$6,$7,$8,$9::char(64),$10,$11,$12,$13,$14,$15
+		SELECT $1,$2,$3,$4,$5::char(64),$6,$7,$8::uuid,$9,$10::char(64),$11,$12,$13,$14,$15,$16
 		FROM jobs j
 		JOIN media_assets m ON m.id=$7
-		WHERE j.id=$4 AND j.owner_id=$2 AND j.project_id=$3 AND j.kind=$16
-		  AND j.state='running' AND j.lease_token=$17 AND j.lease_until>now()
+		LEFT JOIN media_assets sm ON sm.id=$8::uuid
+		WHERE j.id=$4 AND j.owner_id=$2 AND j.project_id=$3 AND j.kind=$17
+		  AND j.state='running' AND j.lease_token=$18 AND j.lease_until>now()
 		  AND j.cancel_requested_at IS NULL
 		  AND j.payload->>'snapshot_digest'=$5::text AND j.payload->>'profile_id'=$6
 		  AND m.owner_id=$2 AND m.project_id=$3 AND m.deletion_requested_at IS NULL
 		  AND m.kind='video' AND m.origin='system'
-		  AND m.byte_size=$8 AND m.sha256=$9::text AND m.mime_type=$10
+		  AND m.byte_size=$9 AND m.sha256=$10::text AND m.mime_type=$11
+		  AND (
+			$8::uuid IS NULL OR (
+				sm.owner_id=$2 AND sm.project_id=$3 AND sm.deletion_requested_at IS NULL
+				AND sm.kind='document' AND sm.origin='system' AND sm.mime_type='text/vtt'
+				AND sm.metadata->>'source'=$17 AND sm.metadata->>'render_job_id'=$4::text
+				AND sm.metadata->>'snapshot_digest'=$5::text AND sm.metadata->>'profile_id'=$6
+				AND sm.metadata->>'output_role'='subtitle'
+				AND j.payload->>'subtitle_mode'='webvtt'
+			)
+		  )
 		RETURNING %s
 	`, renderArtifactFields)
 	created, err := scanRenderArtifact(r.pool.QueryRow(ctx, query,
 		artifact.ID, artifact.OwnerID, artifact.ProjectID, artifact.JobID,
-		artifact.SnapshotDigest, artifact.ProfileID, artifact.MediaAssetID,
+		artifact.SnapshotDigest, artifact.ProfileID, artifact.MediaAssetID, artifact.SubtitleMediaAssetID,
 		artifact.ByteSize, artifact.SHA256, artifact.MimeType, artifact.DurationMS,
 		artifact.Width, artifact.Height, artifact.ToolchainVersion, artifact.CreatedAt,
 		renderexport.JobKind, leaseToken,
@@ -140,7 +151,7 @@ func scanRenderArtifact(row renderArtifactRow) (renderexport.RenderArtifact, err
 	var artifact renderexport.RenderArtifact
 	if err := row.Scan(
 		&artifact.ID, &artifact.OwnerID, &artifact.ProjectID, &artifact.JobID,
-		&artifact.SnapshotDigest, &artifact.ProfileID, &artifact.MediaAssetID,
+		&artifact.SnapshotDigest, &artifact.ProfileID, &artifact.MediaAssetID, &artifact.SubtitleMediaAssetID,
 		&artifact.ByteSize, &artifact.SHA256, &artifact.MimeType, &artifact.DurationMS,
 		&artifact.Width, &artifact.Height, &artifact.ToolchainVersion, &artifact.CreatedAt,
 	); err != nil {

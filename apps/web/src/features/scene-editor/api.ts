@@ -7,6 +7,7 @@ export type SceneEditorState = 'CURRENT' | 'STALE' | 'BROKEN'
 export type SceneEditorFit = 'contain' | 'cover'
 export type SceneEditorTransitionKind = 'cut' | 'fade' | 'crossfade'
 export type RenderExportState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type RenderSubtitleMode = 'off' | 'webvtt'
 
 export interface SceneEditorVisualRef {
   asset_id: string
@@ -122,6 +123,7 @@ export interface SceneEditorReconcilePreview {
 export interface RenderExportArtifact {
   id: string
   media_asset_id: string
+  subtitle_media_asset_id?: string
   byte_size: number
   sha256: string
   mime_type: string
@@ -140,6 +142,7 @@ export interface RenderExportJob {
   error_code?: string
   snapshot_digest: string
   profile_id: string
+  subtitle_mode: RenderSubtitleMode
   retry_of_render_job_id?: string
   cancellation_pending?: boolean
   artifact?: RenderExportArtifact
@@ -213,10 +216,10 @@ export async function createSceneEditorSnapshot(projectID: string, expectedRevis
   })
 }
 
-export async function createRenderExport(projectID: string, snapshotDigest: string): Promise<RenderExportJob> {
+export async function createRenderExport(projectID: string, snapshotDigest: string, subtitleMode: RenderSubtitleMode = 'off'): Promise<RenderExportJob> {
   return request<RenderExportJob>(renderBase(projectID), {
     method: 'POST',
-    body: JSON.stringify({ snapshot_digest: snapshotDigest }),
+    body: JSON.stringify({ snapshot_digest: snapshotDigest, subtitle_mode: subtitleMode }),
   })
 }
 
