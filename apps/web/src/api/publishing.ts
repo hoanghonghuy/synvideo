@@ -103,6 +103,12 @@ export async function retryPublishAttempt(projectID: string, attemptID: string):
   })
 }
 
+export async function reconcilePublishAttempt(projectID: string, attemptID: string): Promise<PublishAttempt> {
+  return request<PublishAttempt>(`/api/v1/projects/${encodeURIComponent(projectID)}/publishing/attempts/${encodeURIComponent(attemptID)}/reconcile`, {
+    method: 'POST',
+  })
+}
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await apiFetch(url, {
     ...init,
