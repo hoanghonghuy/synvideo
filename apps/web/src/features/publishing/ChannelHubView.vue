@@ -414,8 +414,8 @@ function formatDuration(durationMS: number): string {
         <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
       </div>
       <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">Upload progress is indeterminate because artifact total is unavailable in this workspace snapshot.</p>
-      <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" role="status" data-testid="live-progress-status">
-        {{ liveRefreshing ? 'Refreshing saved upload progress…' : liveRefreshMessage || 'Upload progress refreshes automatically while this attempt is queued or uploading.' }}
+      <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" data-testid="live-progress-status">
+        {{ liveRefreshMessage || 'Upload progress refreshes automatically while this attempt is queued or uploading.' }}
       </p>
 
       <div v-if="attempt.last_error_code" class="notice error">Publishing needs attention: {{ attempt.last_error_code }}</div>
