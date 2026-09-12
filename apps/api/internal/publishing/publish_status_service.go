@@ -16,11 +16,11 @@ type RemoteStatusReader interface {
 }
 
 type PublishStatusService struct {
-	attempts     AttemptRepository
+	attempts    AttemptRepository
 	connections ConnectionCredentialReader
-	oauth        OAuthTokenRefresher
-	remote       RemoteStatusReader
-	now          func() time.Time
+	oauth       OAuthTokenRefresher
+	remote      RemoteStatusReader
+	now         func() time.Time
 }
 
 func NewPublishStatusService(attempts AttemptRepository, connections ConnectionCredentialReader, oauth OAuthTokenRefresher, remote RemoteStatusReader) (*PublishStatusService, error) {
@@ -28,11 +28,11 @@ func NewPublishStatusService(attempts AttemptRepository, connections ConnectionC
 		return nil, ErrInvalidModel
 	}
 	return &PublishStatusService{
-		attempts:     attempts,
+		attempts:    attempts,
 		connections: connections,
-		oauth:        oauth,
-		remote:       remote,
-		now:          time.Now,
+		oauth:       oauth,
+		remote:      remote,
+		now:         time.Now,
 	}, nil
 }
 
