@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { ApiError } from '@/api/projects'
@@ -15,7 +15,10 @@ import {
   type ChannelConnection,
   type PublishArtifactSummary,
   type PublishAttempt,
+  type PublishState,
 } from '@/api/publishing'
+
+const LIVE_PROGRESS_REFRESH_MS = 4000
 
 const route = useRoute()
 const projectID = computed(() => String(route.params.id ?? ''))
@@ -30,12 +33,17 @@ const description = ref('')
 const loading = ref(true)
 const submitting = ref(false)
 const refreshing = ref(false)
+const liveRefreshing = ref(false)
 const retrying = ref(false)
 const reconciling = ref(false)
 const connecting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
+const liveRefreshMessage = ref('')
 const attempt = ref<PublishAttempt | null>(null)
+let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let liveRefreshRequest = 0
+let disposed = false
 
 const selectedConnection = computed(() => connections.value.find((item) => item.id === selectedConnectionID.value) ?? null)
 const selectedAttemptArtifact = computed(() => {
@@ -64,11 +72,25 @@ const canSubmit = computed(() => {
   )
 })
 
+watch(
+  () => [attempt.value?.id, attempt.value?.state],
+  () => {
+    liveRefreshMessage.value = ''
+    scheduleLiveProgressRefresh()
+  },
+)
+
 onMounted(() => {
   if (route.query.youtube === 'connected') {
     successMessage.value = 'YouTube authorization completed. Channel capabilities have been refreshed.'
   }
   void loadWorkspace()
+})
+
+onUnmounted(() => {
+  disposed = true
+  liveRefreshRequest += 1
+  clearLiveProgressRefresh()
 })
 
 async function loadWorkspace() {
@@ -136,17 +158,77 @@ async function submit() {
 }
 
 async function refreshAttempt(item: PublishAttempt | null = attempt.value) {
-  if (!item) return
+  if (!item || liveRefreshing.value) return
   refreshing.value = true
   errorMessage.value = ''
   try {
     const refreshed = await getPublishAttempt(projectID.value, item.id)
-    updateAttempt(refreshed)
+    if (attempt.value?.id === item.id) {
+      liveRefreshMessage.value = ''
+      updateAttempt(refreshed)
+      scheduleLiveProgressRefresh()
+    }
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh the persisted publish attempt.'
   } finally {
     refreshing.value = false
   }
+}
+
+async function refreshLiveProgress(attemptID: string) {
+  if (
+    disposed
+    || liveRefreshing.value
+    || refreshing.value
+    || attempt.value?.id !== attemptID
+    || !isLiveProgressState(attempt.value.state)
+  ) {
+    scheduleLiveProgressRefresh()
+    return
+  }
+
+  liveRefreshing.value = true
+  const request = ++liveRefreshRequest
+  try {
+    const refreshed = await getPublishAttempt(projectID.value, attemptID)
+    if (!disposed && request === liveRefreshRequest && attempt.value?.id === attemptID) {
+      liveRefreshMessage.value = ''
+      updateAttempt(refreshed)
+    }
+  } catch {
+    if (!disposed && request === liveRefreshRequest && attempt.value?.id === attemptID) {
+      liveRefreshMessage.value = 'Live progress refresh paused. The last saved upload state is still shown; use Refresh saved state to retry.'
+    }
+  } finally {
+    if (request === liveRefreshRequest) {
+      liveRefreshing.value = false
+    }
+    if (!liveRefreshMessage.value) {
+      scheduleLiveProgressRefresh()
+    }
+  }
+}
+
+function scheduleLiveProgressRefresh() {
+  clearLiveProgressRefresh()
+  const current = attempt.value
+  if (disposed || !current || !isLiveProgressState(current.state) || liveRefreshMessage.value) return
+  const attemptID = current.id
+  liveRefreshTimer = setTimeout(() => {
+    liveRefreshTimer = null
+    void refreshLiveProgress(attemptID)
+  }, LIVE_PROGRESS_REFRESH_MS)
+}
+
+function clearLiveProgressRefresh() {
+  if (liveRefreshTimer !== null) {
+    clearTimeout(liveRefreshTimer)
+    liveRefreshTimer = null
+  }
+}
+
+function isLiveProgressState(state: PublishState): boolean {
+  return state === 'queued' || state === 'uploading'
 }
 
 async function reconcileAttempt() {
@@ -332,6 +414,9 @@ function formatDuration(durationMS: number): string {
         <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
       </div>
       <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">Upload progress is indeterminate because artifact total is unavailable in this workspace snapshot.</p>
+      <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" role="status" data-testid="live-progress-status">
+        {{ liveRefreshing ? 'Refreshing saved upload progress…' : liveRefreshMessage || 'Upload progress refreshes automatically while this attempt is queued or uploading.' }}
+      </p>
 
       <div v-if="attempt.last_error_code" class="notice error">Publishing needs attention: {{ attempt.last_error_code }}</div>
       <p v-if="attempt.last_error_code === 'youtube_status_retryable'" class="warning-copy">The remote video already exists. Retry only the YouTube status check; do not restart the upload.</p>
@@ -350,8 +435,8 @@ function formatDuration(durationMS: number): string {
         <button v-if="canReconcile" class="primary-button" type="button" :disabled="reconciling || refreshing || retrying" @click="reconcileAttempt">
           {{ reconciling ? 'Checking YouTube…' : attempt.last_error_code === 'youtube_status_retryable' ? 'Retry YouTube status check' : 'Check YouTube status' }}
         </button>
-        <button class="secondary-button" type="button" :disabled="refreshing || retrying || reconciling" @click="refreshAttempt()">
-          {{ refreshing ? 'Refreshing…' : 'Refresh saved state' }}
+        <button class="secondary-button" type="button" :disabled="refreshing || liveRefreshing || retrying || reconciling" @click="refreshAttempt()">
+          {{ refreshing || liveRefreshing ? 'Refreshing…' : 'Refresh saved state' }}
         </button>
       </div>
     </section>
@@ -370,7 +455,7 @@ function formatDuration(durationMS: number): string {
         <p>Create an attempt above; it remains visible here after refresh or restart.</p>
       </div>
       <div v-else class="history-list">
-        <button v-for="item in attempts" :key="item.id" type="button" class="history-row" @click="inspectAttempt(item)">
+        <button v-for="item in attempts" :key="item.id" type="button" class="history-row" :data-attempt-id="item.id" @click="inspectAttempt(item)">
           <span class="history-main">
             <strong>{{ item.title }}</strong>
             <span>{{ new Date(item.created_at).toLocaleString() }} · {{ item.uploaded_bytes.toLocaleString() }} bytes</span>
@@ -428,6 +513,7 @@ function formatDuration(durationMS: number): string {
 .progress-block { display: grid; gap: 8px; margin-top: 18px; }
 .progress-copy { display: flex; justify-content: space-between; gap: 12px; }
 progress { width: 100%; height: 12px; }
+.live-refresh-status { margin: 10px 0 0; color: #587068; font-size: 13px; }
 .attempt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .history-row { display: flex; width: 100%; min-height: 58px; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid #d3ddd8; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .history-row:hover { border-color: #8daaa0; }
