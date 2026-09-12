@@ -101,6 +101,34 @@ describe('ChannelHubView live upload progress', () => {
     wrapper.unmount()
   })
 
+  it('keeps routine polling copy stable and avoids a nested live-region status', async () => {
+    const uploading = publishAttempt('attempt-quiet', 'uploading', 250)
+    const progressed = publishAttempt('attempt-quiet', 'uploading', 500)
+    vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([uploading])
+    const getSpy = vi.spyOn(publishingApi, 'getPublishAttempt').mockResolvedValue(progressed)
+
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.get('[data-attempt-id="attempt-quiet"]').trigger('click')
+    await flushPromises()
+
+    const initialStatus = wrapper.get('[data-testid="live-progress-status"]')
+    expect(initialStatus.text()).toContain('refreshes automatically')
+    expect(initialStatus.attributes('role')).toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(4000)
+    await flushPromises()
+
+    expect(getSpy).toHaveBeenCalledTimes(1)
+    const refreshedStatus = wrapper.get('[data-testid="live-progress-status"]')
+    expect(refreshedStatus.text()).toBe(initialStatus.text())
+    expect(refreshedStatus.text()).not.toContain('Refreshing saved upload progress')
+    expect(refreshedStatus.attributes('role')).toBeUndefined()
+    expect(wrapper.text()).toContain('500 bytes')
+
+    wrapper.unmount()
+  })
+
   it('cancels scheduled refresh on unmount', async () => {
     vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([
       publishAttempt('attempt-2', 'queued', 0),
