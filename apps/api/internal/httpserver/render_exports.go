@@ -18,7 +18,7 @@ import (
 )
 
 type RenderExportService interface {
-	Enqueue(context.Context, uuid.UUID, uuid.UUID, string) (jobs.Job, error)
+	Enqueue(context.Context, uuid.UUID, uuid.UUID, string, ...renderexport.SubtitleMode) (jobs.Job, error)
 	Get(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (renderexport.JobView, error)
 	Cancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (renderexport.JobView, error)
 	Retry(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) (renderexport.JobView, error)
@@ -31,7 +31,8 @@ type renderExportHandler struct {
 }
 
 type createRenderExportRequest struct {
-	SnapshotDigest string `json:"snapshot_digest"`
+	SnapshotDigest string                    `json:"snapshot_digest"`
+	SubtitleMode   renderexport.SubtitleMode `json:"subtitle_mode,omitempty"`
 }
 
 type renderArtifactResponse struct {
@@ -48,18 +49,19 @@ type renderArtifactResponse struct {
 }
 
 type renderExportResponse struct {
-	ID                  string                  `json:"id"`
-	State               string                  `json:"state"`
-	Attempt             int                     `json:"attempt"`
-	MaxAttempts         int                     `json:"max_attempts"`
-	ErrorCode           *string                 `json:"error_code,omitempty"`
-	SnapshotDigest      string                  `json:"snapshot_digest"`
-	ProfileID           string                  `json:"profile_id"`
-	RetryOfRenderJobID  *string                 `json:"retry_of_render_job_id,omitempty"`
-	CancellationPending bool                    `json:"cancellation_pending"`
-	Artifact            *renderArtifactResponse `json:"artifact,omitempty"`
-	CreatedAt           string                  `json:"created_at"`
-	UpdatedAt           string                  `json:"updated_at"`
+	ID                  string                    `json:"id"`
+	State               string                    `json:"state"`
+	Attempt             int                       `json:"attempt"`
+	MaxAttempts         int                       `json:"max_attempts"`
+	ErrorCode           *string                   `json:"error_code,omitempty"`
+	SnapshotDigest      string                    `json:"snapshot_digest"`
+	ProfileID           string                    `json:"profile_id"`
+	SubtitleMode        renderexport.SubtitleMode `json:"subtitle_mode"`
+	RetryOfRenderJobID  *string                   `json:"retry_of_render_job_id,omitempty"`
+	CancellationPending bool                      `json:"cancellation_pending"`
+	Artifact            *renderArtifactResponse   `json:"artifact,omitempty"`
+	CreatedAt           string                    `json:"created_at"`
+	UpdatedAt           string                    `json:"updated_at"`
 }
 
 type retryRenderExportRequest struct {
@@ -87,7 +89,7 @@ func (h renderExportHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, project.ValidationError{Fields: map[string]string{"body": "invalid_json"}})
 		return
 	}
-	job, err := h.service.Enqueue(r.Context(), principal.OwnerID, projectID, req.SnapshotDigest)
+	job, err := h.service.Enqueue(r.Context(), principal.OwnerID, projectID, req.SnapshotDigest, req.SubtitleMode)
 	if err != nil {
 		writeRenderExportAPIError(w, err)
 		return
@@ -230,6 +232,7 @@ func toRenderExportResponse(view renderexport.JobView) renderExportResponse {
 		ErrorCode:           view.ErrorCode,
 		SnapshotDigest:      view.SnapshotDigest,
 		ProfileID:           view.ProfileID,
+		SubtitleMode:        view.SubtitleMode,
 		CancellationPending: view.CancellationPending,
 		CreatedAt:           view.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:           view.UpdatedAt.UTC().Format(time.RFC3339Nano),

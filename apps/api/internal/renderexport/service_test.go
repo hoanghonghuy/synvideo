@@ -79,8 +79,51 @@ func TestEnqueueBindsJobToAuthoritativeImmutableSnapshot(t *testing.T) {
 	if err := json.Unmarshal(queue.input.Payload, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	if payload.SnapshotDigest != digest || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID {
+	if payload.SnapshotDigest != digest || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID || payload.SubtitleMode != SubtitleModeOff {
 		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestEnqueueWebVTTModeIsImmutableAndDedupeDistinct(t *testing.T) {
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	store := &snapshotStoreStub{snapshot: sceneeditor.Snapshot{
+		SchemaVersion: sceneeditor.SnapshotSchemaVersion,
+		ProjectID:     projectID,
+		Digest:        digest,
+	}}
+	queue := &jobQueueStub{job: jobs.Job{ID: uuid.New()}}
+	service := NewService(store, queue, uuid.New)
+
+	_, err := service.Enqueue(context.Background(), ownerID, projectID, digest, SubtitleModeWebVTT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queue.input.DedupeKey == nil || *queue.input.DedupeKey != "render:"+projectID.String()+":"+digest+":"+LocalProfileID+":webvtt" {
+		t.Fatalf("webvtt dedupe key = %v", queue.input.DedupeKey)
+	}
+	var payload RenderPayload
+	if err := json.Unmarshal(queue.input.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.SubtitleMode != SubtitleModeWebVTT {
+		t.Fatalf("subtitle mode = %q, want %q", payload.SubtitleMode, SubtitleModeWebVTT)
+	}
+}
+
+func TestEnqueueRejectsInvalidSubtitleModeBeforeDependencies(t *testing.T) {
+	store := &snapshotStoreStub{}
+	queue := &jobQueueStub{}
+	service := NewService(store, queue, uuid.New)
+	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	_, err := service.Enqueue(context.Background(), uuid.New(), uuid.New(), digest, SubtitleMode("burned-in"))
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("Enqueue() error = %v, want ErrInvalidRequest", err)
+	}
+	if store.digest != "" || queue.calls != 0 {
+		t.Fatalf("invalid subtitle mode reached dependencies: digest=%q calls=%d", store.digest, queue.calls)
 	}
 }
 

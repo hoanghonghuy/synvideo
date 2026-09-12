@@ -194,6 +194,12 @@ func TestRetryCreatesLinkedJobWithoutMutatingSource(t *testing.T) {
 	projectID := uuid.New()
 	reader := newLifecycleJobReader()
 	source := terminalRenderJob(ownerID, projectID, jobs.StateFailed)
+	var sourcePayload RenderPayload
+	if err := json.Unmarshal(source.Payload, &sourcePayload); err != nil {
+		t.Fatal(err)
+	}
+	sourcePayload.SubtitleMode = SubtitleModeWebVTT
+	source.Payload, _ = json.Marshal(sourcePayload)
 	reader.seed(source)
 	service := NewServiceWithRuntime(nil, &lifecycleQueue{reader: reader}, reader, nil, uuid.New)
 	requestID := uuid.New()
@@ -204,6 +210,9 @@ func TestRetryCreatesLinkedJobWithoutMutatingSource(t *testing.T) {
 	}
 	if retryView.RetryOfRenderJobID == nil || *retryView.RetryOfRenderJobID != source.ID {
 		t.Fatalf("retry lineage = %#v", retryView.RetryOfRenderJobID)
+	}
+	if retryView.SubtitleMode != SubtitleModeWebVTT {
+		t.Fatalf("retry subtitle mode = %q, want %q", retryView.SubtitleMode, SubtitleModeWebVTT)
 	}
 	sourceAfter, err := reader.GetByIDForProject(context.Background(), ownerID, projectID, source.ID)
 	if err != nil || sourceAfter.State != jobs.StateFailed {

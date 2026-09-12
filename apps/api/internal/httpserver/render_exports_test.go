@@ -23,18 +23,22 @@ func (r renderResolverStub) Resolve(*http.Request) (project.Principal, error) {
 }
 
 type renderExportServiceStub struct {
-	job        jobs.Job
-	view       renderexport.JobView
-	enqueueErr error
-	getErr     error
-	ownerID    uuid.UUID
-	projectID  uuid.UUID
-	digest     string
-	jobID      uuid.UUID
+	job          jobs.Job
+	view         renderexport.JobView
+	enqueueErr   error
+	getErr       error
+	ownerID      uuid.UUID
+	projectID    uuid.UUID
+	digest       string
+	subtitleMode renderexport.SubtitleMode
+	jobID        uuid.UUID
 }
 
-func (s *renderExportServiceStub) Enqueue(_ context.Context, ownerID, projectID uuid.UUID, digest string) (jobs.Job, error) {
+func (s *renderExportServiceStub) Enqueue(_ context.Context, ownerID, projectID uuid.UUID, digest string, modes ...renderexport.SubtitleMode) (jobs.Job, error) {
 	s.ownerID, s.projectID, s.digest = ownerID, projectID, digest
+	if len(modes) > 0 {
+		s.subtitleMode = modes[0]
+	}
 	return s.job, s.enqueueErr
 }
 func (s *renderExportServiceStub) Get(_ context.Context, ownerID, projectID, jobID uuid.UUID) (renderexport.JobView, error) {
@@ -67,7 +71,7 @@ func TestRenderExportCreateReturnsDurableStatusView(t *testing.T) {
 		},
 	}
 	handler := renderExportHandler{service: service, actorResolver: renderResolverStub{principal: project.Principal{OwnerID: ownerID}}}
-	body, err := json.Marshal(createRenderExportRequest{SnapshotDigest: digest})
+	body, err := json.Marshal(createRenderExportRequest{SnapshotDigest: digest, SubtitleMode: renderexport.SubtitleModeWebVTT})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +83,7 @@ func TestRenderExportCreateReturnsDurableStatusView(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if service.ownerID != ownerID || service.projectID != projectID || service.digest != digest || service.jobID != jobID {
+	if service.ownerID != ownerID || service.projectID != projectID || service.digest != digest || service.subtitleMode != renderexport.SubtitleModeWebVTT || service.jobID != jobID {
 		t.Fatalf("service scope mismatch: %#v", service)
 	}
 	var response renderExportResponse
