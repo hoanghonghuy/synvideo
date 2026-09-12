@@ -29,13 +29,15 @@ var (
 )
 
 type PreparedLocalRenderInput struct {
-	VisualPath string
-	OutputPath string
-	Width      int
-	Height     int
-	FrameRate  int
-	DurationMS int64
-	Fit        sceneeditor.FitMode
+	VisualPath       string
+	OutputPath       string
+	Width            int
+	Height           int
+	FrameRate        int
+	DurationMS       int64
+	Fit              sceneeditor.FitMode
+	CaptionVTTPath   string
+	CaptionProfileID string
 }
 
 type RenderMetadata struct {
@@ -83,10 +85,18 @@ func RenderSingleVisualMP4(ctx context.Context, runner RenderProcessRunner, prof
 	defer cancel()
 
 	durationSeconds := strconv.FormatFloat(float64(input.DurationMS)/1000, 'f', 3, 64)
-	filter := fmt.Sprintf(
+	filters := []string{fmt.Sprintf(
 		"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1",
 		input.Width, input.Height, input.Width, input.Height,
-	)
+	)}
+	if input.CaptionVTTPath != "" {
+		captionFilter, err := BurnedCaptionFilter(input.CaptionProfileID, input.CaptionVTTPath)
+		if err != nil {
+			return RenderMetadata{}, err
+		}
+		filters = append(filters, captionFilter)
+	}
+	filter := strings.Join(filters, ",")
 	args := []string{
 		"-hide_banner", "-nostdin", "-loglevel", "error", "-y",
 		"-loop", "1", "-framerate", strconv.Itoa(input.FrameRate), "-i", input.VisualPath,
@@ -161,6 +171,18 @@ func validatePreparedLocalRenderInput(profile FFmpegProfile, input PreparedLocal
 	}
 	if input.Fit != sceneeditor.FitContain {
 		return ErrUnsupportedRenderSemantics
+	}
+	if (input.CaptionVTTPath == "") != (input.CaptionProfileID == "") {
+		return ErrInvalidRenderInput
+	}
+	if input.CaptionVTTPath != "" {
+		captionStat, err := os.Stat(input.CaptionVTTPath)
+		if err != nil || !captionStat.Mode().IsRegular() || captionStat.Size() <= 0 || captionStat.Size() > maxWebVTTBytes {
+			return ErrInvalidRenderInput
+		}
+		if _, err := BurnedCaptionFilter(input.CaptionProfileID, input.CaptionVTTPath); err != nil {
+			return ErrInvalidRenderInput
+		}
 	}
 	return nil
 }
