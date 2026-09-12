@@ -101,11 +101,30 @@ func TestYouTubeOAuthProviderFailureDoesNotLeakBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = oauth.Refresh(context.Background(), "refresh-secret")
-	if !errors.Is(err, ErrOAuthRefresh) {
-		t.Fatalf("expected refresh sentinel, got %v", err)
+	if !errors.Is(err, ErrOAuthRefresh) || !errors.Is(err, ErrOAuthRefreshReconnect) {
+		t.Fatalf("expected refresh and reconnect sentinels, got %v", err)
 	}
 	if err != nil && (contains(err.Error(), "must-not-leak") || contains(err.Error(), "refresh-secret")) {
 		t.Fatalf("credential leaked in error: %v", err)
+	}
+}
+
+func TestYouTubeOAuthTransientProviderFailureStaysRetryable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"temporarily_unavailable"}`))
+	}))
+	defer server.Close()
+	oauth, err := NewYouTubeOAuth(YouTubeOAuthConfig{ClientID: "client", ClientSecret: "secret", RedirectURL: "https://synvideo.test/callback", TokenURL: server.URL}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = oauth.Refresh(context.Background(), "refresh-secret")
+	if !errors.Is(err, ErrOAuthRefresh) {
+		t.Fatalf("expected refresh sentinel, got %v", err)
+	}
+	if errors.Is(err, ErrOAuthRefreshReconnect) {
+		t.Fatalf("transient provider failure incorrectly classified as reconnect: %v", err)
 	}
 }
 
