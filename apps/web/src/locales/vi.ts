@@ -44,6 +44,13 @@ export default {
         editing: 'Media & biên tập',
         publishing: 'Xuất bản & phát hành',
       },
+      workspaceLinks: {
+        stockMedia: 'Kho media có sẵn',
+        captions: 'Phụ đề & căn thời gian',
+        audioMix: 'Nhạc nền & phối âm thanh',
+        sceneEditor: 'Trình biên tập phân cảnh',
+        channelHub: 'Trung tâm kênh',
+      },
     },
     fields: {
       title: 'Tiêu đề',
