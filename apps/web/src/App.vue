@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -20,6 +20,14 @@ const showSignOut = computed(() => {
 function skipToMainContent() {
   mainContent.value?.focus()
 }
+
+watch(
+  () => route.fullPath,
+  async () => {
+    await nextTick()
+    mainContent.value?.focus()
+  },
+)
 
 async function handleSignOut() {
   signOut()
