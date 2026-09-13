@@ -139,6 +139,13 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	if err != nil {
 		return nil, jobs.NewTerminalError(ErrorUnsupportedSnapshot, err)
 	}
+	expectedBurnedCaptionProfileID := ""
+	if scene.Caption != nil {
+		expectedBurnedCaptionProfileID = BurnedCaptionProfileV1
+	}
+	if payload.BurnedCaptionProfileID != expectedBurnedCaptionProfileID {
+		return nil, jobs.NewTerminalError(ErrorSnapshotInvalid, ErrSnapshotMismatch)
+	}
 
 	var captionPayload []byte
 	captionRequired := false
@@ -194,7 +201,7 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		if err := os.WriteFile(captionPath, captionPayload, 0o600); err != nil {
 			return nil, jobs.NewRetryableError(ErrorRendererFailed, err, nil)
 		}
-		captionProfileID = BurnedCaptionProfileV1
+		captionProfileID = payload.BurnedCaptionProfileID
 	}
 
 	metadata, err := h.render(ctx, nil, h.profile, PreparedLocalRenderInput{
@@ -505,11 +512,8 @@ func parseRenderOutputMetadata(asset mediaasset.MediaAsset, jobID uuid.UUID, pay
 	if err := json.Unmarshal(asset.Metadata, &metadata); err != nil {
 		return renderOutputMetadata{}, errors.New("render output metadata is invalid")
 	}
-	if metadata.Source != JobKind || metadata.RenderJobID != jobID.String() || metadata.SnapshotDigest != payload.SnapshotDigest || metadata.ProfileID != payload.ProfileID || metadata.DurationMS <= 0 || metadata.Width <= 0 || metadata.Height <= 0 || metadata.ToolchainVersion == "" {
+	if metadata.Source != JobKind || metadata.RenderJobID != jobID.String() || metadata.SnapshotDigest != payload.SnapshotDigest || metadata.ProfileID != payload.ProfileID || metadata.BurnedCaptionProfileID != payload.BurnedCaptionProfileID || metadata.DurationMS <= 0 || metadata.Width <= 0 || metadata.Height <= 0 || metadata.ToolchainVersion == "" {
 		return renderOutputMetadata{}, errors.New("render output provenance does not match job")
-	}
-	if metadata.BurnedCaptionProfileID != "" && metadata.BurnedCaptionProfileID != BurnedCaptionProfileV1 {
-		return renderOutputMetadata{}, errors.New("render output burned-caption provenance is invalid")
 	}
 	return metadata, nil
 }
