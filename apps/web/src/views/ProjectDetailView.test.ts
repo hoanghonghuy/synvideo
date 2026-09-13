@@ -59,6 +59,36 @@ describe('ProjectDetailView', () => {
     expect(wrapper.text()).not.toContain(hardCodedVietnameseDate)
   })
 
+  it('focuses the request-level error after a generic update failure', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
+
+    const wrapper = await mountDetailView(true)
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const alert = wrapper.get('template + .notice.error, .notice.error[role="alert"]')
+    expect(alert.attributes('tabindex')).toBe('-1')
+    expect(document.activeElement).toBe(alert.element)
+    wrapper.unmount()
+  })
+
+  it('preserves field-level focus when update validation fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(project))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'validation_failed', message: 'invalid', fields: { title: 'required' } } }, 422))
+
+    const wrapper = await mountDetailView(true)
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(document.activeElement).toBe(wrapper.get('input[name="title"]').element)
+    wrapper.unmount()
+  })
+
   it('renders creative workspace links and navigates to their production routes', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
@@ -177,7 +207,7 @@ describe('ProjectDetailView', () => {
   })
 })
 
-async function mountDetailView() {
+async function mountDetailView(attachToBody = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -196,6 +226,7 @@ async function mountDetailView() {
   await router.isReady()
 
   return mount(ProjectDetailView, {
+    attachTo: attachToBody ? document.body : undefined,
     global: {
       plugins: [i18n, router],
     },

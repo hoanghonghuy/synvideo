@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -17,6 +17,7 @@ const submitting = ref(false)
 const errorCode = ref('')
 const fieldErrors = ref<Record<string, string>>({})
 const saved = ref(false)
+const mutationErrorNotice = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   void loadProject()
@@ -48,9 +49,12 @@ async function submit(payload: UpdateProjectPayload) {
     if (error instanceof ApiError) {
       errorCode.value = error.code
       fieldErrors.value = error.fields
+      if (Object.keys(error.fields).length > 0) return
     } else {
       errorCode.value = 'request_failed'
     }
+    await nextTick()
+    mutationErrorNotice.value?.focus()
   } finally {
     submitting.value = false
   }
@@ -126,7 +130,7 @@ async function submit(payload: UpdateProjectPayload) {
       <div v-if="saved" class="notice success" role="status" aria-live="polite">
         {{ t('projects.states.saved') }}
       </div>
-      <div v-if="errorCode" class="notice error" role="alert" aria-live="assertive">
+      <div v-if="errorCode" ref="mutationErrorNotice" class="notice error" role="alert" aria-live="assertive" tabindex="-1">
         {{ t(`projects.errors.${errorCode}`) }}
       </div>
       <ProjectForm
