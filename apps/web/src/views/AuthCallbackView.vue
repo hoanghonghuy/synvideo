@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import { isOidcConfigured } from '@/auth/config'
 import { completeSignInFromCallback, pendingSignInReturnTo } from '@/auth/oidc'
 
 const route = useRoute()
+const { t } = useI18n()
 const router = useRouter()
 const errorMessage = ref('')
 const errorHeading = ref<HTMLElement | null>(null)
@@ -29,7 +31,7 @@ async function recoverSignIn() {
 
 onMounted(async () => {
   if (!isOidcConfigured()) {
-    await showFailure('Không thể hoàn tất đăng nhập vì OIDC chưa được cấu hình.')
+    await showFailure(t('auth.callback.unconfigured'))
     return
   }
 
@@ -39,7 +41,7 @@ onMounted(async () => {
     const returnTo = await completeSignInFromCallback(route.fullPath.split('?')[1] ?? '')
     await router.replace(returnTo)
   } catch (error) {
-    await showFailure(error instanceof Error ? error.message : 'Không thể hoàn tất đăng nhập.')
+    await showFailure(error instanceof Error ? error.message : t('auth.callback.failed'))
   }
 })
 </script>
@@ -48,16 +50,16 @@ onMounted(async () => {
   <section class="panel" aria-live="polite">
     <div v-if="errorMessage" class="auth-callback-error">
       <h1 ref="errorHeading" tabindex="-1">
-        Đăng nhập chưa hoàn tất
+        {{ t('auth.callback.failureTitle') }}
       </h1>
       <p>{{ errorMessage }}</p>
       <button type="button" class="recovery-action" @click="recoverSignIn">
-        Thử đăng nhập lại
+        {{ t('auth.callback.retryAction') }}
       </button>
     </div>
     <div v-else role="status" aria-busy="true">
-      <h1>Đang hoàn tất đăng nhập</h1>
-      <p>Vui lòng chờ trong giây lát…</p>
+      <h1>{{ t('auth.callback.loadingTitle') }}</h1>
+      <p>{{ t('auth.callback.loadingBody') }}</p>
     </div>
   </section>
 </template>

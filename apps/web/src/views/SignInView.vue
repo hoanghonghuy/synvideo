@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import { isOidcConfigured } from '@/auth/config'
 import { beginSignIn, sanitizeReturnTo } from '@/auth/oidc'
 
 const route = useRoute()
+const { t } = useI18n()
 const heading = ref<HTMLElement | null>(null)
 const errorMessage = ref('')
 const signingIn = ref(false)
@@ -16,25 +18,25 @@ const reason = computed(() => typeof route.query.reason === 'string' ? route.que
 const stateCopy = computed(() => {
   if (errorMessage.value) {
     return {
-      title: 'Đăng nhập cần được xử lý',
+      title: t('auth.signIn.errorTitle'),
       body: errorMessage.value,
     }
   }
   if (reason.value === 'signed-out') {
     return {
-      title: 'Bạn đã đăng xuất',
-      body: 'Phiên đăng nhập trong bộ nhớ đã được xóa an toàn. Đăng nhập lại khi bạn muốn tiếp tục làm video.',
+      title: t('auth.signIn.signedOutTitle'),
+      body: t('auth.signIn.signedOutBody'),
     }
   }
   if (reason.value === 'session-expired') {
     return {
-      title: 'Phiên đăng nhập đã hết hạn',
-      body: 'Đăng nhập lại để quay về đúng không gian làm việc bạn đang sử dụng.',
+      title: t('auth.signIn.expiredTitle'),
+      body: t('auth.signIn.expiredBody'),
     }
   }
   return {
-    title: 'Đăng nhập để tiếp tục',
-    body: 'Phiên đăng nhập không còn trong tab này. Hãy đăng nhập lại để trở về không gian làm việc một cách an toàn.',
+    title: t('auth.signIn.defaultTitle'),
+    body: t('auth.signIn.defaultBody'),
   }
 })
 
@@ -45,7 +47,7 @@ async function signIn() {
     await beginSignIn(returnTo)
   } catch (error) {
     signingIn.value = false
-    errorMessage.value = error instanceof Error ? error.message : 'Không thể bắt đầu đăng nhập.'
+    errorMessage.value = error instanceof Error ? error.message : t('auth.signIn.startFailed')
     await nextTick()
     heading.value?.focus()
   }
@@ -53,7 +55,7 @@ async function signIn() {
 
 onMounted(() => {
   if (!configured) {
-    errorMessage.value = 'Môi trường này chưa được cấu hình đăng nhập.'
+    errorMessage.value = t('auth.signIn.unconfigured')
   }
   void nextTick(() => heading.value?.focus())
 })
@@ -62,7 +64,7 @@ onMounted(() => {
 <template>
   <section class="page">
     <div class="panel auth-panel">
-      <p class="eyebrow">Tài khoản SynVideo</p>
+      <p class="eyebrow">{{ t('auth.eyebrow') }}</p>
       <h1
         ref="heading"
         tabindex="-1"
@@ -79,7 +81,7 @@ onMounted(() => {
         :disabled="signingIn"
         @click="signIn"
       >
-        {{ signingIn ? 'Đang mở đăng nhập…' : errorMessage ? 'Thử đăng nhập lại' : 'Đăng nhập' }}
+        {{ signingIn ? t('auth.signIn.pendingAction') : errorMessage ? t('auth.signIn.retryAction') : t('auth.signIn.action') }}
       </button>
     </div>
   </section>
