@@ -87,14 +87,15 @@ type HandlerResult struct {
 }
 
 type renderOutputMetadata struct {
-	Source           string `json:"source"`
-	RenderJobID      string `json:"render_job_id"`
-	SnapshotDigest   string `json:"snapshot_digest"`
-	ProfileID        string `json:"profile_id"`
-	DurationMS       int64  `json:"duration_ms"`
-	Width            int    `json:"width"`
-	Height           int    `json:"height"`
-	ToolchainVersion string `json:"toolchain_version"`
+	Source                 string `json:"source"`
+	RenderJobID            string `json:"render_job_id"`
+	SnapshotDigest         string `json:"snapshot_digest"`
+	ProfileID              string `json:"profile_id"`
+	BurnedCaptionProfileID string `json:"burned_caption_profile_id,omitempty"`
+	DurationMS             int64  `json:"duration_ms"`
+	Width                  int    `json:"width"`
+	Height                 int    `json:"height"`
+	ToolchainVersion       string `json:"toolchain_version"`
 }
 
 type renderSubtitleMetadata struct {
@@ -139,17 +140,19 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, jobs.NewTerminalError(ErrorUnsupportedSnapshot, err)
 	}
 
-	var subtitlePayload []byte
-	subtitleRequired := false
-	if payload.SubtitleMode == SubtitleModeWebVTT && scene.Caption != nil {
+	var captionPayload []byte
+	captionRequired := false
+	if scene.Caption != nil {
 		if h.captions == nil {
 			return nil, jobs.NewTerminalError(ErrorSnapshotInvalid, errors.New("caption revision resolver unavailable"))
 		}
-		subtitlePayload, subtitleRequired, err = BuildSingleSceneSnapshotWebVTT(ctx, h.captions, job.OwnerID, projectID, snapshot)
+		captionPayload, captionRequired, err = BuildSingleSceneSnapshotWebVTT(ctx, h.captions, job.OwnerID, projectID, snapshot)
 		if err != nil {
 			return nil, jobs.NewTerminalError(ErrorSnapshotInvalid, err)
 		}
 	}
+	subtitlePayload := captionPayload
+	subtitleRequired := payload.SubtitleMode == SubtitleModeWebVTT && captionRequired
 
 	if existing, findErr := h.assets.FindFinalByJob(ctx, principal, projectID, job.ID); findErr == nil {
 		subtitleAsset, subtitleErr := h.ensureSubtitleAsset(ctx, principal, projectID, job, payload, subtitlePayload, subtitleRequired)
@@ -184,14 +187,26 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 		return nil, err
 	}
 
+	captionPath := ""
+	captionProfileID := ""
+	if captionRequired {
+		captionPath = filepath.Join(workDir, "captions.vtt")
+		if err := os.WriteFile(captionPath, captionPayload, 0o600); err != nil {
+			return nil, jobs.NewRetryableError(ErrorRendererFailed, err, nil)
+		}
+		captionProfileID = BurnedCaptionProfileV1
+	}
+
 	metadata, err := h.render(ctx, nil, h.profile, PreparedLocalRenderInput{
-		VisualPath: visualPath,
-		OutputPath: outputPath,
-		Width:      LocalProfileWidth,
-		Height:     LocalProfileHeight,
-		FrameRate:  LocalProfileFrameRate,
-		DurationMS: scene.DurationMS,
-		Fit:        scene.VisualTreatment.Fit,
+		VisualPath:       visualPath,
+		OutputPath:       outputPath,
+		Width:            LocalProfileWidth,
+		Height:           LocalProfileHeight,
+		FrameRate:        LocalProfileFrameRate,
+		DurationMS:       scene.DurationMS,
+		Fit:              scene.VisualTreatment.Fit,
+		CaptionVTTPath:   captionPath,
+		CaptionProfileID: captionProfileID,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -212,14 +227,15 @@ func (h *Handler) Handle(ctx context.Context, job jobs.Job) (json.RawMessage, er
 	}
 	defer output.Close()
 	assetMetadata, err := json.Marshal(renderOutputMetadata{
-		Source:           JobKind,
-		RenderJobID:      job.ID.String(),
-		SnapshotDigest:   payload.SnapshotDigest,
-		ProfileID:        payload.ProfileID,
-		DurationMS:       metadata.DurationMS,
-		Width:            metadata.Width,
-		Height:           metadata.Height,
-		ToolchainVersion: metadata.ToolchainVersion,
+		Source:                 JobKind,
+		RenderJobID:            job.ID.String(),
+		SnapshotDigest:         payload.SnapshotDigest,
+		ProfileID:              payload.ProfileID,
+		BurnedCaptionProfileID: captionProfileID,
+		DurationMS:             metadata.DurationMS,
+		Width:                  metadata.Width,
+		Height:                 metadata.Height,
+		ToolchainVersion:       metadata.ToolchainVersion,
 	})
 	if err != nil {
 		return nil, jobs.NewTerminalError(ErrorInvalidPayload, err)
@@ -491,6 +507,9 @@ func parseRenderOutputMetadata(asset mediaasset.MediaAsset, jobID uuid.UUID, pay
 	}
 	if metadata.Source != JobKind || metadata.RenderJobID != jobID.String() || metadata.SnapshotDigest != payload.SnapshotDigest || metadata.ProfileID != payload.ProfileID || metadata.DurationMS <= 0 || metadata.Width <= 0 || metadata.Height <= 0 || metadata.ToolchainVersion == "" {
 		return renderOutputMetadata{}, errors.New("render output provenance does not match job")
+	}
+	if metadata.BurnedCaptionProfileID != "" && metadata.BurnedCaptionProfileID != BurnedCaptionProfileV1 {
+		return renderOutputMetadata{}, errors.New("render output burned-caption provenance is invalid")
 	}
 	return metadata, nil
 }
