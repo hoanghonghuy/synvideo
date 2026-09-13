@@ -395,11 +395,13 @@ describe('CreativeProposalView', () => {
       approved_at: '2026-08-31T10:00:00Z',
     })
 
-    const wrapper = await mountCreativeProposalView()
+    const wrapper = await mountCreativeProposalView(true)
     await flushPromises()
 
     await wrapper.find('[data-testid="approve-proposal"]').trigger('click')
     expect(wrapper.text()).toContain('Xác nhận duyệt phiên bản này?')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-approve"]').element)
 
     await wrapper.find('[data-testid="confirm-approve"]').trigger('click')
     await flushPromises()
@@ -861,7 +863,7 @@ describe('CreativeProposalView', () => {
   })
 })
 
-async function mountCreativeProposalView() {
+async function mountCreativeProposalView(attachToBody = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -873,6 +875,7 @@ async function mountCreativeProposalView() {
   await router.isReady()
 
   return mount(CreativeProposalView, {
+    attachTo: attachToBody ? document.body : undefined,
     global: {
       plugins: [i18n, router],
     },
