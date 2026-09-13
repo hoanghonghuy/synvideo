@@ -213,3 +213,106 @@ func TestRenderHandlerSubtitleStoreRetryReusesDurableMP4(t *testing.T) {
 		t.Fatalf("retry failed to reuse MP4/finalize sidecar renders=%d result=%+v subtitle=%+v artifact=%+v", renderCalls, decoded, assets.subtitle, artifacts.artifact)
 	}
 }
+
+func TestRenderHandlerCaptionCancellationThenRetryKeepsPinnedRevision(t *testing.T) {
+	snapshot, visual, visualBytes, captionDoc := handlerCaptionFixture(t)
+	assets := &handlerAssets{visual: visual, visualBytes: visualBytes}
+	artifacts := &handlerArtifactRepo{}
+	reader := &snapshotCaptionReaderStub{doc: captionDoc}
+	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, artifacts, testLocalProfile(), reader)
+	job := handlerJobWithSubtitleMode(t, snapshot, captionDoc.OwnerID, SubtitleModeOff)
+
+	handler.render = func(ctx context.Context, _ RenderProcessRunner, _ FFmpegProfile, input PreparedLocalRenderInput) (RenderMetadata, error) {
+		if input.CaptionVTTPath == "" || input.CaptionProfileID != BurnedCaptionProfileV1 {
+			t.Fatalf("cancelled attempt lost burned-caption input: %+v", input)
+		}
+		<-ctx.Done()
+		return RenderMetadata{}, ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := handler.Handle(ctx, job); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Handle() error=%v, want context.Canceled", err)
+	}
+	if assets.final != nil || artifacts.artifact != nil || assets.stores != 0 {
+		t.Fatalf("cancelled attempt published output: final=%+v artifact=%+v stores=%d", assets.final, artifacts.artifact, assets.stores)
+	}
+
+	var retryCaption []byte
+	handler.render = func(ctx context.Context, runner RenderProcessRunner, profile FFmpegProfile, input PreparedLocalRenderInput) (RenderMetadata, error) {
+		payload, err := os.ReadFile(input.CaptionVTTPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		retryCaption = payload
+		return subtitleTestRenderer(ctx, runner, profile, input)
+	}
+	if _, err := handler.Handle(context.Background(), job); err != nil {
+		t.Fatalf("retry Handle() error=%v", err)
+	}
+	if artifacts.artifact == nil || assets.final == nil {
+		t.Fatalf("retry did not finalize output: final=%+v artifact=%+v", assets.final, artifacts.artifact)
+	}
+	if !strings.Contains(string(retryCaption), "Pinned &lt;caption&gt;") {
+		t.Fatalf("retry caption payload=%q, want pinned revision text", retryCaption)
+	}
+	if len(reader.reads) != 2 {
+		t.Fatalf("caption reads=%d, want one exact revision read per attempt", len(reader.reads))
+	}
+	for _, read := range reader.reads {
+		if read.projectID != snapshot.ProjectID || read.scenePlanVersion != snapshot.ScenePlanVersion || read.revision != captionDoc.Revision {
+			t.Fatalf("retry escaped pinned caption identity: %+v", read)
+		}
+	}
+}
+
+func TestRenderHandlerRejectsLaterCaptionRevisionForPinnedSnapshot(t *testing.T) {
+	snapshot, visual, visualBytes, captionDoc := handlerCaptionFixture(t)
+	later := captionDoc
+	later.Revision++
+	later.Segments = []captions.Segment{{ID: uuid.New(), StartMS: 100, EndMS: 800, Text: "Later mutable caption"}}
+	reader := &snapshotCaptionReaderStub{doc: later}
+	assets := &handlerAssets{visual: visual, visualBytes: visualBytes}
+	artifacts := &handlerArtifactRepo{}
+	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, artifacts, testLocalProfile(), reader)
+	rendered := false
+	handler.render = func(context.Context, RenderProcessRunner, FFmpegProfile, PreparedLocalRenderInput) (RenderMetadata, error) {
+		rendered = true
+		return RenderMetadata{}, nil
+	}
+
+	_, err := handler.Handle(context.Background(), handlerJobWithSubtitleMode(t, snapshot, captionDoc.OwnerID, SubtitleModeOff))
+	var terminal *jobs.TerminalJobError
+	if !errors.As(err, &terminal) || terminal.Code != ErrorSnapshotInvalid {
+		t.Fatalf("Handle() error=%v, want pinned-caption snapshot rejection", err)
+	}
+	if rendered || assets.stores != 0 || artifacts.artifact != nil {
+		t.Fatalf("later mutable caption reached output path: rendered=%v stores=%d artifact=%+v", rendered, assets.stores, artifacts.artifact)
+	}
+	if len(reader.reads) != 1 || reader.reads[0].revision != captionDoc.Revision {
+		t.Fatalf("reader did not request exact pinned revision: %+v", reader.reads)
+	}
+}
+
+func TestRenderHandlerRejectsCrossProjectCaptionLineage(t *testing.T) {
+	snapshot, visual, visualBytes, captionDoc := handlerCaptionFixture(t)
+	captionDoc.ProjectID = uuid.New()
+	reader := &snapshotCaptionReaderStub{doc: captionDoc}
+	assets := &handlerAssets{visual: visual, visualBytes: visualBytes}
+	artifacts := &handlerArtifactRepo{}
+	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, artifacts, testLocalProfile(), reader)
+	rendered := false
+	handler.render = func(context.Context, RenderProcessRunner, FFmpegProfile, PreparedLocalRenderInput) (RenderMetadata, error) {
+		rendered = true
+		return RenderMetadata{}, nil
+	}
+
+	_, err := handler.Handle(context.Background(), handlerJobWithSubtitleMode(t, snapshot, captionDoc.OwnerID, SubtitleModeWebVTT))
+	var terminal *jobs.TerminalJobError
+	if !errors.As(err, &terminal) || terminal.Code != ErrorSnapshotInvalid {
+		t.Fatalf("Handle() error=%v, want cross-project caption rejection", err)
+	}
+	if rendered || assets.stores != 0 || artifacts.artifact != nil {
+		t.Fatalf("cross-project caption reached output path: rendered=%v stores=%d artifact=%+v", rendered, assets.stores, artifacts.artifact)
+	}
+}
