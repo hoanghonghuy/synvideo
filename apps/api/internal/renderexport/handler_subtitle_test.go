@@ -109,7 +109,20 @@ func handlerJobWithSubtitleMode(t *testing.T, snapshot sceneeditor.Snapshot, own
 	t.Helper()
 	job := handlerJob(t, snapshot)
 	job.OwnerID = ownerID
-	payload := RenderPayload{SnapshotDigest: snapshot.Digest, SnapshotSchema: snapshot.SchemaVersion, ProfileID: LocalProfileID, SubtitleMode: mode}
+	burnedCaptionProfileID := ""
+	for _, scene := range snapshot.Scenes {
+		if scene.Caption != nil {
+			burnedCaptionProfileID = BurnedCaptionProfileV1
+			break
+		}
+	}
+	payload := RenderPayload{
+		SnapshotDigest:         snapshot.Digest,
+		SnapshotSchema:         snapshot.SchemaVersion,
+		ProfileID:              LocalProfileID,
+		BurnedCaptionProfileID: burnedCaptionProfileID,
+		SubtitleMode:           mode,
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatal(err)
