@@ -101,7 +101,8 @@ async function submit(payload: UpdateProjectPayload) {
           <h2 id="workspace-edit-heading" class="workspace-group-title">
             {{ t('projects.detail.workflowGroups.editing') }}
           </h2>
-          <div class="workspace-links">''            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
+          <div class="workspace-links">
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">Stock Media</RouterLink>
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/images`">{{ tGeneratedImage('generatedImage.title') }}</RouterLink>
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/narration`">{{ t('navigation.sceneNarration') }}</RouterLink>
