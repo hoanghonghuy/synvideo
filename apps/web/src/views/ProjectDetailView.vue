@@ -36,9 +36,7 @@ async function loadProject() {
 }
 
 async function submit(payload: UpdateProjectPayload) {
-  if (!project.value) {
-    return
-  }
+  if (!project.value) return
   submitting.value = true
   errorCode.value = ''
   fieldErrors.value = {}
@@ -61,29 +59,16 @@ async function submit(payload: UpdateProjectPayload) {
 
 <template>
   <section class="page">
-    <RouterLink
-      class="text-link"
-      to="/projects"
-    >
+    <RouterLink class="text-link" to="/projects">
       {{ t('projects.actions.backToList') }}
     </RouterLink>
 
-    <p
-      v-if="loading"
-      class="state-text"
-    >
+    <p v-if="loading" class="state-text">
       {{ t('projects.states.loading') }}
     </p>
-    <div
-      v-else-if="errorCode && !project"
-      class="notice error"
-    >
+    <div v-else-if="errorCode && !project" class="notice error" role="alert" aria-live="assertive">
       <p>{{ t(`projects.errors.${errorCode}`) }}</p>
-      <button
-        class="secondary-button"
-        type="button"
-        @click="loadProject"
-      >
+      <button class="secondary-button" type="button" @click="loadProject">
         {{ t('projects.actions.retry') }}
       </button>
     </div>
@@ -96,102 +81,28 @@ async function submit(payload: UpdateProjectPayload) {
         {{ t('projects.detail.updatedAt', { value: d(new Date(project.updated_at), 'long') }) }}
       </p>
 
-      <nav
-        class="workspace-nav"
-        :aria-label="t('projects.detail.eyebrow')"
-      >
+      <nav class="workspace-nav" :aria-label="t('projects.detail.eyebrow')">
         <div class="workspace-links">
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/creative-brief`"
-          >
-            {{ t('creativeBrief.actions.open') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/creative-proposal`"
-          >
-            {{ t('creativeProposal.actions.open') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/script`"
-          >
-            {{ t('script.actions.open') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/scene-plan`"
-          >
-            {{ t('scenePlan.actions.open') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/media`"
-          >
-            {{ t('navigation.media') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/media/stock`"
-          >
-            Stock Media
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/images`"
-          >
-            {{ tGeneratedImage('generatedImage.title') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/narration`"
-          >
-            {{ t('navigation.sceneNarration') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/captions`"
-          >
-            Captions &amp; timing
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/audio-mix`"
-          >
-            Background music &amp; audio mix
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/scene-editor`"
-          >
-            Scene Editor
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/scene-video`"
-          >
-            {{ t('projects.detail.sceneVideoAction') }}
-          </RouterLink>
-          <RouterLink
-            class="workspace-link"
-            :to="`/projects/${project.id}/publishing`"
-          >
-            Channel Hub
-          </RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-brief`">{{ t('creativeBrief.actions.open') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-proposal`">{{ t('creativeProposal.actions.open') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/script`">{{ t('script.actions.open') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-plan`">{{ t('scenePlan.actions.open') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">Stock Media</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/images`">{{ tGeneratedImage('generatedImage.title') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/narration`">{{ t('navigation.sceneNarration') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/captions`">Captions &amp; timing</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/audio-mix`">Background music &amp; audio mix</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-editor`">Scene Editor</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-video`">{{ t('projects.detail.sceneVideoAction') }}</RouterLink>
+          <RouterLink class="workspace-link" :to="`/projects/${project.id}/publishing`">Channel Hub</RouterLink>
         </div>
       </nav>
 
-      <div
-        v-if="saved"
-        class="notice success"
-      >
+      <div v-if="saved" class="notice success" role="status" aria-live="polite">
         {{ t('projects.states.saved') }}
       </div>
-      <div
-        v-if="errorCode"
-        class="notice error"
-      >
+      <div v-if="errorCode" class="notice error" role="alert" aria-live="assertive">
         {{ t(`projects.errors.${errorCode}`) }}
       </div>
       <ProjectForm
