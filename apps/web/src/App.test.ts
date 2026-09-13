@@ -68,7 +68,7 @@ describe('App', () => {
 
     await router.push('/status')
     await vi.waitFor(() => {
-      expect(wrapper.text()).toContain('Trạng thái hệ thống')
+      expect(wrapper.text()).toContain('Kiểm tra hệ thống')
       expect(document.activeElement).toBe(main.element)
     })
 
