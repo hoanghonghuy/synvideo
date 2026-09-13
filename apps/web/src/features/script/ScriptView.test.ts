@@ -124,7 +124,7 @@ describe('ScriptView', () => {
     route('GET', '/api/v1/ai/text-generation-options', providers)
     route('PUT', `/api/v1/projects/${projectId}/scripts/1`, { error: { code: 'STALE_REVISION' } }, 409)
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
     expect(wrapper.find('[data-testid="stale-source-warning"]').exists()).toBe(true)
     await wrapper.find('[name="section_body_0"]').setValue('Bản chỉnh sửa cần được giữ lại')
@@ -137,6 +137,8 @@ describe('ScriptView', () => {
     expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).value).toBe('Bản chỉnh sửa cần được giữ lại')
     await wrapper.find('[data-testid="reload-stale-script"]').trigger('click')
     expect(wrapper.find('[data-testid="confirm-stale-reload"]').exists()).toBe(true)
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-reload-stale-script"]').element)
     await wrapper.find('[data-testid="confirm-reload-stale-script"]').trigger('click')
     await flushPromises()
     expect((wrapper.find('[name="section_body_0"]').element as HTMLTextAreaElement).value).toBe('Bản trên máy chủ')
@@ -218,9 +220,11 @@ describe('ScriptView', () => {
     })
     route('POST', `/api/v1/projects/${projectId}/scripts/1/approve`, approvedDraft)
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
     await wrapper.find('[data-testid="approve-script"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-approve-script"]').element)
     await wrapper.find('[data-testid="confirm-approve-script"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Đã duyệt')
@@ -391,7 +395,7 @@ describe('ScriptView', () => {
   })
 })
 
-async function mountView() {
+async function mountView(attachToBody = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -403,7 +407,7 @@ async function mountView() {
   })
   await router.push(`/projects/${projectId}/script`)
   await router.isReady()
-  return mount(ScriptView, { global: { plugins: [router, i18n] } })
+  return mount(ScriptView, { attachTo: attachToBody ? document.body : undefined, global: { plugins: [router, i18n] } })
 }
 
 function route(method: string, path: string, body: unknown, status = 200) {

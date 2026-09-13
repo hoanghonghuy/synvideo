@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -394,6 +394,12 @@ function cancelSwitch() {
 
 function requestStaleReload() {
   confirmStaleReload.value = true
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-reload-stale-script"]')?.focus())
+}
+
+function requestApproval() {
+  confirmApproval.value = true
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-approve-script"]')?.focus())
 }
 
 async function confirmStaleReloadAndDiscard() {
@@ -887,7 +893,7 @@ function errorMessage(code: string) {
                   data-testid="approve-script"
                   type="button"
                   :disabled="dirty || saving || approving"
-                  @click="confirmApproval = true"
+                  @click="requestApproval"
                 >
                   {{ t('script.actions.approve') }}
                 </button>
