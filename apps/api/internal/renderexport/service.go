@@ -64,27 +64,29 @@ type Service struct {
 }
 
 type RenderPayload struct {
-	SnapshotDigest     string       `json:"snapshot_digest"`
-	SnapshotSchema     int          `json:"snapshot_schema"`
-	ProfileID          string       `json:"profile_id"`
-	SubtitleMode       SubtitleMode `json:"subtitle_mode"`
-	RetryOfRenderJobID *string      `json:"retry_of_render_job_id,omitempty"`
+	SnapshotDigest         string       `json:"snapshot_digest"`
+	SnapshotSchema         int          `json:"snapshot_schema"`
+	ProfileID              string       `json:"profile_id"`
+	BurnedCaptionProfileID string       `json:"burned_caption_profile_id,omitempty"`
+	SubtitleMode           SubtitleMode `json:"subtitle_mode"`
+	RetryOfRenderJobID     *string      `json:"retry_of_render_job_id,omitempty"`
 }
 
 type JobView struct {
-	ID                  uuid.UUID       `json:"id"`
-	State               jobs.State      `json:"state"`
-	Attempt             int             `json:"attempt"`
-	MaxAttempts         int             `json:"max_attempts"`
-	ErrorCode           *string         `json:"error_code,omitempty"`
-	SnapshotDigest      string          `json:"snapshot_digest"`
-	ProfileID           string          `json:"profile_id"`
-	SubtitleMode        SubtitleMode    `json:"subtitle_mode"`
-	RetryOfRenderJobID  *uuid.UUID      `json:"retry_of_render_job_id,omitempty"`
-	CancellationPending bool            `json:"cancellation_pending"`
-	Artifact            *RenderArtifact `json:"artifact,omitempty"`
-	CreatedAt           time.Time       `json:"created_at"`
-	UpdatedAt           time.Time       `json:"updated_at"`
+	ID                     uuid.UUID       `json:"id"`
+	State                  jobs.State      `json:"state"`
+	Attempt                int             `json:"attempt"`
+	MaxAttempts            int             `json:"max_attempts"`
+	ErrorCode              *string         `json:"error_code,omitempty"`
+	SnapshotDigest         string          `json:"snapshot_digest"`
+	ProfileID              string          `json:"profile_id"`
+	BurnedCaptionProfileID string          `json:"burned_caption_profile_id,omitempty"`
+	SubtitleMode           SubtitleMode    `json:"subtitle_mode"`
+	RetryOfRenderJobID     *uuid.UUID      `json:"retry_of_render_job_id,omitempty"`
+	CancellationPending    bool            `json:"cancellation_pending"`
+	Artifact               *RenderArtifact `json:"artifact,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
+	UpdatedAt              time.Time       `json:"updated_at"`
 }
 
 type HistoryResult struct {
@@ -101,6 +103,15 @@ func NewServiceWithRuntime(snapshots SnapshotStore, queue JobQueue, reader JobRe
 		newID = uuid.New
 	}
 	return &Service{snapshots: snapshots, jobs: queue, reader: reader, artifacts: artifacts, newID: newID}
+}
+
+func burnedCaptionProfileForSnapshot(snapshot sceneeditor.Snapshot) string {
+	for _, scene := range snapshot.Scenes {
+		if scene.Caption != nil {
+			return BurnedCaptionProfileV1
+		}
+	}
+	return ""
 }
 
 func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, snapshotDigest string, requestedMode ...SubtitleMode) (jobs.Job, error) {
@@ -122,18 +133,23 @@ func (s *Service) Enqueue(ctx context.Context, ownerID, projectID uuid.UUID, sna
 	if snapshot.ProjectID != projectID || snapshot.Digest != snapshotDigest || snapshot.SchemaVersion != sceneeditor.SnapshotSchemaVersion {
 		return jobs.Job{}, ErrSnapshotMismatch
 	}
+	burnedCaptionProfileID := burnedCaptionProfileForSnapshot(snapshot)
 
 	payload, err := json.Marshal(RenderPayload{
-		SnapshotDigest: snapshot.Digest,
-		SnapshotSchema: snapshot.SchemaVersion,
-		ProfileID:      LocalProfileID,
-		SubtitleMode:   subtitleMode,
+		SnapshotDigest:         snapshot.Digest,
+		SnapshotSchema:         snapshot.SchemaVersion,
+		ProfileID:              LocalProfileID,
+		BurnedCaptionProfileID: burnedCaptionProfileID,
+		SubtitleMode:           subtitleMode,
 	})
 	if err != nil {
 		return jobs.Job{}, fmt.Errorf("marshal render payload: %w", err)
 	}
 
 	dedupeParts := []string{"render", projectID.String(), snapshot.Digest, LocalProfileID}
+	if burnedCaptionProfileID != "" {
+		dedupeParts = append(dedupeParts, burnedCaptionProfileID)
+	}
 	if subtitleMode != SubtitleModeOff {
 		dedupeParts = append(dedupeParts, string(subtitleMode))
 	}
@@ -240,11 +256,12 @@ func (s *Service) Retry(ctx context.Context, ownerID, projectID, sourceJobID, re
 		return JobView{}, err
 	}
 	retryPayload, err := json.Marshal(RenderPayload{
-		SnapshotDigest:     sourcePayload.SnapshotDigest,
-		SnapshotSchema:     sourcePayload.SnapshotSchema,
-		ProfileID:          sourcePayload.ProfileID,
-		SubtitleMode:       sourcePayload.SubtitleMode,
-		RetryOfRenderJobID: stringPtr(sourceJobID.String()),
+		SnapshotDigest:         sourcePayload.SnapshotDigest,
+		SnapshotSchema:         sourcePayload.SnapshotSchema,
+		ProfileID:              sourcePayload.ProfileID,
+		BurnedCaptionProfileID: sourcePayload.BurnedCaptionProfileID,
+		SubtitleMode:           sourcePayload.SubtitleMode,
+		RetryOfRenderJobID:     stringPtr(sourceJobID.String()),
 	})
 	if err != nil {
 		return JobView{}, fmt.Errorf("marshal retry payload: %w", err)
@@ -342,17 +359,18 @@ func (s *Service) jobToView(ctx context.Context, ownerID, projectID uuid.UUID, j
 		return JobView{}, err
 	}
 	view := JobView{
-		ID:                  job.ID,
-		State:               job.State,
-		Attempt:             job.Attempt,
-		MaxAttempts:         job.MaxAttempts,
-		ErrorCode:           job.ErrorCode,
-		SnapshotDigest:      payload.SnapshotDigest,
-		ProfileID:           payload.ProfileID,
-		SubtitleMode:        payload.SubtitleMode,
-		CancellationPending: job.State == jobs.StateRunning && job.CancelRequestedAt != nil,
-		CreatedAt:           job.CreatedAt,
-		UpdatedAt:           job.UpdatedAt,
+		ID:                     job.ID,
+		State:                  job.State,
+		Attempt:                job.Attempt,
+		MaxAttempts:            job.MaxAttempts,
+		ErrorCode:              job.ErrorCode,
+		SnapshotDigest:         payload.SnapshotDigest,
+		ProfileID:              payload.ProfileID,
+		BurnedCaptionProfileID: payload.BurnedCaptionProfileID,
+		SubtitleMode:           payload.SubtitleMode,
+		CancellationPending:    job.State == jobs.StateRunning && job.CancelRequestedAt != nil,
+		CreatedAt:              job.CreatedAt,
+		UpdatedAt:              job.UpdatedAt,
 	}
 	if payload.RetryOfRenderJobID != nil {
 		retryID, parseErr := uuid.Parse(*payload.RetryOfRenderJobID)
@@ -384,6 +402,9 @@ func (s *Service) jobToView(ctx context.Context, ownerID, projectID uuid.UUID, j
 func decodeRenderPayload(raw json.RawMessage) (RenderPayload, error) {
 	var payload RenderPayload
 	if err := json.Unmarshal(raw, &payload); err != nil || !validDigest(payload.SnapshotDigest) || payload.SnapshotSchema != sceneeditor.SnapshotSchemaVersion || payload.ProfileID != LocalProfileID {
+		return RenderPayload{}, ErrInvalidRequest
+	}
+	if payload.BurnedCaptionProfileID != "" && payload.BurnedCaptionProfileID != BurnedCaptionProfileV1 {
 		return RenderPayload{}, ErrInvalidRequest
 	}
 	mode, err := normalizeSubtitleMode([]SubtitleMode{payload.SubtitleMode})
