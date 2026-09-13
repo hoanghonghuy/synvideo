@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -12,6 +12,7 @@ const router = useRouter()
 const submitting = ref(false)
 const errorCode = ref('')
 const fieldErrors = ref<Record<string, string>>({})
+const errorNotice = ref<HTMLElement | null>(null)
 
 async function submit(payload: ProjectPayload) {
   submitting.value = true
@@ -24,9 +25,12 @@ async function submit(payload: ProjectPayload) {
     if (error instanceof ApiError) {
       errorCode.value = error.code
       fieldErrors.value = error.fields
+      if (Object.keys(error.fields).length > 0) return
     } else {
       errorCode.value = 'request_failed'
     }
+    await nextTick()
+    errorNotice.value?.focus()
   } finally {
     submitting.value = false
   }
@@ -42,7 +46,7 @@ async function submit(payload: ProjectPayload) {
       {{ t('projects.create.eyebrow') }}
     </p>
     <h1>{{ t('projects.create.title') }}</h1>
-    <div v-if="errorCode" class="notice error" role="alert" aria-live="assertive">
+    <div v-if="errorCode" ref="errorNotice" class="notice error" role="alert" aria-live="assertive" tabindex="-1">
       {{ t(`projects.errors.${errorCode}`) }}
     </div>
     <ProjectForm
