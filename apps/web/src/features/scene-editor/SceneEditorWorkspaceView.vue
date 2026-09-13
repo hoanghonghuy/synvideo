@@ -71,6 +71,7 @@ const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
 const upstreamBusy = ref(false)
 const pendingSceneRemovalID = ref<string | null>(null)
 const pendingRenderCancellationID = ref<string | null>(null)
+const pendingDraftReset = ref(false)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
@@ -119,6 +120,7 @@ async function load(resetDraft: boolean) {
     if (resetDraft || !draft.value) draft.value = cloneEditorView(latest)
     pendingSceneRemovalID.value = null
     pendingRenderCancellationID.value = null
+    pendingDraftReset.value = false
     conflict.value = false
     await refreshUpstreamGuidance()
   } catch (cause) {
@@ -147,6 +149,7 @@ async function saveDraft() {
     })
     composition.value = saved
     draft.value = cloneEditorView(saved)
+    pendingDraftReset.value = false
     notice.value = `Scene composition saved as revision ${saved.revision}.`
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 409) {
@@ -164,14 +167,26 @@ async function saveDraft() {
 async function rereadAfterConflict() {
   try {
     composition.value = await getSceneEditor(projectID.value)
+    pendingDraftReset.value = false
     conflict.value = true
   } catch (cause) {
     error.value = `Conflict recovery could not reload authoritative state: ${messageFor(cause)}`
   }
 }
 
+function armDraftReset() {
+  if (!composition.value || acting.value || (!dirty.value && !conflict.value)) return
+  pendingDraftReset.value = true
+  void nextTick(() => document.getElementById('confirm-draft-reset')?.focus())
+}
+
+function cancelDraftReset() {
+  pendingDraftReset.value = false
+}
+
 function resetToSaved() {
-  if (!composition.value || acting.value) return
+  if (!composition.value || acting.value || !pendingDraftReset.value) return
+  pendingDraftReset.value = false
   pendingSceneRemovalID.value = null
   pendingRenderCancellationID.value = null
   draft.value = cloneEditorView(composition.value)
@@ -584,7 +599,14 @@ async function applyUpstreamReconcile() {
         </div>
         <div class="save-actions">
           <button type="button" :disabled="!dirty || invalid || acting || conflict" @click="saveDraft">Save composition</button>
-          <button type="button" :disabled="(!dirty && !conflict) || acting" @click="resetToSaved">Reload saved revision</button>
+          <template v-if="!pendingDraftReset">
+            <button type="button" :disabled="(!dirty && !conflict) || acting" @click="armDraftReset">Reload saved revision</button>
+          </template>
+          <span v-else class="destructive-confirmation" role="group" aria-label="Confirm discarding local draft">
+            <span>Discard unsaved local changes and reload the authoritative saved revision? These draft changes cannot be recovered.</span>
+            <button id="confirm-draft-reset" type="button" :disabled="acting" @click="resetToSaved">Discard changes</button>
+            <button type="button" :disabled="acting" @click="cancelDraftReset">Keep editing</button>
+          </span>
         </div>
         <p v-if="invalid" class="validation-summary" role="alert">Fix the highlighted composition fields before saving or snapshotting.</p>
       </section>
