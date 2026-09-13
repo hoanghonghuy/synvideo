@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 
 import { i18n } from '@/locales'
@@ -46,6 +47,9 @@ describe('ProjectForm accessibility', () => {
         title: 'required',
       },
     })
+    // The component intentionally waits for the error DOM to render before focusing.
+    // Let that post-render focus effect finish before asserting activeElement.
+    await nextTick()
 
     const title = wrapper.get('input[name="title"]')
     const duration = wrapper.get('input[name="duration"]')
