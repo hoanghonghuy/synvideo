@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -312,6 +312,11 @@ async function submit(payload: CreativeProposalEditableContent) {
   } finally {
     submitting.value = false
   }
+}
+
+function requestApproval() {
+  confirmApproval.value = true
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-approve"]')?.focus())
 }
 
 async function approveSelected() {
@@ -732,7 +737,7 @@ async function retryFailedVersion() {
                 data-testid="approve-proposal"
                 type="button"
                 :disabled="dirty || submitting || approving"
-                @click="confirmApproval = true"
+                @click="requestApproval"
               >
                 {{ t('creativeProposal.actions.approve') }}
               </button>
