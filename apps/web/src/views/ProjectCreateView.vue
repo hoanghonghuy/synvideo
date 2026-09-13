@@ -35,20 +35,14 @@ async function submit(payload: ProjectPayload) {
 
 <template>
   <section class="page">
-    <RouterLink
-      class="text-link"
-      to="/projects"
-    >
+    <RouterLink class="text-link" to="/projects">
       {{ t('projects.actions.backToList') }}
     </RouterLink>
     <p class="eyebrow">
       {{ t('projects.create.eyebrow') }}
     </p>
     <h1>{{ t('projects.create.title') }}</h1>
-    <div
-      v-if="errorCode"
-      class="notice error"
-    >
+    <div v-if="errorCode" class="notice error" role="alert" aria-live="assertive">
       {{ t(`projects.errors.${errorCode}`) }}
     </div>
     <ProjectForm
