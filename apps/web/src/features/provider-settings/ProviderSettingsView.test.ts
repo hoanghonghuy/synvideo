@@ -55,7 +55,7 @@ function createMockProvidersList() {
   }
 }
 
-async function mountProviderSettingsView() {
+async function mountProviderSettingsView(options: { attachTo?: Element } = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -71,6 +71,7 @@ async function mountProviderSettingsView() {
   await router.isReady()
 
   return mount(ProviderSettingsView, {
+    ...options,
     global: {
       plugins: [router, i18n],
     },
@@ -239,20 +240,34 @@ describe('ProviderSettingsView', () => {
     expect(body.api_key).toBeUndefined()
   })
 
-  it('deletes provider configuration on confirm', async () => {
+  it('requires in-app confirmation, supports cancel, and deletes only after confirm', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(createMockProvidersList()))
 
-    vi.stubGlobal('confirm', () => true)
-
-    const wrapper = await mountProviderSettingsView()
+    const wrapper = await mountProviderSettingsView({ attachTo: document.body })
     await flushPromises()
 
-    const openaiCard = wrapper.find('[data-provider-id="openai"]')
+    let openaiCard = wrapper.find('[data-provider-id="openai"]')
     const deleteBtn = openaiCard.find('button.btn-danger')
     expect(deleteBtn.exists()).toBe(true)
 
+    await deleteBtn.trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(openaiCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(true)
+    expect(openaiCard.text()).toContain('Thao tác này không thể hoàn tác')
+    expect((document.activeElement as HTMLElement | null)?.id).toBe('confirm-provider-delete-openai')
+
+    const confirmation = openaiCard.find('[data-testid="provider-delete-confirmation"]')
+    await confirmation.findAll('button')[1]!.trigger('click')
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(openaiCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(false)
+
+    await openaiCard.find('button.btn-danger').trigger('click')
+    await flushPromises()
+
     fetchMock.mockResolvedValueOnce(emptyResponse(204))
-    // Refetch after delete
     fetchMock.mockResolvedValueOnce(jsonResponse({
       providers: [
         {
@@ -265,17 +280,22 @@ describe('ProviderSettingsView', () => {
           models: [
             { id: 'gpt-5-mini', display_name: 'GPT-5 mini', enabled_text: false, enabled_image: false, enabled_tts: false, capabilities: ['text'] },
           ],
+          voices: [],
         },
       ],
     }))
 
-    await deleteBtn.trigger('click')
+    openaiCard = wrapper.find('[data-provider-id="openai"]')
+    await openaiCard.find('#confirm-provider-delete-openai').trigger('click')
     await flushPromises()
 
     const deleteCall = fetchMock.mock.calls[1] as [string, RequestInit]
     expect(deleteCall[0]).toBe('/api/v1/ai/provider-settings/openai?revision=2')
     expect(deleteCall[1]?.method).toBe('DELETE')
+    expect(wrapper.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Đã xóa cấu hình nhà cung cấp.')
+
+    wrapper.unmount()
   })
 
   it('handles stale revision conflict by refetching', async () => {
@@ -285,7 +305,11 @@ describe('ProviderSettingsView', () => {
     await flushPromises()
 
     const openaiCard = wrapper.find('[data-provider-id="openai"]')
-    
+
+    await openaiCard.find('button.btn-danger').trigger('click')
+    await flushPromises()
+    expect(openaiCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(true)
+
     // 409 conflict
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ error: { code: 'STALE_REVISION', message: 'Stale revision' } }, 409),
@@ -298,5 +322,6 @@ describe('ProviderSettingsView', () => {
 
     const updatedCard = wrapper.find('[data-provider-id="openai"]')
     expect(updatedCard.text()).toContain('Cấu hình đã thay đổi trên máy chủ')
+    expect(updatedCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(false)
   })
 })

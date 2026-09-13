@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   fetchProviderSettings,
@@ -17,6 +17,7 @@ const loading = ref(true)
 const providers = ref<ProviderSettingView[]>([])
 const generalError = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
+const pendingDeleteProviderId = ref<string | null>(null)
 
 interface ProviderFormState {
   enabled: boolean
@@ -89,6 +90,7 @@ function initFormState(p: ProviderSettingView) {
 }
 
 async function loadSettings(showSpinner = false) {
+  pendingDeleteProviderId.value = null
   if (showSpinner) {
     loading.value = true
   }
@@ -198,14 +200,21 @@ async function handleSave(provider: ProviderSettingView) {
   }
 }
 
+function armDelete(provider: ProviderSettingView) {
+  const form = formStates[provider.id]
+  if (!form || !provider.configured || form.submitting || form.deleting) return
+
+  pendingDeleteProviderId.value = provider.id
+  void nextTick(() => document.getElementById(`confirm-provider-delete-${provider.id}`)?.focus())
+}
+
+function cancelDelete() {
+  pendingDeleteProviderId.value = null
+}
+
 async function handleDelete(provider: ProviderSettingView) {
   const form = formStates[provider.id]
-  if (!form || !provider.configured) return
-
-  const confirmed = window.confirm(
-    t('providerSettings.actions.confirmDelete', { name: provider.display_name }),
-  )
-  if (!confirmed) return
+  if (!form || !provider.configured || pendingDeleteProviderId.value !== provider.id) return
 
   form.error = null
   generalError.value = null
@@ -468,20 +477,47 @@ onMounted(() => {
             </button>
 
             <button
-              v-if="provider.configured"
+              v-if="provider.configured && pendingDeleteProviderId !== provider.id"
               type="button"
               class="btn btn-danger"
               :disabled="
                 getFormState(provider.id).submitting || getFormState(provider.id).deleting
               "
-              @click="handleDelete(provider)"
+              @click="armDelete(provider)"
             >
-              {{
-                getFormState(provider.id).deleting
-                  ? t('providerSettings.actions.deleting')
-                  : t('providerSettings.actions.delete')
-              }}
+              {{ t('providerSettings.actions.delete') }}
             </button>
+
+            <div
+              v-else-if="provider.configured"
+              class="delete-confirmation"
+              role="group"
+              :aria-label="t('providerSettings.actions.confirmDelete', { name: provider.display_name })"
+              data-testid="provider-delete-confirmation"
+            >
+              <p>{{ t('providerSettings.actions.confirmDelete', { name: provider.display_name }) }}</p>
+              <button
+                :id="`confirm-provider-delete-${provider.id}`"
+                type="button"
+                class="btn btn-danger"
+                :disabled="getFormState(provider.id).deleting"
+                @click="handleDelete(provider)"
+              >
+                {{
+                  getFormState(provider.id).deleting
+                    ? t('providerSettings.actions.deleting')
+                    : t('providerSettings.actions.confirmDeleteButton')
+                }}
+              </button>
+              <button
+                type="button"
+                class="btn"
+                :disabled="getFormState(provider.id).deleting"
+                @click="cancelDelete"
+              >
+                {{ t('providerSettings.actions.cancelDelete') }}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -490,6 +526,21 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.delete-confirmation {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.delete-confirmation p {
+  flex: 1 1 18rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .provider-settings-view {
   max-width: 800px;
   margin: 0 auto;
@@ -699,6 +750,8 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   margin-top: 1.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .btn {
