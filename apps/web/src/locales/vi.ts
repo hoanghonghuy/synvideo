@@ -39,6 +39,11 @@ export default {
     detail: {
       eyebrow: 'Chi tiết dự án',
       updatedAt: 'Cập nhật lần cuối: {value}',
+      workflowGroups: {
+        planning: 'Lên ý tưởng & kịch bản',
+        editing: 'Media & biên tập',
+        publishing: 'Xuất bản & phát hành',
+      },
     },
     fields: {
       title: 'Tiêu đề',
