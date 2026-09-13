@@ -305,7 +305,11 @@ describe('ProviderSettingsView', () => {
     await flushPromises()
 
     const openaiCard = wrapper.find('[data-provider-id="openai"]')
-    
+
+    await openaiCard.find('button.btn-danger').trigger('click')
+    await flushPromises()
+    expect(openaiCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(true)
+
     // 409 conflict
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ error: { code: 'STALE_REVISION', message: 'Stale revision' } }, 409),
@@ -318,5 +322,6 @@ describe('ProviderSettingsView', () => {
 
     const updatedCard = wrapper.find('[data-provider-id="openai"]')
     expect(updatedCard.text()).toContain('Cấu hình đã thay đổi trên máy chủ')
+    expect(updatedCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(false)
   })
 })
