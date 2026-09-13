@@ -126,13 +126,26 @@ func subtitleTestRenderer(_ context.Context, _ RenderProcessRunner, profile FFmp
 	return RenderMetadata{ByteSize: int64(len(body)), DurationMS: input.DurationMS, Width: input.Width, Height: input.Height, ToolchainVersion: profile.VersionLine}, nil
 }
 
-func TestRenderHandlerOffModeDoesNotResolvePinnedCaptions(t *testing.T) {
+func TestRenderHandlerOffModeBurnsPinnedCaptionsWithoutCreatingSidecar(t *testing.T) {
 	snapshot, visual, visualBytes, captionDoc := handlerCaptionFixture(t)
 	assets := &handlerAssets{visual: visual, visualBytes: visualBytes}
 	artifacts := &handlerArtifactRepo{}
-	// No caption reader is wired deliberately: off mode must not hydrate captions.
-	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, artifacts, testLocalProfile())
-	handler.render = subtitleTestRenderer
+	reader := &snapshotCaptionReaderStub{doc: captionDoc}
+	handler := NewHandler(handlerSnapshotStore{snapshot: snapshot}, assets, artifacts, testLocalProfile(), reader)
+	var renderedCaption []byte
+	var renderedProfile string
+	handler.render = func(ctx context.Context, runner RenderProcessRunner, profile FFmpegProfile, input PreparedLocalRenderInput) (RenderMetadata, error) {
+		if input.CaptionVTTPath == "" {
+			t.Fatal("captioned snapshot reached renderer without burned-caption VTT")
+		}
+		payload, err := os.ReadFile(input.CaptionVTTPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		renderedCaption = payload
+		renderedProfile = input.CaptionProfileID
+		return subtitleTestRenderer(ctx, runner, profile, input)
+	}
 	job := handlerJobWithSubtitleMode(t, snapshot, captionDoc.OwnerID, SubtitleModeOff)
 
 	result, err := handler.Handle(context.Background(), job)
@@ -144,10 +157,13 @@ func TestRenderHandlerOffModeDoesNotResolvePinnedCaptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if decoded.SubtitleMediaAssetID != nil || assets.subtitle != nil || artifacts.artifact == nil || artifacts.artifact.SubtitleMediaAssetID != nil {
-		t.Fatalf("off mode created subtitle work: result=%+v subtitle=%+v artifact=%+v", decoded, assets.subtitle, artifacts.artifact)
+		t.Fatalf("off mode created sidecar work: result=%+v subtitle=%+v artifact=%+v", decoded, assets.subtitle, artifacts.artifact)
 	}
 	if assets.stores != 1 {
 		t.Fatalf("off mode stores=%d, want only MP4", assets.stores)
+	}
+	if renderedProfile != BurnedCaptionProfileV1 || !strings.Contains(string(renderedCaption), "Pinned &lt;caption&gt;") || len(reader.reads) != 1 {
+		t.Fatalf("burned-caption input profile=%q payload=%q reads=%d", renderedProfile, renderedCaption, len(reader.reads))
 	}
 }
 
