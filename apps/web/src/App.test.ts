@@ -52,6 +52,29 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('moves focus to main content after a client-side route transition without stealing initial focus', async () => {
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [router, i18n],
+      },
+    })
+
+    const main = wrapper.get('#main-content')
+    expect(document.activeElement).not.toBe(main.element)
+
+    await router.push('/status')
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Kiểm tra hệ thống')
+      expect(document.activeElement).toBe(main.element)
+    })
+
+    wrapper.unmount()
+  })
+
   it('signs out from the shell, clears memory auth, and returns to the safe sign-in screen', async () => {
     vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
     vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
