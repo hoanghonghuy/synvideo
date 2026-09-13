@@ -69,6 +69,7 @@ const reconcilePreview = ref<SceneEditorReconcilePreview | null>(null)
 const reconcileCandidate = ref<SceneEditorCandidate | null>(null)
 const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
 const upstreamBusy = ref(false)
+const pendingSceneRemovalID = ref<string | null>(null)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
@@ -115,6 +116,7 @@ async function load(resetDraft: boolean) {
     const latest = await getSceneEditor(projectID.value)
     composition.value = latest
     if (resetDraft || !draft.value) draft.value = cloneEditorView(latest)
+    pendingSceneRemovalID.value = null
     conflict.value = false
     await refreshUpstreamGuidance()
   } catch (cause) {
@@ -168,6 +170,7 @@ async function rereadAfterConflict() {
 
 function resetToSaved() {
   if (!composition.value || acting.value) return
+  pendingSceneRemovalID.value = null
   draft.value = cloneEditorView(composition.value)
   conflict.value = false
   error.value = ''
@@ -195,8 +198,18 @@ async function duplicate(scene: SceneEditorScene) {
   await act(() => duplicateScene(projectID.value, scene.id, composition.value!.revision), 'Scene duplicated.')
 }
 
-async function remove(scene: SceneEditorScene) {
+function requestSceneRemoval(scene: SceneEditorScene) {
   if (!composition.value || dirty.value || conflict.value || acting.value || composition.value.scenes.length <= 1) return
+  pendingSceneRemovalID.value = scene.id
+}
+
+function cancelSceneRemoval() {
+  pendingSceneRemovalID.value = null
+}
+
+async function confirmSceneRemoval(scene: SceneEditorScene) {
+  if (pendingSceneRemovalID.value !== scene.id || !composition.value || dirty.value || conflict.value || acting.value || composition.value.scenes.length <= 1) return
+  pendingSceneRemovalID.value = null
   await act(() => removeScene(projectID.value, scene.id, composition.value!.revision), 'Scene removed.')
 }
 
@@ -721,7 +734,14 @@ async function applyUpstreamReconcile() {
               <button type="button" :disabled="acting || dirty || conflict || index === 0" @click="move(scene, -1)">Move up</button>
               <button type="button" :disabled="acting || dirty || conflict || index === draft.scenes.length - 1" @click="move(scene, 1)">Move down</button>
               <button type="button" :disabled="acting || dirty || conflict" @click="duplicate(scene)">Duplicate</button>
-              <button type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="remove(scene)">Remove</button>
+              <template v-if="pendingSceneRemovalID === scene.id">
+                <span class="destructive-confirmation" role="group" :aria-label="`Confirm removal of ${scene.scene_key}`">
+                  <span>This permanently removes this scene from the composition.</span>
+                  <button type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="confirmSceneRemoval(scene)">Confirm remove</button>
+                  <button type="button" :disabled="acting" @click="cancelSceneRemoval">Cancel</button>
+                </span>
+              </template>
+              <button v-else type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="requestSceneRemoval(scene)">Remove</button>
               <span v-if="dirty" class="action-hint">Save or reload local edits before structural actions.</span>
             </div>
           </li>
@@ -741,6 +761,8 @@ async function applyUpstreamReconcile() {
 .render-status { border-top: 1px solid currentColor; padding-top: .9rem; }
 .render-status p { margin: 0; overflow-wrap: anywhere; }
 .render-actions, .render-history-header, .render-config, .history-actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.destructive-confirmation { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; max-width: 100%; }
+.destructive-confirmation > span { flex: 1 1 15rem; overflow-wrap: anywhere; }
 .render-config label { display: grid; gap: .25rem; font-weight: 600; }
 .render-config select { min-height: 2.75rem; padding: .45rem .6rem; }
 .caption-output-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
