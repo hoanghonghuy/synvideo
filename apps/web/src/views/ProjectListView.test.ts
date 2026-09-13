@@ -45,6 +45,24 @@ describe('ProjectListView', () => {
     expect(wrapper.text()).toContain('Tạo dự án')
   })
 
+  it('renders a page-level alert when the initial project request fails', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: { code: 'request_failed', message: 'Request failed.' } }, 500),
+    )
+
+    const wrapper = mount(ProjectListView, {
+      global: {
+        plugins: [i18n, testRouter()],
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBeTruthy()
+    expect(wrapper.findAll('.project-card')).toHaveLength(0)
+    expect(wrapper.get('[role="alert"] button').text()).toContain('Thử lại')
+  })
+
   it('renders project library metadata and distinct status labels returned by the API', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -95,6 +113,51 @@ describe('ProjectListView', () => {
     expect(wrapper.findAll('.project-card')).toHaveLength(2)
     expect(wrapper.find('.project-status-active').exists()).toBe(true)
     expect(wrapper.find('.project-status-archived').exists()).toBe(true)
+  })
+
+  it('keeps loaded projects visible when load more fails and appends them after retry', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          projects: [project('11111111-1111-4111-8111-111111111111', 'Trang một')],
+          next_cursor: 'cursor-2',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { code: 'request_failed', message: 'Request failed.' } }, 500),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          projects: [project('22222222-2222-4222-8222-222222222222', 'Trang hai')],
+          next_cursor: '',
+        }),
+      )
+
+    const wrapper = mount(ProjectListView, {
+      global: {
+        plugins: [i18n, testRouter()],
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.findAll('.project-card')).toHaveLength(1)
+
+    await wrapper.get('.project-library-load-more').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.project-card')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Trang một')
+    const paginationAlert = wrapper.get('.project-library-pagination-error[role="alert"]')
+    expect(paginationAlert.text()).toBeTruthy()
+
+    await paginationAlert.get('button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.project-card')).toHaveLength(2)
+    expect(wrapper.text()).toContain('Trang một')
+    expect(wrapper.text()).toContain('Trang hai')
+    expect(wrapper.find('.project-library-pagination-error').exists()).toBe(false)
+    expect(wrapper.find('.project-library-load-more').exists()).toBe(false)
   })
 })
 
@@ -165,6 +228,21 @@ describe('ProjectCreateView', () => {
     expect(wrapper.text()).toContain('Bắt buộc nhập.')
   })
 })
+
+function project(id: string, title: string) {
+  return {
+    id,
+    title,
+    description: '',
+    content_format: 'short',
+    aspect_ratio: '9:16',
+    target_duration_seconds: 60,
+    locale: 'vi',
+    status: 'active',
+    created_at: '2026-09-10T08:00:00Z',
+    updated_at: '2026-09-10T08:00:00Z',
+  }
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return {
