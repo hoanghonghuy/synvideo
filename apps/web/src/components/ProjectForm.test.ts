@@ -29,6 +29,52 @@ describe('ProjectForm accessibility', () => {
     expect(wrapper.find('#project-duration-error').exists()).toBe(true)
   })
 
+  it('focuses the first invalid control in form order when server field errors arrive', async () => {
+    const wrapper = mount(ProjectForm, {
+      attachTo: document.body,
+      props: {
+        submitting: false,
+        submitLabel: 'Save',
+        fieldErrors: {},
+      },
+      global: { plugins: [i18n] },
+    })
+
+    await wrapper.setProps({
+      fieldErrors: {
+        target_duration_seconds: 'invalid',
+        title: 'required',
+      },
+    })
+
+    const title = wrapper.get('input[name="title"]')
+    const duration = wrapper.get('input[name="duration"]')
+    expect(title.attributes('aria-invalid')).toBe('true')
+    expect(duration.attributes('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe(title.element)
+
+    wrapper.unmount()
+  })
+
+  it('does not move focus when server field errors are cleared', async () => {
+    const wrapper = mount(ProjectForm, {
+      attachTo: document.body,
+      props: {
+        submitting: false,
+        submitLabel: 'Save',
+        fieldErrors: { title: 'required' },
+      },
+      global: { plugins: [i18n] },
+    })
+
+    const submit = wrapper.get('button[type="submit"]')
+    ;(submit.element as HTMLButtonElement).focus()
+    await wrapper.setProps({ fieldErrors: {} })
+
+    expect(document.activeElement).toBe(submit.element)
+    wrapper.unmount()
+  })
+
   it('focuses invalid duration and does not submit', async () => {
     const wrapper = mount(ProjectForm, {
       attachTo: document.body,
