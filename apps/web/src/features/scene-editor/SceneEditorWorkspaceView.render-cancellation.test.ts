@@ -112,6 +112,24 @@ describe('Scene Editor active render cancellation', () => {
     expect(wrapper.text()).not.toContain('Confirm cancel render')
   })
 
+  it('preserves an armed cancellation across no-op polls and clears it when authoritative state changes', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
+    expect(wrapper.text()).toContain('Confirm cancel render')
+
+    mocks.getRenderExport.mockResolvedValueOnce(renderJob('render-active', 'running'))
+    await wrapper.findAll('button').find((button) => button.text() === 'Refresh render status')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Confirm cancel render')
+
+    mocks.getRenderExport.mockResolvedValueOnce(renderJob('render-active', 'succeeded'))
+    await wrapper.findAll('button').find((button) => button.text() === 'Refresh render status')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Confirm cancel render')
+    expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
+  })
+
   it('clears an armed cancellation when the user selects another authoritative render', async () => {
     mocks.listRenderExportHistory.mockResolvedValue({ items: [renderJob('render-old', 'succeeded')], next_cursor: null })
     const wrapper = await mountView()

@@ -249,8 +249,13 @@ async function refreshRenderExport(jobID = renderJob.value?.id, reportError = tr
   if (!jobID) return
   try {
     const latest = await getRenderExport(projectID.value, jobID)
+    const previous = renderJob.value
+    const authoritativeCancellationContextChanged = previous === null
+      || previous.id !== latest.id
+      || previous.state !== latest.state
+      || Boolean(previous.cancellation_pending) !== Boolean(latest.cancellation_pending)
     renderJob.value = latest
-    pendingRenderCancellationID.value = null
+    if (authoritativeCancellationContextChanged) pendingRenderCancellationID.value = null
     persistRenderJobID(window.localStorage, projectID.value, latest.id)
     if (isRenderExportTerminal(latest)) stopRenderPolling()
     else startRenderPolling()
