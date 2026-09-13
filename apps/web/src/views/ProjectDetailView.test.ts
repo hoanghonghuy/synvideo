@@ -98,7 +98,32 @@ describe('ProjectDetailView', () => {
     expect(workspaceNav.exists()).toBe(true)
     expect(workspaceNav.attributes('aria-label')).toBeTruthy()
 
+    const groups = wrapper.findAll('.workspace-group')
+    expect(groups).toHaveLength(3)
+    expect(groups.map((group) => group.get('.workspace-group-title').text())).toEqual([
+      'Lên ý tưởng & kịch bản',
+      'Media & biên tập',
+      'Xuất bản & phát hành',
+    ])
+    expect(groups.every((group) => Boolean(group.attributes('aria-labelledby')))).toBe(true)
+
     const links = wrapper.findAll('.workspace-links a')
+    expect(links).toHaveLength(13)
+    expect(links.map((link) => link.attributes('href'))).toEqual([
+      `/projects/${project.id}/creative-brief`,
+      `/projects/${project.id}/creative-proposal`,
+      `/projects/${project.id}/script`,
+      `/projects/${project.id}/scene-plan`,
+      `/projects/${project.id}/media`,
+      `/projects/${project.id}/media/stock`,
+      `/projects/${project.id}/images`,
+      `/projects/${project.id}/narration`,
+      `/projects/${project.id}/captions`,
+      `/projects/${project.id}/audio-mix`,
+      `/projects/${project.id}/scene-editor`,
+      `/projects/${project.id}/scene-video`,
+      `/projects/${project.id}/publishing`,
+    ])
     const briefLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-brief`)
     const proposalLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-proposal`)
     const scriptLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/script`)

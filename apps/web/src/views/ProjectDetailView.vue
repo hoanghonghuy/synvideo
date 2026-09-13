@@ -81,22 +81,46 @@ async function submit(payload: UpdateProjectPayload) {
         {{ t('projects.detail.updatedAt', { value: d(new Date(project.updated_at), 'long') }) }}
       </p>
 
-      <nav class="workspace-nav" :aria-label="t('projects.detail.eyebrow')">
-        <div class="workspace-links">
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-brief`">{{ t('creativeBrief.actions.open') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-proposal`">{{ t('creativeProposal.actions.open') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/script`">{{ t('script.actions.open') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-plan`">{{ t('scenePlan.actions.open') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">Stock Media</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/images`">{{ tGeneratedImage('generatedImage.title') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/narration`">{{ t('navigation.sceneNarration') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/captions`">Captions &amp; timing</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/audio-mix`">Background music &amp; audio mix</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-editor`">Scene Editor</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-video`">{{ t('projects.detail.sceneVideoAction') }}</RouterLink>
-          <RouterLink class="workspace-link" :to="`/projects/${project.id}/publishing`">Channel Hub</RouterLink>
-        </div>
+      <nav
+        class="workspace-nav"
+        :aria-label="t('projects.detail.eyebrow')"
+      >
+        <section class="workspace-group" aria-labelledby="workspace-plan-heading">
+          <h2 id="workspace-plan-heading" class="workspace-group-title">
+            {{ t('projects.detail.workflowGroups.planning') }}
+          </h2>
+          <div class="workspace-links">
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-brief`">{{ t('creativeBrief.actions.open') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/creative-proposal`">{{ t('creativeProposal.actions.open') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/script`">{{ t('script.actions.open') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-plan`">{{ t('scenePlan.actions.open') }}</RouterLink>
+          </div>
+        </section>
+
+        <section class="workspace-group" aria-labelledby="workspace-edit-heading">
+          <h2 id="workspace-edit-heading" class="workspace-group-title">
+            {{ t('projects.detail.workflowGroups.editing') }}
+          </h2>
+          <div class="workspace-links">
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">Stock Media</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/images`">{{ tGeneratedImage('generatedImage.title') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/narration`">{{ t('navigation.sceneNarration') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/captions`">Captions &amp; timing</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/audio-mix`">Background music &amp; audio mix</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-editor`">Scene Editor</RouterLink>
+          </div>
+        </section>
+
+        <section class="workspace-group" aria-labelledby="workspace-output-heading">
+          <h2 id="workspace-output-heading" class="workspace-group-title">
+            {{ t('projects.detail.workflowGroups.publishing') }}
+          </h2>
+          <div class="workspace-links">
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-video`">{{ t('projects.detail.sceneVideoAction') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/publishing`">Channel Hub</RouterLink>
+          </div>
+        </section>
       </nav>
 
       <div v-if="saved" class="notice success" role="status" aria-live="polite">
@@ -119,7 +143,22 @@ async function submit(payload: UpdateProjectPayload) {
 
 <style scoped>
 .workspace-nav {
+  display: grid;
+  gap: 20px;
   margin: 24px 0;
+}
+
+.workspace-group {
+  min-width: 0;
+}
+
+.workspace-group-title {
+  margin: 0 0 10px;
+  color: #31584f;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .workspace-links {
