@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -10,11 +10,16 @@ import { getAccessToken } from '@/auth/session'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const mainContent = ref<HTMLElement | null>(null)
 
 const showSignOut = computed(() => {
   void route.fullPath
   return isOidcConfigured() && Boolean(getAccessToken())
 })
+
+function skipToMainContent() {
+  mainContent.value?.focus()
+}
 
 async function handleSignOut() {
   signOut()
@@ -27,6 +32,13 @@ async function handleSignOut() {
 
 <template>
   <div class="app-shell">
+    <a
+      class="skip-link"
+      href="#main-content"
+      @click.prevent="skipToMainContent"
+    >
+      Bỏ qua điều hướng
+    </a>
     <header class="app-header">
       <RouterLink
         class="brand"
@@ -60,13 +72,39 @@ async function handleSignOut() {
         </button>
       </nav>
     </header>
-    <main>
+    <main
+      id="main-content"
+      ref="mainContent"
+      tabindex="-1"
+    >
       <RouterView />
     </main>
   </div>
 </template>
 
 <style scoped>
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #143d36;
+  font-weight: 700;
+  transform: translateY(calc(-100% - 24px));
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid #7aa995;
+  outline-offset: 2px;
+}
+
 .nav {
   flex-wrap: wrap;
   justify-content: flex-end;
