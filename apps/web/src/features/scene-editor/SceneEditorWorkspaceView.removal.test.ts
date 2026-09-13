@@ -7,6 +7,7 @@ import type { SceneEditorScene, SceneEditorView } from './api'
 const mocks = vi.hoisted(() => ({
   getSceneEditor: vi.fn(),
   removeScene: vi.fn(),
+  duplicateScene: vi.fn(),
   listRenderExportHistory: vi.fn(),
 }))
 
@@ -14,7 +15,7 @@ vi.mock('./api', () => ({
   cancelRenderExport: vi.fn(),
   createRenderExport: vi.fn(),
   createSceneEditorSnapshot: vi.fn(),
-  duplicateScene: vi.fn(),
+  duplicateScene: mocks.duplicateScene,
   getRenderExport: vi.fn(),
   getSceneEditor: mocks.getSceneEditor,
   listRenderExportHistory: mocks.listRenderExportHistory,
@@ -59,6 +60,7 @@ beforeEach(() => {
   mocks.getSceneEditor.mockResolvedValue(view())
   mocks.listRenderExportHistory.mockResolvedValue({ items: [], next_cursor: null })
   mocks.removeScene.mockResolvedValue(view([scene('scene-2', 'outro')]))
+  mocks.duplicateScene.mockResolvedValue(view([scene('scene-1', 'intro'), scene('scene-2', 'outro'), scene('scene-3', 'intro copy')]))
 })
 describe('Scene Editor destructive scene removal', () => {
   it('requires explicit confirmation, supports cancel, and removes only after confirm', async () => {
@@ -69,7 +71,7 @@ describe('Scene Editor destructive scene removal', () => {
     router.push('/projects/project-1/scene-editor')
     await router.isReady()
 
-    const wrapper = mount(SceneEditorWorkspaceView, { global: { plugins: [router] } })
+    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
     await flushPromises()
 
     const removeButton = wrapper.findAll('button').find((button) => button.text() === 'Remove')
@@ -77,6 +79,8 @@ describe('Scene Editor destructive scene removal', () => {
     await removeButton!.trigger('click')
     expect(mocks.removeScene).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('This permanently removes this scene from the composition.')
+    await flushPromises()
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Confirm remove')
 
     await wrapper.findAll('button').find((button) => button.text() === 'Cancel')!.trigger('click')
     expect(mocks.removeScene).not.toHaveBeenCalled()
@@ -90,6 +94,22 @@ describe('Scene Editor destructive scene removal', () => {
     expect(mocks.removeScene).toHaveBeenCalledWith('project-1', 'scene-1', 3)
     expect(wrapper.text()).not.toContain('Confirm remove')
   })
+
+  it('clears armed removal after another authoritative structural mutation', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/projects/:id/scene-editor', component: SceneEditorWorkspaceView }] })
+    router.push('/projects/project-1/scene-editor')
+    await router.isReady()
+    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'Remove')!.trigger('click')
+    expect(wrapper.text()).toContain('Confirm remove')
+    await wrapper.findAll('button').find((button) => button.text() === 'Duplicate')!.trigger('click')
+    await flushPromises()
+    expect(mocks.duplicateScene).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('Confirm remove')
+    expect(mocks.removeScene).not.toHaveBeenCalled()
+  })
+
 })
 
 function flushPromises() {

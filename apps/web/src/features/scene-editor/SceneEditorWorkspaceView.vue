@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError } from '@/api/projects'
@@ -201,6 +201,7 @@ async function duplicate(scene: SceneEditorScene) {
 function requestSceneRemoval(scene: SceneEditorScene) {
   if (!composition.value || dirty.value || conflict.value || acting.value || composition.value.scenes.length <= 1) return
   pendingSceneRemovalID.value = scene.id
+  void nextTick(() => document.getElementById(`confirm-remove-${scene.id}`)?.focus())
 }
 
 function cancelSceneRemoval() {
@@ -335,6 +336,7 @@ async function act(operation: () => Promise<SceneEditorView>, success: string) {
     const saved = await operation()
     composition.value = saved
     draft.value = cloneEditorView(saved)
+    pendingSceneRemovalID.value = null
     conflict.value = false
     notice.value = success
   } catch (cause) {
@@ -737,7 +739,7 @@ async function applyUpstreamReconcile() {
               <template v-if="pendingSceneRemovalID === scene.id">
                 <span class="destructive-confirmation" role="group" :aria-label="`Confirm removal of ${scene.scene_key}`">
                   <span>This permanently removes this scene from the composition.</span>
-                  <button type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="confirmSceneRemoval(scene)">Confirm remove</button>
+                  <button :id="`confirm-remove-${scene.id}`" type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="confirmSceneRemoval(scene)">Confirm remove</button>
                   <button type="button" :disabled="acting" @click="cancelSceneRemoval">Cancel</button>
                 </span>
               </template>
