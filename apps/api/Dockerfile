@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/synvide
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --home /nonexistent --shell /usr/sbin/nologin synvideo
 COPY --from=build /out/synvideo-api /usr/local/bin/synvideo-api
