@@ -27,6 +27,31 @@ describe('App', () => {
     expect(wrapper.text()).toContain('tài nguyên ngôn ngữ tiếng Việt')
   })
 
+  it('provides a first-focusable skip link that moves focus to main content', async () => {
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [router, i18n],
+      },
+    })
+
+    const skipLink = wrapper.get('a.skip-link')
+    const nav = wrapper.get('nav')
+    const main = wrapper.get('#main-content')
+
+    expect(skipLink.attributes('href')).toBe('#main-content')
+    expect(skipLink.element.compareDocumentPosition(nav.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(main.attributes('tabindex')).toBe('-1')
+
+    await skipLink.trigger('click')
+    expect(document.activeElement).toBe(main.element)
+
+    wrapper.unmount()
+  })
+
   it('signs out from the shell, clears memory auth, and returns to the safe sign-in screen', async () => {
     vi.stubEnv('VITE_OIDC_ISSUER', 'https://issuer.example')
     vi.stubEnv('VITE_OIDC_CLIENT_ID', 'web-client')
