@@ -376,6 +376,7 @@ async function act(operation: () => Promise<SceneEditorView>, success: string) {
     composition.value = saved
     draft.value = cloneEditorView(saved)
     pendingSceneRemovalID.value = null
+    pendingDraftReset.value = false
     conflict.value = false
     notice.value = success
   } catch (cause) {
@@ -472,6 +473,7 @@ async function applyUpstreamReconcile() {
     draft.value = cloneEditorView(reconciled)
     reconcilePreview.value = null
     reconcileCandidate.value = null
+    pendingDraftReset.value = false
     conflict.value = false
     notice.value = `Composition reconciled to Scene Plan v${targetVersion} as revision ${reconciled.revision}.`
     await refreshUpstreamGuidance()

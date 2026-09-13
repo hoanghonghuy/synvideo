@@ -8,13 +8,14 @@ const mocks = vi.hoisted(() => ({
   getSceneEditor: vi.fn(),
   updateSceneEditor: vi.fn(),
   listRenderExportHistory: vi.fn(),
+  duplicateScene: vi.fn(),
 }))
 
 vi.mock('./api', () => ({
   cancelRenderExport: vi.fn(),
   createRenderExport: vi.fn(),
   createSceneEditorSnapshot: vi.fn(),
-  duplicateScene: vi.fn(),
+  duplicateScene: mocks.duplicateScene,
   getRenderExport: vi.fn(),
   getSceneEditor: mocks.getSceneEditor,
   listRenderExportHistory: mocks.listRenderExportHistory,
@@ -55,6 +56,7 @@ beforeEach(() => {
   mocks.getSceneEditor.mockResolvedValue(view())
   mocks.updateSceneEditor.mockResolvedValue(view(3_000, 4))
   mocks.listRenderExportHistory.mockResolvedValue({ items: [], next_cursor: null })
+  mocks.duplicateScene.mockResolvedValue(view(2_000, 4))
 })
 
 async function mountEditor() {
@@ -88,6 +90,19 @@ describe('Scene Editor local draft reset', () => {
     await wrapper.find('#confirm-draft-reset').trigger('click')
     expect((wrapper.find('input[type="number"]').element as HTMLInputElement).value).toBe('2000')
     expect(wrapper.text()).toContain('Local draft reset to the authoritative saved revision.')
+  })
+
+  it('clears an armed reset when a structural mutation establishes new authoritative state', async () => {
+    const wrapper = await mountEditor()
+    const duration = wrapper.find('input[type="number"]')
+    await duration.setValue('3000')
+    await wrapper.findAll('button').find((button) => button.text() === 'Reload saved revision')!.trigger('click')
+    expect(wrapper.text()).toContain('Discard changes')
+    await duration.setValue('2000')
+    await wrapper.findAll('button').find((button) => button.text() === 'Duplicate')!.trigger('click')
+    await flushPromises()
+    expect(mocks.duplicateScene).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('Discard changes')
   })
 
   it('clears an armed reset when a save establishes new authoritative state', async () => {
