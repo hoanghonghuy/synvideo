@@ -28,6 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const formElement = ref<HTMLFormElement | null>(null)
 const durationInput = ref<HTMLInputElement | null>(null)
 
 const contentFormats: ContentFormat[] = ['short', 'long', 'flexible']
@@ -60,6 +61,15 @@ watch(
     form.status = project.status
   },
   { immediate: true },
+)
+
+watch(
+  () => props.fieldErrors,
+  async (errors) => {
+    if (!errors || Object.keys(errors).length === 0) return
+    await nextTick()
+    formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  },
 )
 
 const durationError = computed(() => clientError.duration || props.fieldErrors?.target_duration_seconds)
@@ -95,7 +105,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <form class="project-form" @submit.prevent="onSubmit">
+  <form ref="formElement" class="project-form" @submit.prevent="onSubmit">
     <label class="field">
       <span>{{ t('projects.fields.title') }}</span>
       <input v-model="form.title" name="title" :aria-invalid="hasError('title') || undefined" :aria-describedby="hasError('title') ? errorId('title') : undefined">
