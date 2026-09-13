@@ -25,6 +25,10 @@ watch(
   () => route.fullPath,
   async () => {
     await nextTick()
+    const activeElement = document.activeElement
+    if (activeElement && mainContent.value?.contains(activeElement)) {
+      return
+    }
     mainContent.value?.focus()
   },
 )
