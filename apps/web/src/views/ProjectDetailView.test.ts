@@ -124,6 +124,21 @@ describe('ProjectDetailView', () => {
       `/projects/${project.id}/scene-video`,
       `/projects/${project.id}/publishing`,
     ])
+    expect(links.map((link) => link.text())).toEqual([
+      'Mở Creative Brief',
+      'Mở AI Proposal',
+      'Mở Script',
+      'Mở Scene Plan',
+      'Thư viện Media',
+      'Kho media có sẵn',
+      'Không gian tạo hình ảnh AI',
+      'Thuyết minh phân cảnh',
+      'Phụ đề & căn thời gian',
+      'Nhạc nền & phối âm thanh',
+      'Trình biên tập phân cảnh',
+      'Tạo video phân cảnh',
+      'Trung tâm kênh',
+    ])
     const briefLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-brief`)
     const proposalLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/creative-proposal`)
     const scriptLink = links.find((link) => link.attributes('href') === `/projects/${project.id}/script`)

@@ -103,12 +103,12 @@ async function submit(payload: UpdateProjectPayload) {
           </h2>
           <div class="workspace-links">
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/media`">{{ t('navigation.media') }}</RouterLink>
-            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">Stock Media</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/media/stock`">{{ t('projects.detail.workspaceLinks.stockMedia') }}</RouterLink>
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/images`">{{ tGeneratedImage('generatedImage.title') }}</RouterLink>
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/narration`">{{ t('navigation.sceneNarration') }}</RouterLink>
-            <RouterLink class="workspace-link" :to="`/projects/${project.id}/captions`">Captions &amp; timing</RouterLink>
-            <RouterLink class="workspace-link" :to="`/projects/${project.id}/audio-mix`">Background music &amp; audio mix</RouterLink>
-            <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-editor`">Scene Editor</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/captions`">{{ t('projects.detail.workspaceLinks.captions') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/audio-mix`">{{ t('projects.detail.workspaceLinks.audioMix') }}</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-editor`">{{ t('projects.detail.workspaceLinks.sceneEditor') }}</RouterLink>
           </div>
         </section>
 
@@ -118,7 +118,7 @@ async function submit(payload: UpdateProjectPayload) {
           </h2>
           <div class="workspace-links">
             <RouterLink class="workspace-link" :to="`/projects/${project.id}/scene-video`">{{ t('projects.detail.sceneVideoAction') }}</RouterLink>
-            <RouterLink class="workspace-link" :to="`/projects/${project.id}/publishing`">Channel Hub</RouterLink>
+            <RouterLink class="workspace-link" :to="`/projects/${project.id}/publishing`">{{ t('projects.detail.workspaceLinks.channelHub') }}</RouterLink>
           </div>
         </section>
       </nav>
