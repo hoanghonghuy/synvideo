@@ -21,12 +21,12 @@ describe('ProjectForm accessibility', () => {
     const title = wrapper.get('input[name="title"]')
     expect(title.attributes('aria-invalid')).toBe('true')
     expect(title.attributes('aria-describedby')).toBe('project-title-error')
-    expect(wrapper.get('#project-title-error').exists()).toBe(true)
+    expect(wrapper.find('#project-title-error').exists()).toBe(true)
 
     const duration = wrapper.get('input[name="duration"]')
     expect(duration.attributes('aria-invalid')).toBe('true')
     expect(duration.attributes('aria-describedby')).toBe('project-duration-error')
-    expect(wrapper.get('#project-duration-error').exists()).toBe(true)
+    expect(wrapper.find('#project-duration-error').exists()).toBe(true)
   })
 
   it('focuses invalid duration and does not submit', async () => {
