@@ -70,6 +70,7 @@ const reconcileCandidate = ref<SceneEditorCandidate | null>(null)
 const upstreamGuidance = ref<UpstreamBridgeGuidance | null>(null)
 const upstreamBusy = ref(false)
 const pendingSceneRemovalID = ref<string | null>(null)
+const pendingRenderCancellationID = ref<string | null>(null)
 let renderPollTimer: ReturnType<typeof setInterval> | null = null
 
 const dirty = computed(() => editorContentSignature(draft.value) !== editorContentSignature(composition.value))
@@ -117,6 +118,7 @@ async function load(resetDraft: boolean) {
     composition.value = latest
     if (resetDraft || !draft.value) draft.value = cloneEditorView(latest)
     pendingSceneRemovalID.value = null
+    pendingRenderCancellationID.value = null
     conflict.value = false
     await refreshUpstreamGuidance()
   } catch (cause) {
@@ -171,6 +173,7 @@ async function rereadAfterConflict() {
 function resetToSaved() {
   if (!composition.value || acting.value) return
   pendingSceneRemovalID.value = null
+  pendingRenderCancellationID.value = null
   draft.value = cloneEditorView(composition.value)
   conflict.value = false
   error.value = ''
@@ -223,6 +226,7 @@ async function createSnapshot() {
     const snapshot = await createSceneEditorSnapshot(projectID.value, composition.value.revision)
     const job = await createRenderExport(projectID.value, snapshot.digest, renderSubtitleMode.value)
     renderJob.value = job
+    pendingRenderCancellationID.value = null
     persistRenderJobID(window.localStorage, projectID.value, job.id)
     notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4${hasSnapshotBoundCaptions.value ? ' with in-video captions' : ''}${renderSubtitleMode.value === 'webvtt' ? ' + WebVTT download' : ''} render.`
     startRenderPolling()
@@ -246,12 +250,14 @@ async function refreshRenderExport(jobID = renderJob.value?.id, reportError = tr
   try {
     const latest = await getRenderExport(projectID.value, jobID)
     renderJob.value = latest
+    pendingRenderCancellationID.value = null
     persistRenderJobID(window.localStorage, projectID.value, latest.id)
     if (isRenderExportTerminal(latest)) stopRenderPolling()
     else startRenderPolling()
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 404) {
       renderJob.value = null
+      pendingRenderCancellationID.value = null
       persistRenderJobID(window.localStorage, projectID.value, null)
       stopRenderPolling()
     } else if (reportError) {
@@ -284,12 +290,24 @@ async function refreshRenderHistory(append = false) {
   }
 }
 
-async function cancelActiveRender() {
+function requestRenderCancellation() {
   if (!renderJob.value || !isRenderExportCancellable(renderJob.value) || acting.value) return
+  pendingRenderCancellationID.value = renderJob.value.id
+  void nextTick(() => document.getElementById(`confirm-cancel-render-${renderJob.value?.id}`)?.focus())
+}
+
+function keepRendering() {
+  pendingRenderCancellationID.value = null
+}
+
+async function cancelActiveRender() {
+  if (!renderJob.value || pendingRenderCancellationID.value !== renderJob.value.id || !isRenderExportCancellable(renderJob.value) || acting.value) return
+  const jobID = renderJob.value.id
+  pendingRenderCancellationID.value = null
   acting.value = true
   error.value = ''
   try {
-    const cancelled = await cancelRenderExport(projectID.value, renderJob.value.id)
+    const cancelled = await cancelRenderExport(projectID.value, jobID)
     renderJob.value = cancelled
     persistRenderJobID(window.localStorage, projectID.value, cancelled.id)
     if (isRenderExportTerminal(cancelled)) stopRenderPolling()
@@ -322,6 +340,7 @@ async function retryTerminalRender(sourceJob: RenderExportJob) {
 }
 
 function selectRenderHistoryItem(job: RenderExportJob) {
+  pendingRenderCancellationID.value = null
   renderJob.value = job
   persistRenderJobID(window.localStorage, projectID.value, job.id)
   if (isRenderExportTerminal(job)) stopRenderPolling()
@@ -617,7 +636,12 @@ async function applyUpstreamReconcile() {
             WebVTT was requested, but this immutable snapshot had no enabled caption sidecar to export.
           </p>
           <div class="render-actions">
-            <button v-if="isRenderExportCancellable(renderJob)" type="button" :disabled="acting" @click="cancelActiveRender">Cancel render</button>
+            <span v-if="pendingRenderCancellationID === renderJob.id && isRenderExportCancellable(renderJob)" class="destructive-confirmation" role="group" aria-label="Confirm render cancellation">
+              <span>Stop this active render? Work already completed for this attempt may be lost.</span>
+              <button :id="`confirm-cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="cancelActiveRender">Confirm cancel render</button>
+              <button type="button" :disabled="acting" @click="keepRendering">Keep rendering</button>
+            </span>
+            <button v-else-if="isRenderExportCancellable(renderJob)" type="button" :disabled="acting" @click="requestRenderCancellation">Cancel render</button>
             <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">Retry render</button>
             <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
             <a v-if="subtitleDownloadURL" :href="subtitleDownloadURL" download>Download WebVTT</a>
