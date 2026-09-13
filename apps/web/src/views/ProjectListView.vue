@@ -12,6 +12,7 @@ const nextCursor = ref('')
 const loading = ref(true)
 const loadingMore = ref(false)
 const errorCode = ref('')
+const paginationErrorCode = ref('')
 
 const dateFormatter = computed(
   () =>
@@ -26,10 +27,11 @@ onMounted(() => {
 })
 
 async function loadProjects(cursor = '') {
-  errorCode.value = ''
   if (cursor) {
+    paginationErrorCode.value = ''
     loadingMore.value = true
   } else {
+    errorCode.value = ''
     loading.value = true
   }
 
@@ -38,7 +40,12 @@ async function loadProjects(cursor = '') {
     projects.value = cursor ? [...projects.value, ...response.projects] : response.projects
     nextCursor.value = response.next_cursor ?? ''
   } catch (error) {
-    errorCode.value = error instanceof ApiError ? error.code : 'request_failed'
+    const code = error instanceof ApiError ? error.code : 'request_failed'
+    if (cursor) {
+      paginationErrorCode.value = code
+    } else {
+      errorCode.value = code
+    }
   } finally {
     loading.value = false
     loadingMore.value = false
@@ -95,6 +102,7 @@ function formatUpdatedAt(value: string) {
     <div
       v-else-if="errorCode"
       class="notice error"
+      role="alert"
     >
       <p>{{ t(`projects.errors.${errorCode}`) }}</p>
       <button
@@ -156,8 +164,23 @@ function formatUpdatedAt(value: string) {
         </RouterLink>
       </div>
 
+      <div
+        v-if="paginationErrorCode"
+        class="notice error project-library-pagination-error"
+        role="alert"
+      >
+        <p>{{ t(`projects.errors.${paginationErrorCode}`) }}</p>
+        <button
+          class="secondary-button"
+          type="button"
+          :disabled="loadingMore"
+          @click="loadProjects(nextCursor)"
+        >
+          {{ t('projects.actions.retry') }}
+        </button>
+      </div>
       <button
-        v-if="nextCursor"
+        v-else-if="nextCursor"
         class="secondary-button project-library-load-more"
         type="button"
         :disabled="loadingMore"
@@ -175,7 +198,8 @@ function formatUpdatedAt(value: string) {
 }
 
 .project-library-create,
-.project-library-load-more {
+.project-library-load-more,
+.project-library-pagination-error .secondary-button {
   min-height: 44px;
 }
 
@@ -215,7 +239,8 @@ function formatUpdatedAt(value: string) {
 
 .project-card:focus-visible,
 .project-library-create:focus-visible,
-.project-library-load-more:focus-visible {
+.project-library-load-more:focus-visible,
+.project-library-pagination-error .secondary-button:focus-visible {
   outline: 3px solid #27634e;
   outline-offset: 3px;
 }
@@ -281,8 +306,14 @@ function formatUpdatedAt(value: string) {
   overflow-wrap: anywhere;
 }
 
-.project-library-load-more {
+.project-library-load-more,
+.project-library-pagination-error {
   justify-self: center;
+}
+
+.project-library-pagination-error {
+  width: min(100%, 560px);
+  box-sizing: border-box;
 }
 
 .project-card-skeleton {
@@ -333,7 +364,8 @@ function formatUpdatedAt(value: string) {
     align-items: stretch;
   }
 
-  .project-library-create {
+  .project-library-create,
+  .project-library-pagination-error .secondary-button {
     width: 100%;
     box-sizing: border-box;
   }
