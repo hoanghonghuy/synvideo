@@ -67,7 +67,7 @@ async function submit(payload: UpdateProjectPayload) {
       {{ t('projects.actions.backToList') }}
     </RouterLink>
 
-    <p v-if="loading" class="state-text">
+    <p v-if="loading" class="state-text" role="status" aria-live="polite">
       {{ t('projects.states.loading') }}
     </p>
     <div v-else-if="errorCode && !project" class="notice error" role="alert" aria-live="assertive">
