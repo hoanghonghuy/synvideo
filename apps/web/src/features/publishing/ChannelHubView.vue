@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+
+import messages from './messages'
 
 import { ApiError } from '@/api/projects'
 import {
@@ -21,6 +24,7 @@ import {
 const LIVE_PROGRESS_REFRESH_MS = 4000
 
 const route = useRoute()
+const { t } = useI18n({ useScope: 'local', messages })
 const projectID = computed(() => String(route.params.id ?? ''))
 
 const connections = ref<ChannelConnection[]>([])
@@ -82,7 +86,7 @@ watch(
 
 onMounted(() => {
   if (route.query.youtube === 'connected') {
-    successMessage.value = 'YouTube authorization completed. Channel capabilities have been refreshed.'
+    successMessage.value = t('channelHub.authComplete')
   }
   void loadWorkspace()
 })
@@ -116,7 +120,7 @@ async function loadWorkspace() {
       attempt.value = attempts.value.find((item) => item.id === attempt.value?.id) ?? attempt.value
     }
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not load the Channel Hub workspace.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.loadFailed')
   } finally {
     loading.value = false
   }
@@ -132,7 +136,7 @@ async function connectYouTube() {
     window.location.assign(authorizationURL)
   } catch (error) {
     connecting.value = false
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not start YouTube authorization.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.oauthFailed')
   }
 }
 
@@ -151,7 +155,7 @@ async function submit() {
     attempt.value = created
     attempts.value = [created, ...attempts.value.filter((item) => item.id !== created.id)]
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not create the publish attempt.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.createFailed')
   } finally {
     submitting.value = false
   }
@@ -169,7 +173,7 @@ async function refreshAttempt(item: PublishAttempt | null = attempt.value) {
       scheduleLiveProgressRefresh()
     }
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not refresh the persisted publish attempt.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.refreshFailed')
   } finally {
     refreshing.value = false
   }
@@ -197,7 +201,7 @@ async function refreshLiveProgress(attemptID: string) {
     }
   } catch {
     if (!disposed && request === liveRefreshRequest && attempt.value?.id === attemptID) {
-      liveRefreshMessage.value = 'Live progress refresh paused. The last saved upload state is still shown; use Refresh saved state to retry.'
+      liveRefreshMessage.value = t('channelHub.livePaused')
     }
   } finally {
     if (request === liveRefreshRequest) {
@@ -240,12 +244,12 @@ async function reconcileAttempt() {
     const reconciled = await reconcilePublishAttempt(projectID.value, attempt.value.id)
     updateAttempt(reconciled)
     if (reconciled.last_error_code === 'youtube_status_retryable') {
-      errorMessage.value = 'YouTube status is temporarily unavailable. The remote video is preserved; retry this status check later.'
+      errorMessage.value = t('channelHub.youtubeStatusUnavailable')
     } else {
-      successMessage.value = 'YouTube processing and publication status refreshed.'
+      successMessage.value = t('channelHub.youtubeStatusRefreshed')
     }
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not check the current YouTube status.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.youtubeStatusFailed')
   } finally {
     reconciling.value = false
   }
@@ -259,7 +263,7 @@ async function retryAttempt() {
     const retried = await retryPublishAttempt(projectID.value, attempt.value.id)
     updateAttempt(retried)
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : 'Could not queue the publish retry.'
+    errorMessage.value = error instanceof ApiError ? error.message : t('channelHub.retryFailed')
   } finally {
     retrying.value = false
   }
@@ -283,7 +287,7 @@ function attemptTone(item: PublishAttempt): string {
 }
 
 function stateLabel(state: string): string {
-  return state.split('_').join(' ')
+  return t(`channelHub.states.${state}`, state.split('_').join(' '))
 }
 
 function formatBytes(bytes: number): string {
@@ -303,13 +307,13 @@ function formatDuration(durationMS: number): string {
   <section class="channel-hub page">
     <div class="hub-heading">
       <div>
-        <RouterLink class="text-link" :to="`/projects/${projectID}`">Back to project</RouterLink>
-        <p class="eyebrow">Publishing</p>
-        <h1>Channel Hub</h1>
-        <p class="body-copy">Publish an immutable rendered video to YouTube with durable progress, retry, reconnect and post-upload status recovery.</p>
+        <RouterLink class="text-link" :to="`/projects/${projectID}`">{{ t('channelHub.backToProject') }}</RouterLink>
+        <p class="eyebrow">{{ t('channelHub.eyebrow') }}</p>
+        <h1>{{ t('channelHub.title') }}</h1>
+        <p class="body-copy">{{ t('channelHub.description') }}</p>
       </div>
       <button class="secondary-button" type="button" :disabled="loading" @click="loadWorkspace">
-        {{ loading ? 'Refreshing…' : 'Refresh workspace' }}
+        {{ loading ? t('channelHub.refreshing') : t('channelHub.refreshWorkspace') }}
       </button>
     </div>
 
@@ -320,18 +324,18 @@ function formatDuration(durationMS: number): string {
       <section class="panel" aria-labelledby="connections-title">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Destination</p>
-            <h2 id="connections-title">YouTube connection</h2>
+            <p class="eyebrow">{{ t('channelHub.destination') }}</p>
+            <h2 id="connections-title">{{ t('channelHub.youtubeConnection') }}</h2>
           </div>
           <span class="count-badge">{{ connections.length }}</span>
         </div>
 
-        <p v-if="loading" class="state-text">Loading connected channels…</p>
+        <p v-if="loading" class="state-text">{{ t('channelHub.loadingChannels') }}</p>
         <div v-else-if="connections.length === 0" class="empty-state">
-          <strong>No channel connected</strong>
-          <p>Authorize YouTube to create the first server-managed channel connection. OAuth credentials and refresh tokens never enter the browser.</p>
+          <strong>{{ t('channelHub.noChannel') }}</strong>
+          <p>{{ t('channelHub.noChannelHelp') }}</p>
           <button class="primary-button" type="button" :disabled="connecting" @click="connectYouTube">
-            {{ connecting ? 'Opening YouTube…' : 'Connect YouTube' }}
+            {{ connecting ? t('channelHub.openingYoutube') : t('channelHub.connectYoutube') }}
           </button>
         </div>
         <div v-else class="connection-list">
@@ -346,47 +350,47 @@ function formatDuration(durationMS: number): string {
         </div>
 
         <div v-if="selectedConnection" class="capability-box">
-          <strong>Channel capabilities</strong>
+          <strong>{{ t('channelHub.capabilities') }}</strong>
           <ul>
-            <li>Upload: {{ selectedConnection.capabilities.can_upload ? 'available' : 'unavailable' }}</li>
-            <li>Public publish: {{ selectedConnection.capabilities.can_publish ? 'available' : 'unavailable' }}</li>
-            <li>Schedule: {{ selectedConnection.capabilities.can_schedule ? 'available' : 'unavailable' }}</li>
+            <li>{{ t('channelHub.upload') }}: {{ selectedConnection.capabilities.can_upload ? t('channelHub.available') : t('channelHub.unavailable') }}</li>
+            <li>{{ t('channelHub.publicPublish') }}: {{ selectedConnection.capabilities.can_publish ? t('channelHub.available') : t('channelHub.unavailable') }}</li>
+            <li>{{ t('channelHub.schedule') }}: {{ selectedConnection.capabilities.can_schedule ? t('channelHub.available') : t('channelHub.unavailable') }}</li>
           </ul>
           <div v-if="selectedConnection.state === 'reconnect_required' || selectedConnection.state === 'revoked'" class="recovery-box">
-            <p class="warning-copy">Authorization is no longer usable. Reconnect the same remote channel before upload can continue.</p>
+            <p class="warning-copy">{{ t('channelHub.reconnectHelp') }}</p>
             <button class="primary-button" type="button" :disabled="connecting" @click="connectYouTube">
-              {{ connecting ? 'Opening YouTube…' : 'Reconnect YouTube' }}
+              {{ connecting ? t('channelHub.openingYoutube') : t('channelHub.reconnectYoutube') }}
             </button>
           </div>
-          <p v-else-if="!selectedConnection.capabilities.can_publish" class="warning-copy">This connection cannot promise public publication. Controls remain limited to server-reported capability.</p>
+          <p v-else-if="!selectedConnection.capabilities.can_publish" class="warning-copy">{{ t('channelHub.publishLimited') }}</p>
         </div>
       </section>
 
       <section class="panel" aria-labelledby="publish-title">
-        <p class="eyebrow">New upload</p>
-        <h2 id="publish-title">Publish rendered video</h2>
+        <p class="eyebrow">{{ t('channelHub.newUpload') }}</p>
+        <h2 id="publish-title">{{ t('channelHub.publishRendered') }}</h2>
         <form class="publish-form" @submit.prevent="submit">
           <label>
-            <span>Rendered video</span>
+            <span>{{ t('channelHub.renderedVideo') }}</span>
             <select v-model="renderArtifactID" required :disabled="loading || artifacts.length === 0">
-              <option value="" disabled>{{ artifacts.length === 0 ? 'No successful renders available' : 'Select a render' }}</option>
+              <option value="" disabled>{{ artifacts.length === 0 ? t('channelHub.noRenders') : t('channelHub.selectRender') }}</option>
               <option v-for="artifact in artifacts" :key="artifact.id" :value="artifact.id">
                 {{ artifact.width }}×{{ artifact.height }} · {{ formatDuration(artifact.duration_ms) }} · {{ formatBytes(artifact.byte_size) }} · {{ new Date(artifact.created_at).toLocaleString() }}
               </option>
             </select>
-            <small v-if="artifacts.length">Only owned immutable MP4 render artifacts for this project are listed.</small>
-            <small v-else>Create a successful render before publishing.</small>
+            <small v-if="artifacts.length">{{ t('channelHub.renderHelp') }}</small>
+            <small v-else>{{ t('channelHub.renderEmptyHelp') }}</small>
           </label>
           <label>
-            <span>Video title</span>
-            <input v-model="title" required maxlength="100" autocomplete="off" placeholder="Title shown on YouTube">
+            <span>{{ t('channelHub.videoTitle') }}</span>
+            <input v-model="title" required maxlength="100" autocomplete="off" :placeholder="t('channelHub.titlePlaceholder')">
           </label>
           <label>
-            <span>Description</span>
-            <textarea v-model="description" rows="5" maxlength="5000" placeholder="Optional description" />
+            <span>{{ t('channelHub.descriptionLabel') }}</span>
+            <textarea v-model="description" rows="5" maxlength="5000" :placeholder="t('channelHub.descriptionPlaceholder')" />
           </label>
           <button class="primary-button" type="submit" :disabled="!canSubmit">
-            {{ submitting ? 'Creating publish attempt…' : 'Create publish attempt' }}
+            {{ submitting ? t('channelHub.creatingAttempt') : t('channelHub.createAttempt') }}
           </button>
         </form>
       </section>
@@ -395,48 +399,48 @@ function formatDuration(durationMS: number): string {
     <section v-if="attempt" class="panel attempt-panel" aria-live="polite">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">Selected attempt</p>
+          <p class="eyebrow">{{ t('channelHub.selectedAttempt') }}</p>
           <h2>{{ attempt.title }}</h2>
         </div>
         <span class="status-pill" :class="attemptTone(attempt)">{{ stateLabel(attempt.state) }}</span>
       </div>
 
       <div class="attempt-grid">
-        <div><span>Attempt</span><strong>{{ attempt.id }}</strong></div>
-        <div><span>Artifact</span><strong>{{ attempt.render_artifact_id }}</strong></div>
-        <div><span>Uploaded</span><strong>{{ attempt.uploaded_bytes.toLocaleString() }} bytes</strong></div>
-        <div><span>Updated</span><strong>{{ new Date(attempt.updated_at).toLocaleString() }}</strong></div>
+        <div><span>{{ t('channelHub.attempt') }}</span><strong>{{ attempt.id }}</strong></div>
+        <div><span>{{ t('channelHub.artifact') }}</span><strong>{{ attempt.render_artifact_id }}</strong></div>
+        <div><span>{{ t('channelHub.uploaded') }}</span><strong>{{ attempt.uploaded_bytes.toLocaleString() }} bytes</strong></div>
+        <div><span>{{ t('channelHub.updated') }}</span><strong>{{ new Date(attempt.updated_at).toLocaleString() }}</strong></div>
       </div>
 
       <div v-if="uploadPercent !== null" class="progress-block">
-        <div class="progress-copy"><span>Upload progress</span><strong>{{ uploadPercent }}%</strong></div>
+        <div class="progress-copy"><span>{{ t('channelHub.uploadProgress') }}</span><strong>{{ uploadPercent }}%</strong></div>
         <progress :value="uploadPercent" max="100">{{ uploadPercent }}%</progress>
         <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
       </div>
-      <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">Upload progress is indeterminate because artifact total is unavailable in this workspace snapshot.</p>
+      <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">{{ t('channelHub.indeterminate') }}</p>
       <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" data-testid="live-progress-status">
-        {{ liveRefreshMessage || 'Upload progress refreshes automatically while this attempt is queued or uploading.' }}
+        {{ liveRefreshMessage || t('channelHub.autoRefresh') }}
       </p>
 
-      <div v-if="attempt.last_error_code" class="notice error">Publishing needs attention: {{ attempt.last_error_code }}</div>
-      <p v-if="attempt.last_error_code === 'youtube_status_retryable'" class="warning-copy">The remote video already exists. Retry only the YouTube status check; do not restart the upload.</p>
-      <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">Retry preserves this logical attempt and resumable offset; it does not create a duplicate remote upload.</p>
+      <div v-if="attempt.last_error_code" class="notice error">{{ t('channelHub.needsAttention', { code: attempt.last_error_code }) }}</div>
+      <p v-if="attempt.last_error_code === 'youtube_status_retryable'" class="warning-copy">{{ t('channelHub.statusRetryHelp') }}</p>
+      <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">{{ t('channelHub.retryHelp') }}</p>
       <div v-if="attempt.state === 'reconnect_required'" class="recovery-box">
-        <p class="warning-copy">Reconnect YouTube, then refresh this attempt before continuing.</p>
+        <p class="warning-copy">{{ t('channelHub.reconnectAttemptHelp') }}</p>
         <button class="primary-button" type="button" :disabled="connecting" @click="connectYouTube">
-          {{ connecting ? 'Opening YouTube…' : 'Reconnect YouTube' }}
+          {{ connecting ? t('channelHub.openingYoutube') : t('channelHub.reconnectYoutube') }}
         </button>
       </div>
-      <a v-if="attempt.remote_video_id" class="text-link" :href="`https://www.youtube.com/watch?v=${attempt.remote_video_id}`" target="_blank" rel="noopener noreferrer">Open remote video</a>
+      <a v-if="attempt.remote_video_id" class="text-link" :href="`https://www.youtube.com/watch?v=${attempt.remote_video_id}`" target="_blank" rel="noopener noreferrer">{{ t('channelHub.openRemote') }}</a>
       <div class="attempt-actions">
         <button v-if="attempt.state === 'retryable_failure'" class="primary-button" type="button" :disabled="retrying || reconciling" @click="retryAttempt">
-          {{ retrying ? 'Queueing retry…' : 'Retry upload' }}
+          {{ retrying ? t('channelHub.queueingRetry') : t('channelHub.retryUpload') }}
         </button>
         <button v-if="canReconcile" class="primary-button" type="button" :disabled="reconciling || refreshing || retrying" @click="reconcileAttempt">
-          {{ reconciling ? 'Checking YouTube…' : attempt.last_error_code === 'youtube_status_retryable' ? 'Retry YouTube status check' : 'Check YouTube status' }}
+          {{ reconciling ? t('channelHub.checkingYoutube') : attempt.last_error_code === 'youtube_status_retryable' ? t('channelHub.retryYoutubeStatus') : t('channelHub.checkYoutubeStatus') }}
         </button>
         <button class="secondary-button" type="button" :disabled="refreshing || liveRefreshing || retrying || reconciling" @click="refreshAttempt()">
-          {{ refreshing || liveRefreshing ? 'Refreshing…' : 'Refresh saved state' }}
+          {{ refreshing || liveRefreshing ? t('channelHub.refreshing') : t('channelHub.refreshSavedState') }}
         </button>
       </div>
     </section>
@@ -444,15 +448,15 @@ function formatDuration(durationMS: number): string {
     <section class="panel history-panel" aria-labelledby="history-title">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">Durable history</p>
-          <h2 id="history-title">Publish attempts</h2>
+          <p class="eyebrow">{{ t('channelHub.durableHistory') }}</p>
+          <h2 id="history-title">{{ t('channelHub.publishAttempts') }}</h2>
         </div>
         <span class="count-badge">{{ attempts.length }}</span>
       </div>
-      <p v-if="loading" class="state-text">Loading publish history…</p>
+      <p v-if="loading" class="state-text">{{ t('channelHub.loadingHistory') }}</p>
       <div v-else-if="attempts.length === 0" class="empty-state">
-        <strong>No publish attempts yet</strong>
-        <p>Create an attempt above; it remains visible here after refresh or restart.</p>
+        <strong>{{ t('channelHub.noAttempts') }}</strong>
+        <p>{{ t('channelHub.noAttemptsHelp') }}</p>
       </div>
       <div v-else class="history-list">
         <button v-for="item in attempts" :key="item.id" type="button" class="history-row" :data-attempt-id="item.id" @click="inspectAttempt(item)">
