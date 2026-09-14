@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import * as publishingApi from '@/api/publishing'
+import { i18n } from '@/locales'
 import ChannelHubView from './ChannelHubView.vue'
 
 const connection: publishingApi.ChannelConnection = {
@@ -77,19 +78,19 @@ describe('ChannelHubView live upload progress', () => {
     const retrySpy = vi.spyOn(publishingApi, 'retryPublishAttempt')
     const reconcileSpy = vi.spyOn(publishingApi, 'reconcilePublishAttempt')
 
-    const wrapper = mount(ChannelHubView, { global: { plugins: [router] } })
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
     await flushPromises()
     await wrapper.get('[data-attempt-id="attempt-1"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('refreshes automatically')
+    expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('tự làm mới')
 
     await vi.advanceTimersByTimeAsync(4000)
     await flushPromises()
 
     expect(getSpy).toHaveBeenCalledTimes(1)
     expect(getSpy).toHaveBeenCalledWith('project-1', 'attempt-1')
-    expect(wrapper.text()).toContain('upload accepted')
+    expect(wrapper.text()).toContain('đã nhận tải lên')
     expect(wrapper.find('[data-testid="live-progress-status"]').exists()).toBe(false)
     expect(retrySpy).not.toHaveBeenCalled()
     expect(reconcileSpy).not.toHaveBeenCalled()
@@ -107,13 +108,13 @@ describe('ChannelHubView live upload progress', () => {
     vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([uploading])
     const getSpy = vi.spyOn(publishingApi, 'getPublishAttempt').mockResolvedValue(progressed)
 
-    const wrapper = mount(ChannelHubView, { global: { plugins: [router] } })
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
     await flushPromises()
     await wrapper.get('[data-attempt-id="attempt-quiet"]').trigger('click')
     await flushPromises()
 
     const initialStatus = wrapper.get('[data-testid="live-progress-status"]')
-    expect(initialStatus.text()).toContain('refreshes automatically')
+    expect(initialStatus.text()).toContain('tự làm mới')
     expect(initialStatus.attributes('role')).toBeUndefined()
 
     await vi.advanceTimersByTimeAsync(4000)
@@ -122,7 +123,7 @@ describe('ChannelHubView live upload progress', () => {
     expect(getSpy).toHaveBeenCalledTimes(1)
     const refreshedStatus = wrapper.get('[data-testid="live-progress-status"]')
     expect(refreshedStatus.text()).toBe(initialStatus.text())
-    expect(refreshedStatus.text()).not.toContain('Refreshing saved upload progress')
+    expect(refreshedStatus.text()).not.toContain('Đang làm mới tiến trình tải lên đã lưu')
     expect(refreshedStatus.attributes('role')).toBeUndefined()
     expect(wrapper.text()).toContain('500 bytes')
 
@@ -137,7 +138,7 @@ describe('ChannelHubView live upload progress', () => {
       publishAttempt('attempt-2', 'uploading', 100),
     )
 
-    const wrapper = mount(ChannelHubView, { global: { plugins: [router] } })
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
     await flushPromises()
     await wrapper.get('[data-attempt-id="attempt-2"]').trigger('click')
     await flushPromises()
@@ -156,7 +157,7 @@ describe('ChannelHubView live upload progress', () => {
     const retrySpy = vi.spyOn(publishingApi, 'retryPublishAttempt')
     const reconcileSpy = vi.spyOn(publishingApi, 'reconcilePublishAttempt')
 
-    const wrapper = mount(ChannelHubView, { global: { plugins: [router] } })
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
     await flushPromises()
     await wrapper.get('[data-attempt-id="attempt-3"]').trigger('click')
     await flushPromises()
@@ -165,7 +166,7 @@ describe('ChannelHubView live upload progress', () => {
     await flushPromises()
 
     expect(getSpy).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('Live progress refresh paused')
+    expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('Tạm dừng làm mới tiến trình trực tiếp')
     expect(wrapper.text()).toContain('400 bytes')
     expect(retrySpy).not.toHaveBeenCalled()
     expect(reconcileSpy).not.toHaveBeenCalled()
