@@ -413,7 +413,7 @@ function formatDuration(durationMS: number): string {
       </div>
 
       <div
-        v-if="uploadPercent !== null || attempt.state === 'uploading' || attempt.state === 'retryable_failure' || isLiveProgressState(attempt.state)"
+        v-if="isLiveProgressState(attempt.state) || attempt.state === 'retryable_failure'"
         class="upload-status"
         role="status"
         aria-live="polite"
