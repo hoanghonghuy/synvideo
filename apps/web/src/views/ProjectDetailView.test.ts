@@ -29,6 +29,28 @@ describe('ProjectDetailView', () => {
     updated_at: '2026-08-31T08:30:00Z',
   }
 
+  it('announces loading without stealing focus and clears the status after load', async () => {
+    let resolveFetch!: (value: ReturnType<typeof jsonResponse>) => void
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => {
+      resolveFetch = resolve
+    }))
+
+    const wrapper = await mountDetailView(true)
+
+    const loadingStatus = wrapper.get('[role="status"].state-text')
+    expect(loadingStatus.text()).toBe(i18n.global.t('projects.states.loading'))
+    expect(loadingStatus.attributes('aria-live')).toBe('polite')
+    expect(document.activeElement).not.toBe(loadingStatus.element)
+
+    resolveFetch(jsonResponse(project))
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('[role="status"].state-text').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Video chi tiet')
+    wrapper.unmount()
+  })
+
   it('renders project detail with localized date and allows updates', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(project))
 
