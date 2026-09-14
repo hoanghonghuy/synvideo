@@ -70,6 +70,22 @@ describe('ChannelHubView live upload progress', () => {
     vi.useRealTimers()
   })
 
+  it('exposes workspace loading copy as non-focus-stealing status feedback', async () => {
+    vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([])
+
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
+
+    expect(wrapper.get('[data-testid="connections-loading"]').attributes('role')).toBe('status')
+    expect(wrapper.get('[data-testid="history-loading"]').attributes('role')).toBe('status')
+    expect(document.activeElement).toBe(document.body)
+
+    await flushPromises()
+    expect(wrapper.find('[data-testid="connections-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="history-loading"]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
   it('refreshes a selected active upload and stops after it leaves local execution', async () => {
     const uploading = publishAttempt('attempt-1', 'uploading', 250)
     const accepted = publishAttempt('attempt-1', 'upload_accepted', 1000)
@@ -84,6 +100,7 @@ describe('ChannelHubView live upload progress', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('tự làm mới')
+    expect(wrapper.get('[data-testid="upload-status"]').attributes('role')).toBe('status')
 
     await vi.advanceTimersByTimeAsync(4000)
     await flushPromises()
@@ -92,6 +109,7 @@ describe('ChannelHubView live upload progress', () => {
     expect(getSpy).toHaveBeenCalledWith('project-1', 'attempt-1')
     expect(wrapper.text()).toContain('đã nhận tải lên')
     expect(wrapper.find('[data-testid="live-progress-status"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upload-status"]').exists()).toBe(false)
     expect(retrySpy).not.toHaveBeenCalled()
     expect(reconcileSpy).not.toHaveBeenCalled()
 
@@ -102,7 +120,7 @@ describe('ChannelHubView live upload progress', () => {
     wrapper.unmount()
   })
 
-  it('keeps routine polling copy stable and avoids a nested live-region status', async () => {
+  it('keeps routine polling copy stable inside one dedicated status region', async () => {
     const uploading = publishAttempt('attempt-quiet', 'uploading', 250)
     const progressed = publishAttempt('attempt-quiet', 'uploading', 500)
     vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([uploading])
@@ -113,7 +131,10 @@ describe('ChannelHubView live upload progress', () => {
     await wrapper.get('[data-attempt-id="attempt-quiet"]').trigger('click')
     await flushPromises()
 
+    const uploadStatus = wrapper.get('[data-testid="upload-status"]')
     const initialStatus = wrapper.get('[data-testid="live-progress-status"]')
+    expect(uploadStatus.attributes('role')).toBe('status')
+    expect(uploadStatus.attributes('aria-live')).toBe('polite')
     expect(initialStatus.text()).toContain('tự làm mới')
     expect(initialStatus.attributes('role')).toBeUndefined()
 
@@ -126,6 +147,26 @@ describe('ChannelHubView live upload progress', () => {
     expect(refreshedStatus.text()).not.toContain('Đang làm mới tiến trình tải lên đã lưu')
     expect(refreshedStatus.attributes('role')).toBeUndefined()
     expect(wrapper.text()).toContain('500 bytes')
+
+    wrapper.unmount()
+  })
+
+  it('announces persisted attempt failures as alerts while preserving the raw error code', async () => {
+    const failed = {
+      ...publishAttempt('attempt-error', 'retryable_failure', 400),
+      last_error_code: 'youtube_upload_retryable',
+    }
+    vi.spyOn(publishingApi, 'listPublishAttempts').mockResolvedValue([failed])
+
+    const wrapper = mount(ChannelHubView, { global: { plugins: [router, i18n] } })
+    await flushPromises()
+    await wrapper.get('[data-attempt-id="attempt-error"]').trigger('click')
+    await flushPromises()
+
+    const attemptError = wrapper.get('[data-testid="attempt-error"]')
+    expect(attemptError.attributes('role')).toBe('alert')
+    expect(attemptError.text()).toContain('youtube_upload_retryable')
+    expect(wrapper.get('[data-testid="upload-status"]').attributes('role')).toBe('status')
 
     wrapper.unmount()
   })
@@ -166,6 +207,7 @@ describe('ChannelHubView live upload progress', () => {
     await flushPromises()
 
     expect(getSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="upload-status"]').attributes('role')).toBe('status')
     expect(wrapper.get('[data-testid="live-progress-status"]').text()).toContain('Tạm dừng làm mới tiến trình trực tiếp')
     expect(wrapper.text()).toContain('400 bytes')
     expect(retrySpy).not.toHaveBeenCalled()

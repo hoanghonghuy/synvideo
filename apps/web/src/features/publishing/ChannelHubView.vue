@@ -330,7 +330,7 @@ function formatDuration(durationMS: number): string {
           <span class="count-badge">{{ connections.length }}</span>
         </div>
 
-        <p v-if="loading" class="state-text">{{ t('channelHub.loadingChannels') }}</p>
+        <p v-if="loading" class="state-text" role="status" data-testid="connections-loading">{{ t('channelHub.loadingChannels') }}</p>
         <div v-else-if="connections.length === 0" class="empty-state">
           <strong>{{ t('channelHub.noChannel') }}</strong>
           <p>{{ t('channelHub.noChannelHelp') }}</p>
@@ -396,7 +396,7 @@ function formatDuration(durationMS: number): string {
       </section>
     </div>
 
-    <section v-if="attempt" class="panel attempt-panel" aria-live="polite">
+    <section v-if="attempt" class="panel attempt-panel">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">{{ t('channelHub.selectedAttempt') }}</p>
@@ -412,17 +412,26 @@ function formatDuration(durationMS: number): string {
         <div><span>{{ t('channelHub.updated') }}</span><strong>{{ new Date(attempt.updated_at).toLocaleString() }}</strong></div>
       </div>
 
-      <div v-if="uploadPercent !== null" class="progress-block">
-        <div class="progress-copy"><span>{{ t('channelHub.uploadProgress') }}</span><strong>{{ uploadPercent }}%</strong></div>
-        <progress :value="uploadPercent" max="100">{{ uploadPercent }}%</progress>
-        <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
+      <div
+        v-if="isLiveProgressState(attempt.state) || attempt.state === 'retryable_failure'"
+        class="upload-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        data-testid="upload-status"
+      >
+        <div v-if="uploadPercent !== null" class="progress-block">
+          <div class="progress-copy"><span>{{ t('channelHub.uploadProgress') }}</span><strong>{{ uploadPercent }}%</strong></div>
+          <progress :value="uploadPercent" max="100">{{ uploadPercent }}%</progress>
+          <small v-if="selectedAttemptArtifact">{{ formatBytes(attempt.uploaded_bytes) }} of {{ formatBytes(selectedAttemptArtifact.byte_size) }}</small>
+        </div>
+        <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">{{ t('channelHub.indeterminate') }}</p>
+        <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" data-testid="live-progress-status">
+          {{ liveRefreshMessage || t('channelHub.autoRefresh') }}
+        </p>
       </div>
-      <p v-else-if="attempt.state === 'uploading' || attempt.state === 'retryable_failure'" class="state-text">{{ t('channelHub.indeterminate') }}</p>
-      <p v-if="isLiveProgressState(attempt.state)" class="live-refresh-status" data-testid="live-progress-status">
-        {{ liveRefreshMessage || t('channelHub.autoRefresh') }}
-      </p>
 
-      <div v-if="attempt.last_error_code" class="notice error">{{ t('channelHub.needsAttention', { code: attempt.last_error_code }) }}</div>
+      <div v-if="attempt.last_error_code" class="notice error" role="alert" data-testid="attempt-error">{{ t('channelHub.needsAttention', { code: attempt.last_error_code }) }}</div>
       <p v-if="attempt.last_error_code === 'youtube_status_retryable'" class="warning-copy">{{ t('channelHub.statusRetryHelp') }}</p>
       <p v-if="attempt.state === 'retryable_failure'" class="warning-copy">{{ t('channelHub.retryHelp') }}</p>
       <div v-if="attempt.state === 'reconnect_required'" class="recovery-box">
@@ -453,7 +462,7 @@ function formatDuration(durationMS: number): string {
         </div>
         <span class="count-badge">{{ attempts.length }}</span>
       </div>
-      <p v-if="loading" class="state-text">{{ t('channelHub.loadingHistory') }}</p>
+      <p v-if="loading" class="state-text" role="status" data-testid="history-loading">{{ t('channelHub.loadingHistory') }}</p>
       <div v-else-if="attempts.length === 0" class="empty-state">
         <strong>{{ t('channelHub.noAttempts') }}</strong>
         <p>{{ t('channelHub.noAttemptsHelp') }}</p>
