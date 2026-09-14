@@ -36,6 +36,7 @@ vi.mock('./upstreamBridge', () => ({
   loadUpstreamBridgeGuidance: vi.fn().mockResolvedValue(null),
 }))
 
+import { i18n } from '@/locales'
 import SceneEditorWorkspaceView from './SceneEditorWorkspaceView.vue'
 
 function scene(id: string, key: string): SceneEditorScene {
@@ -71,7 +72,7 @@ describe('Scene Editor destructive scene removal', () => {
     router.push('/projects/project-1/scene-editor')
     await router.isReady()
 
-    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
+    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router, i18n] } })
     await flushPromises()
 
     const removeButton = wrapper.findAll('button').find((button) => button.text() === 'Remove')
@@ -101,7 +102,7 @@ describe('Scene Editor destructive scene removal', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/projects/:id/scene-editor', component: SceneEditorWorkspaceView }] })
     router.push('/projects/project-1/scene-editor')
     await router.isReady()
-    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
+    const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router, i18n] } })
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === 'Remove')!.trigger('click')
     expect(wrapper.text()).toContain('Confirm remove')

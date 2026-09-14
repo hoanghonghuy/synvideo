@@ -37,6 +37,7 @@ vi.mock('./upstreamBridge', () => ({
   loadUpstreamBridgeGuidance: vi.fn().mockResolvedValue(null),
 }))
 
+import { i18n } from '@/locales'
 import SceneEditorWorkspaceView from './SceneEditorWorkspaceView.vue'
 
 function scene(): SceneEditorScene {
@@ -74,7 +75,7 @@ async function mountView() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/projects/:id/scene-editor', component: SceneEditorWorkspaceView }] })
   router.push('/projects/project-1/scene-editor')
   await router.isReady()
-  const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
+  const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router, i18n] } })
   await flushPromises()
   return wrapper
 }
@@ -93,42 +94,42 @@ describe('Scene Editor active render cancellation', () => {
   it('requires explicit confirmation, supports keeping the render, and cancels only after confirm', async () => {
     const wrapper = await mountView()
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy render')!.trigger('click')
     expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Work already completed for this attempt may be lost.')
+    expect(wrapper.text()).toContain('Phần việc đã hoàn thành của lần này có thể bị mất.')
     await flushPromises()
-    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Confirm cancel render')
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Xác nhận hủy render')
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Keep rendering')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Tiếp tục render')!.trigger('click')
     expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
-    expect(wrapper.text()).not.toContain('Confirm cancel render')
+    expect(wrapper.text()).not.toContain('Xác nhận hủy render')
     await flushPromises()
     expect((document.activeElement as HTMLElement | null)?.id).toBe('cancel-render-render-active')
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
-    await wrapper.findAll('button').find((button) => button.text() === 'Confirm cancel render')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy render')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Xác nhận hủy render')!.trigger('click')
     await flushPromises()
 
     expect(mocks.cancelRenderExport).toHaveBeenCalledTimes(1)
     expect(mocks.cancelRenderExport).toHaveBeenCalledWith('project-1', 'render-active')
-    expect(wrapper.text()).not.toContain('Confirm cancel render')
+    expect(wrapper.text()).not.toContain('Xác nhận hủy render')
   })
 
   it('preserves an armed cancellation across no-op polls and clears it when authoritative state changes', async () => {
     const wrapper = await mountView()
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
-    expect(wrapper.text()).toContain('Confirm cancel render')
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy render')!.trigger('click')
+    expect(wrapper.text()).toContain('Xác nhận hủy render')
 
     mocks.getRenderExport.mockResolvedValueOnce(renderJob('render-active', 'running'))
-    await wrapper.findAll('button').find((button) => button.text() === 'Refresh render status')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Làm mới trạng thái render')!.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Confirm cancel render')
+    expect(wrapper.text()).toContain('Xác nhận hủy render')
 
     mocks.getRenderExport.mockResolvedValueOnce(renderJob('render-active', 'succeeded'))
-    await wrapper.findAll('button').find((button) => button.text() === 'Refresh render status')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === 'Làm mới trạng thái render')!.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).not.toContain('Confirm cancel render')
+    expect(wrapper.text()).not.toContain('Xác nhận hủy render')
     expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
   })
 
@@ -136,11 +137,11 @@ describe('Scene Editor active render cancellation', () => {
     mocks.listRenderExportHistory.mockResolvedValue({ items: [renderJob('render-old', 'succeeded')], next_cursor: null })
     const wrapper = await mountView()
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
-    expect(wrapper.text()).toContain('Confirm cancel render')
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy render')!.trigger('click')
+    expect(wrapper.text()).toContain('Xác nhận hủy render')
 
     await wrapper.find('.history-item').trigger('click')
-    expect(wrapper.text()).not.toContain('Confirm cancel render')
+    expect(wrapper.text()).not.toContain('Xác nhận hủy render')
     expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
   })
 })
