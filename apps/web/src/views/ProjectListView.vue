@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -27,6 +27,7 @@ onMounted(() => {
 })
 
 async function loadProjects(cursor = '') {
+  let shouldFocusPaginationRetry = false
   if (cursor) {
     paginationErrorCode.value = ''
     loadingMore.value = true
@@ -43,12 +44,18 @@ async function loadProjects(cursor = '') {
     const code = error instanceof ApiError ? error.code : 'request_failed'
     if (cursor) {
       paginationErrorCode.value = code
+      shouldFocusPaginationRetry = true
     } else {
       errorCode.value = code
     }
   } finally {
     loading.value = false
     loadingMore.value = false
+  }
+
+  if (shouldFocusPaginationRetry) {
+    await nextTick()
+    document.querySelector<HTMLElement>('.project-library-pagination-error button')?.focus()
   }
 }
 
