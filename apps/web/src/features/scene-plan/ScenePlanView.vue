@@ -541,6 +541,11 @@ function stopPolling() {
 }
 
 function chooseVersion(version: number) {
+  if (dirty.value && selectedVersion.value !== version) {
+    pendingVersion.value = version
+    void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-save-switch"]')?.focus())
+    return
+  }
   void loadVersion(version)
 }
 
@@ -598,6 +603,7 @@ function openSplitModal(index: number) {
   splitPoint.value = Math.max(1, Math.floor(codePoints.length / 2))
   splitNewKey.value = generateUniqueKey(target.key)
   splitError.value = ''
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="split-index-input"]')?.focus())
 }
 
 function closeSplitModal() {
@@ -1403,9 +1409,12 @@ function errorMessage(code: string) {
       v-if="splitTargetScene"
       class="modal-backdrop"
       data-testid="split-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="split-modal-title"
     >
       <div class="modal-card">
-        <h3>{{ t('scenePlan.splitModal.title') }}</h3>
+        <h3 id="split-modal-title">{{ t('scenePlan.splitModal.title') }}</h3>
         <p class="body-copy">
           {{ t('scenePlan.splitModal.description') }}
         </p>
