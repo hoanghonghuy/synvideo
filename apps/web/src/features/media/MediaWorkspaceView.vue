@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -223,6 +223,7 @@ function restore(scene: Scene, entry: SceneMediaEntry) {
 function requestDelete(asset: MediaAsset) {
   deleteTarget.value = asset
   deleteErrorCode.value = ''
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-delete-asset"]')?.focus())
 }
 
 function cancelDelete() {
@@ -762,6 +763,7 @@ const supportedMIME = new Set([
         <button
           class="primary-button"
           type="button"
+          data-testid="confirm-delete-asset"
           @click="confirmDelete"
         >
           {{ t('media.actions.confirmDelete') }}
