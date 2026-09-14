@@ -263,6 +263,7 @@ describe('ProviderSettingsView', () => {
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(openaiCard.find('[data-testid="provider-delete-confirmation"]').exists()).toBe(false)
+    expect((document.activeElement as HTMLElement | null)?.id).toBe('delete-provider-openai')
 
     await openaiCard.find('button.btn-danger').trigger('click')
     await flushPromises()
