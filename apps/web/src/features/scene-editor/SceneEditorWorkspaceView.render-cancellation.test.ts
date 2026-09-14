@@ -102,6 +102,8 @@ describe('Scene Editor active render cancellation', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'Keep rendering')!.trigger('click')
     expect(mocks.cancelRenderExport).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('Confirm cancel render')
+    await flushPromises()
+    expect((document.activeElement as HTMLElement | null)?.id).toBe('cancel-render-render-active')
 
     await wrapper.findAll('button').find((button) => button.text() === 'Cancel render')!.trigger('click')
     await wrapper.findAll('button').find((button) => button.text() === 'Confirm cancel render')!.trigger('click')

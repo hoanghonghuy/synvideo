@@ -85,6 +85,8 @@ describe('Scene Editor local draft reset', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'Keep editing')!.trigger('click')
     expect((duration.element as HTMLInputElement).value).toBe('3000')
     expect(wrapper.text()).not.toContain('Discard changes')
+    await flushPromises()
+    expect((document.activeElement as HTMLElement | null)?.id).toBe('reload-saved-revision')
 
     await wrapper.findAll('button').find((button) => button.text() === 'Reload saved revision')!.trigger('click')
     await wrapper.find('#confirm-draft-reset').trigger('click')
