@@ -73,13 +73,13 @@ test('creator can snapshot, render a real durable MP4, refresh, and download it'
   await page.getByRole('button', { name: 'Snapshot & render MP4' }).click()
 
   await expect(page.getByText(/Render succeeded/)).toBeVisible({ timeout: 60_000 })
-  const renderedSummary = page.getByText(/MP4 ready/)
+  const renderedSummary = page.getByText(/MP4 sẵn sàng/)
   await expect(renderedSummary).toContainText(/\d+×\d+/)
 
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText(/Render succeeded/)).toBeVisible({ timeout: 10_000 })
 
-  const downloadLink = page.getByRole('link', { name: 'Download rendered MP4' })
+  const downloadLink = page.getByRole('link', { name: 'Tải MP4 đã render' })
   await expect(downloadLink).toBeVisible()
   const response = await request.get(await downloadLink.getAttribute('href') as string)
   expect(response.status()).toBe(200)
