@@ -366,9 +366,19 @@ function jobLabel(state: SceneGenerationState): string {
     <h1>{{ t('generatedImage.title') }}</h1>
     <p class="body-copy">{{ t('generatedImage.description') }}</p>
 
-    <p v-if="loading" class="state-text">...</p>
+    <p v-if="loading" class="state-text" role="status">
+      {{ t('generatedImage.loading') }}
+    </p>
     <div v-else-if="loadFailed" class="notice error" role="alert">
-      {{ t('generatedImage.loadFailed') }}
+      <p>{{ t('generatedImage.loadFailed') }}</p>
+      <button
+        class="secondary-button"
+        type="button"
+        data-testid="retry-load-generated-image"
+        @click="loadWorkspace"
+      >
+        {{ t('generatedImage.retryLoad') }}
+      </button>
     </div>
     <div v-else-if="!plan" class="notice">
       <p>{{ t('generatedImage.noApprovedPlan') }}</p>

@@ -128,6 +128,32 @@ describe('GeneratedImageWorkspaceView', () => {
     })
   })
 
+  it('recovers an initial load failure without submitting paid generation work', async () => {
+    const projectSpy = vi.spyOn(projectApi, 'getProject')
+    projectSpy.mockReset()
+    projectSpy
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValue(project)
+    const createSpy = vi.spyOn(imageApi, 'createSceneImageGeneration')
+
+    await router.isReady()
+    const wrapper = mount(GeneratedImageWorkspaceView, { global: { plugins: [router, i18n] } })
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('Không thể tải không gian tạo ảnh.')
+    const retry = wrapper.get('[data-testid="retry-load-generated-image"]')
+    expect(retry.text()).toContain('Thử tải lại')
+
+    await retry.trigger('click')
+    expect(wrapper.get('[role="status"]').text()).toContain('Đang tải không gian tạo ảnh...')
+    await flushPromises()
+
+    expect(projectSpy).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="retry-load-generated-image"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="image-prompt-scene-1"]').exists()).toBe(true)
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
   it('submits the scene-local edited prompt and previews the exact succeeded asset', async () => {
     const createSpy = vi.spyOn(imageApi, 'createSceneImageGeneration').mockResolvedValue({
       id: '11111111-1111-4111-8111-111111111111',
