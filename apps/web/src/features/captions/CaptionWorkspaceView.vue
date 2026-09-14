@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import {
   CaptionApiError,
@@ -14,8 +15,10 @@ import {
   type CaptionStyle,
   type CaptionView,
 } from './api'
+import messages from './messages'
 
 const route = useRoute()
+const { t } = useI18n({ useScope: 'local', messages })
 const projectID = computed(() => String(route.params.id ?? ''))
 const planVersion = ref(Number(route.query.version ?? 1))
 const sceneKey = ref(String(route.query.scene ?? ''))
@@ -38,14 +41,14 @@ function copyFromView(view: CaptionView) {
 
 function describeError(error: unknown): string {
   if (error instanceof CaptionApiError) {
-    if (error.code === 'CAPTION_REVISION_CONFLICT') return 'Bản caption đã thay đổi ở nơi khác. Hãy tải lại trước khi lưu.'
-    if (error.code === 'CAPTION_SOURCE_MISSING') return 'Cảnh này chưa có narration audio hợp lệ với thời lượng đo được.'
-    if (error.code === 'CAPTION_STALE') return 'Caption đang stale. Hãy rebuild có chủ đích trước khi dùng làm snapshot hiện hành.'
-    if (error.code === 'CAPTION_NOT_FOUND') return 'Chưa có caption cho cảnh này.'
+    if (error.code === 'CAPTION_REVISION_CONFLICT') return t('captions.conflict')
+    if (error.code === 'CAPTION_SOURCE_MISSING') return t('captions.sourceMissing')
+    if (error.code === 'CAPTION_STALE') return t('captions.staleError')
+    if (error.code === 'CAPTION_NOT_FOUND') return t('captions.notFound')
     if (error.fields) return Object.entries(error.fields).map(([field, value]) => `${field}: ${value}`).join(', ')
     return error.message
   }
-  return error instanceof Error ? error.message : 'Không thể hoàn thành yêu cầu.'
+  return error instanceof Error ? error.message : t('captions.requestFailed')
 }
 
 async function refreshHistory() {
@@ -80,7 +83,7 @@ async function derive() {
     const view = await deriveCaptions(projectID.value, planVersion.value, sceneKey.value.trim())
     copyFromView(view)
     await refreshHistory()
-    message.value = 'Đã tạo caption từ exact narration lineage hiện tại.'
+    message.value = t('captions.derived')
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
@@ -102,8 +105,8 @@ async function save() {
     copyFromView(view)
     await refreshHistory()
     message.value = view.state === 'STALE'
-      ? 'Đã lưu chỉnh sửa. Caption vẫn stale vì source narration đã thay đổi.'
-      : 'Đã lưu caption.'
+      ? t('captions.savedStale')
+      : t('captions.saved')
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
@@ -120,7 +123,7 @@ async function rebuild() {
     const view = await rebuildCaptions(projectID.value, planVersion.value, sceneKey.value.trim(), current.value.revision)
     copyFromView(view)
     await refreshHistory()
-    message.value = 'Đã rebuild sang narration lineage hiện tại. Revision cũ vẫn được giữ trong history.'
+    message.value = t('captions.rebuilt')
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
@@ -148,24 +151,24 @@ onMounted(() => {
   <section class="caption-workspace">
     <header class="workspace-header">
       <div>
-        <p class="eyebrow">TASK-034 · Captions</p>
-        <h1>Caption timing workspace</h1>
-        <p>Caption được khóa với exact narration/audio lineage và thời lượng audio đã đo.</p>
+        <p class="eyebrow">{{ t('captions.eyebrow') }}</p>
+        <h1>{{ t('captions.title') }}</h1>
+        <p>{{ t('captions.description') }}</p>
       </div>
-      <RouterLink :to="`/projects/${projectID}`">Quay lại project</RouterLink>
+      <RouterLink :to="`/projects/${projectID}`">{{ t('captions.back') }}</RouterLink>
     </header>
 
     <div class="toolbar card">
       <label>
-        Scene plan version
+        {{ t('captions.planVersion') }}
         <input v-model.number="planVersion" type="number" min="1" />
       </label>
       <label>
-        Scene key
+        {{ t('captions.sceneKey') }}
         <input v-model.trim="sceneKey" placeholder="scene-1" />
       </label>
-      <button :disabled="busy || !canOperate" @click="load">Tải</button>
-      <button :disabled="busy || !canOperate" @click="derive">Tạo lần đầu</button>
+      <button :disabled="busy || !canOperate" @click="load">{{ t('captions.load') }}</button>
+      <button :disabled="busy || !canOperate" @click="derive">{{ t('captions.derive') }}</button>
     </div>
 
     <p v-if="errorMessage" class="notice error" role="alert">{{ errorMessage }}</p>
@@ -175,68 +178,68 @@ onMounted(() => {
       <div class="state-card" :class="{ stale: isStale }">
         <div>
           <strong>{{ current.state }}</strong>
-          · revision {{ current.revision }}
-          · source {{ current.source_duration_ms }} ms
+          · {{ t('captions.revision', { revision: current.revision }) }}
+          · {{ t('captions.sourceDuration', { duration: current.source_duration_ms }) }}
         </div>
-        <button v-if="isStale" :disabled="busy" @click="rebuild">Rebuild từ narration hiện tại</button>
+        <button v-if="isStale" :disabled="busy" @click="rebuild">{{ t('captions.rebuild') }}</button>
       </div>
 
       <section class="card">
         <div class="section-heading">
           <div>
-            <h2>Segments</h2>
-            <p>Không overlap; 0 ≤ start &lt; end ≤ source duration.</p>
+            <h2>{{ t('captions.segments') }}</h2>
+            <p>{{ t('captions.segmentHelp') }}</p>
           </div>
-          <button type="button" @click="addSegment">Thêm segment</button>
+          <button type="button" @click="addSegment">{{ t('captions.addSegment') }}</button>
         </div>
 
         <div class="segments">
           <article v-for="(segment, index) in segments" :key="segment.id" class="segment-row">
             <label class="segment-text">
-              Text
+              {{ t('captions.text') }}
               <textarea v-model="segment.text" rows="2" />
             </label>
             <label>
-              Start (ms)
+              {{ t('captions.start') }}
               <input v-model.number="segment.start_ms" type="number" min="0" />
             </label>
             <label>
-              End (ms)
+              {{ t('captions.end') }}
               <input v-model.number="segment.end_ms" type="number" min="1" :max="current.source_duration_ms" />
             </label>
-            <button type="button" class="danger" @click="removeSegment(index)">Xóa</button>
+            <button type="button" class="danger" @click="removeSegment(index)">{{ t('captions.remove') }}</button>
           </article>
         </div>
       </section>
 
       <section class="card">
-        <h2>Render-neutral style</h2>
+        <h2>{{ t('captions.style') }}</h2>
         <div class="style-grid">
-          <label>Alignment
+          <label>{{ t('captions.alignment') }}
             <select v-model="style.alignment"><option>left</option><option>center</option><option>right</option></select>
           </label>
-          <label>Position
+          <label>{{ t('captions.position') }}
             <select v-model="style.position"><option>top</option><option>middle</option><option>bottom</option></select>
           </label>
-          <label>Size
+          <label>{{ t('captions.size') }}
             <select v-model="style.size"><option>small</option><option>medium</option><option>large</option></select>
           </label>
-          <label>Weight
+          <label>{{ t('captions.weight') }}
             <select v-model="style.weight"><option>normal</option><option>semibold</option><option>bold</option></select>
           </label>
-          <label>Font token
-            <input v-model="style.font_family_token" placeholder="optional token" />
+          <label>{{ t('captions.fontToken') }}
+            <input v-model="style.font_family_token" :placeholder="t('captions.optionalToken')" />
           </label>
         </div>
-        <button class="primary" :disabled="busy" @click="save">Lưu revision mới</button>
+        <button class="primary" :disabled="busy" @click="save">{{ t('captions.saveRevision') }}</button>
       </section>
 
       <section class="card">
-        <h2>Revision history</h2>
-        <p v-if="history.length === 0">Chưa có history.</p>
+        <h2>{{ t('captions.history') }}</h2>
+        <p v-if="history.length === 0">{{ t('captions.noHistory') }}</p>
         <ol v-else class="history-list">
           <li v-for="item in history" :key="`${item.id}:${item.revision}`">
-            Revision {{ item.revision }} · {{ item.source_duration_ms }} ms · source {{ item.source_asset_id.slice(0, 8) }}…
+            {{ t('captions.historyItem', { revision: item.revision, duration: item.source_duration_ms, source: item.source_asset_id.slice(0, 8) }) }}
           </li>
         </ol>
       </section>
