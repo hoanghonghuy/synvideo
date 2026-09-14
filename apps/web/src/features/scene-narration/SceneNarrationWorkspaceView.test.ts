@@ -236,7 +236,14 @@ describe('SceneNarrationWorkspaceView', () => {
     expect(wrapper.get('#narration-history-title').text()).toContain('sc-1')
     expect(document.activeElement).toBe(close.element)
 
-    await close.trigger('click')
+    const footerClose = wrapper.get('.modal-footer button')
+    await close.trigger('keydown', { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(footerClose.element)
+
+    await footerClose.trigger('keydown', { key: 'Tab' })
+    expect(document.activeElement).toBe(close.element)
+
+    await close.trigger('keydown', { key: 'Escape' })
     await flushPromises()
 
     expect(wrapper.find('.modal-dialog').exists()).toBe(false)

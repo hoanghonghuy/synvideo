@@ -252,6 +252,40 @@ function closeHistory() {
   }
 }
 
+const historyFocusableSelector = [
+  'button:not([disabled])',
+  'a[href]',
+  'audio[controls]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ')
+
+function handleHistoryKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeHistory()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const dialog = event.currentTarget as HTMLElement | null
+  if (!dialog) return
+  const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(historyFocusableSelector))
+  if (focusable.length === 0) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
 async function handleAssignAlternative(assetID: string) {
   if (!selectedPlanVersion.value || !activeHistorySceneKey.value) return
   const sceneKey = activeHistorySceneKey.value
@@ -535,6 +569,7 @@ onMounted(() => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="narration-history-title"
+        @keydown="handleHistoryKeydown"
       >
         <div class="modal-header">
           <h3 id="narration-history-title">{{ t('sceneNarration.historyModal.title', { key: activeHistorySceneKey }) }}</h3>
