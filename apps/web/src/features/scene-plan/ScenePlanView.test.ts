@@ -205,7 +205,7 @@ describe('ScenePlanView', () => {
     route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
     route('GET', '/api/v1/ai/text-generation-options', providers)
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
 
     await wrapper.find('[name="scene_visual_0"]').setValue('Hình ảnh đã chỉnh sửa mới')
@@ -216,6 +216,8 @@ describe('ScenePlanView', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="dirty-switch-warning"]').exists()).toBe(true)
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-save-switch"]').element)
     expect(fetchMock.mock.calls.filter(([url, init]) => url.endsWith('/scene-plans/2') && (!init || !init.method)).length).toBe(0)
 
     // Discard and switch
@@ -431,12 +433,16 @@ describe('ScenePlanView', () => {
     route('GET', `/api/v1/projects/${projectId}/scene-plans/1`, emojiPlan)
     route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
 
     const originalNarration = emojiPlan.scenes[0]!.narration
     await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
     expect(wrapper.find('[data-testid="split-modal"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="split-modal"]').attributes('role')).toBe('dialog')
+    expect(wrapper.find('[data-testid="split-modal"]').attributes('aria-modal')).toBe('true')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="split-index-input"]').element)
 
     // Split index at code point 10
     const splitIndex = 10
