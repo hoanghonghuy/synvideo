@@ -236,6 +236,12 @@ describe('SceneNarrationWorkspaceView', () => {
     expect(wrapper.get('#narration-history-title').text()).toContain('sc-1')
     expect(document.activeElement).toBe(close.element)
 
+    await close.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.modal-dialog').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="history-btn-sc-1"]').element)
+
     wrapper.unmount()
   })
 
