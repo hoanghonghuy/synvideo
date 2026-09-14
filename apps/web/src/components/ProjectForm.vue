@@ -105,7 +105,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <form ref="formElement" class="project-form" @submit.prevent="onSubmit">
+  <form ref="formElement" class="project-form" :aria-busy="submitting || undefined" @submit.prevent="onSubmit">
     <label class="field">
       <span>{{ t('projects.fields.title') }}</span>
       <input v-model="form.title" name="title" :aria-invalid="hasError('title') || undefined" :aria-describedby="hasError('title') ? errorId('title') : undefined">
@@ -159,7 +159,10 @@ async function onSubmit() {
     </div>
 
     <button class="primary-button" type="submit" :disabled="submitting">
-      {{ submitting ? t('projects.actions.submitting') : submitLabel }}
+      <span v-if="submitting" role="status" aria-live="polite" aria-atomic="true" data-testid="submit-status">
+        {{ t('projects.actions.submitting') }}
+      </span>
+      <span v-else>{{ submitLabel }}</span>
     </button>
   </form>
 </template>

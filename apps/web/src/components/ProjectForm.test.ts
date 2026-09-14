@@ -79,6 +79,42 @@ describe('ProjectForm accessibility', () => {
     wrapper.unmount()
   })
 
+  it('announces submit progress without moving focus and clears busy state afterwards', async () => {
+    const wrapper = mount(ProjectForm, {
+      attachTo: document.body,
+      props: {
+        submitting: false,
+        submitLabel: 'Save',
+      },
+      global: { plugins: [i18n] },
+    })
+
+    const title = wrapper.get('input[name="title"]')
+    ;(title.element as HTMLInputElement).focus()
+
+    expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
+
+    await wrapper.setProps({ submitting: true })
+
+    expect(wrapper.get('form').attributes('aria-busy')).toBe('true')
+    const status = wrapper.get('[data-testid="submit-status"]')
+    expect(status.attributes('role')).toBe('status')
+    expect(status.attributes('aria-live')).toBe('polite')
+    expect(status.attributes('aria-atomic')).toBe('true')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(document.activeElement).toBe(title.element)
+
+    await wrapper.setProps({ submitting: false })
+
+    expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    expect(document.activeElement).toBe(title.element)
+
+    wrapper.unmount()
+  })
+
   it('focuses invalid duration and does not submit', async () => {
     const wrapper = mount(ProjectForm, {
       attachTo: document.body,
