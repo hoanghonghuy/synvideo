@@ -44,6 +44,7 @@ const sceneErrors = ref<Record<string, string>>({})
 const activeHistorySceneKey = ref<string | null>(null)
 const historyEntries = ref<SceneNarrationEntry[]>([])
 const loadingHistory = ref(false)
+const historyTriggerSceneKey = ref<string | null>(null)
 
 const loading = ref(true)
 const pageError = ref<string | null>(null)
@@ -221,6 +222,7 @@ async function pollJob(sceneKey: string, jobID: string) {
 
 async function openHistory(sceneKey: string) {
   if (!selectedPlanVersion.value) return
+  historyTriggerSceneKey.value = sceneKey
   activeHistorySceneKey.value = sceneKey
   loadingHistory.value = true
   await nextTick()
@@ -241,8 +243,13 @@ async function openHistory(sceneKey: string) {
 }
 
 function closeHistory() {
+  const triggerSceneKey = historyTriggerSceneKey.value
   activeHistorySceneKey.value = null
   historyEntries.value = []
+  historyTriggerSceneKey.value = null
+  if (triggerSceneKey) {
+    void nextTick(() => document.querySelector<HTMLElement>(`[data-testid="history-btn-${triggerSceneKey}"]`)?.focus())
+  }
 }
 
 async function handleAssignAlternative(assetID: string) {
