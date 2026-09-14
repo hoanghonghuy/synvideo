@@ -195,7 +195,7 @@ onMounted(load)
       </section>
 
       <form class="mix-grid" @submit.prevent="save">
-        <section class="panel">
+        <section class="panel" :aria-busy="uploading ? 'true' : undefined">
           <h2>{{ t('audioMix.sourceTitle') }}</h2>
           <label for="music-asset">{{ t('audioMix.assetLabel') }}</label>
           <select id="music-asset" v-model="selectedMusicID" required>
@@ -209,6 +209,7 @@ onMounted(load)
             <span>{{ uploading ? t('audioMix.uploading') : t('audioMix.upload') }}</span>
             <input type="file" accept="audio/*" :disabled="uploading" @change="onUpload" />
           </label>
+          <p v-if="uploading" class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="audio-upload-status">{{ t('audioMix.uploading') }}</p>
           <p v-if="audioAssets.length === 0">
             {{ t('audioMix.noAudioPrefix') }}
             <RouterLink :to="`/projects/${projectID}/media`">{{ t('audioMix.mediaLibrary') }}</RouterLink>.
@@ -240,9 +241,10 @@ onMounted(load)
           <p v-else class="hint">{{ t('audioMix.duckingDisabled') }}</p>
         </section>
 
-        <section class="panel actions">
+        <section class="panel actions" :aria-busy="saving ? 'true' : undefined">
           <h2>{{ t('audioMix.revisionTitle') }}</h2>
           <button type="submit" :disabled="saving || !selectedMusicID">{{ saving ? t('audioMix.saving') : mix ? t('audioMix.save') : t('audioMix.create') }}</button>
+          <p v-if="saving" class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="audio-save-status">{{ t('audioMix.saving') }}</p>
           <button v-if="mix?.state === 'STALE'" type="button" :disabled="saving" @click="rebindNarration">{{ t('audioMix.rebind') }}</button>
           <button type="button" :disabled="!mix || mix.state !== 'CURRENT'" @click="verifySnapshot">{{ t('audioMix.verifySnapshot') }}</button>
           <p v-if="mix && mix.state !== 'CURRENT'" class="hint">{{ t('audioMix.snapshotBlocked') }}</p>
@@ -279,5 +281,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .state-stale { border-left: 5px solid #b77b00; }
 .state-broken, .state-error { border-left: 5px solid #b02a37; }
 .hint { font-size: .9rem; opacity: .75; }
+.sr-only { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 760px) { .mix-grid { grid-template-columns: 1fr; } .mix-header { flex-direction: column; } .mix-page { padding: 1rem; } }
 </style>
