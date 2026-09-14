@@ -62,6 +62,22 @@ function applyMix(value: AudioMixView) {
   Object.assign(config, structuredClone(value.config))
 }
 
+function snapshotConfig(): AudioMixConfig {
+  return {
+    music_trim_start_ms: config.music_trim_start_ms,
+    start_offset_ms: config.start_offset_ms,
+    loop_policy: config.loop_policy,
+    music_gain_db: config.music_gain_db,
+    narration_gain_db: config.narration_gain_db,
+    ducking: {
+      enabled: config.ducking.enabled,
+      reduction_db: config.ducking.reduction_db,
+      attack_ms: config.ducking.attack_ms,
+      release_ms: config.ducking.release_ms,
+    },
+  }
+}
+
 async function load() {
   if (!projectID.value) return
   loading.value = true
@@ -97,11 +113,11 @@ async function save() {
       ? await updateAudioMix(projectID.value, {
           expected_revision: mix.value.revision,
           music_asset_id: selectedMusicID.value,
-          config: structuredClone(config),
+          config: snapshotConfig(),
         })
       : await createAudioMix(projectID.value, {
           music_asset_id: selectedMusicID.value,
-          config: structuredClone(config),
+          config: snapshotConfig(),
         })
     applyMix(value)
     history.value = await listAudioMixHistory(projectID.value)
