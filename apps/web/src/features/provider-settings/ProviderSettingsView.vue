@@ -281,6 +281,10 @@ onMounted(() => {
     <div
       v-if="loading"
       class="loading-state"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="provider-settings-loading-status"
     >
       {{ t('providerSettings.states.loading') }}
     </div>
@@ -344,6 +348,7 @@ onMounted(() => {
 
         <form
           class="provider-form"
+          :aria-busy="getFormState(provider.id).submitting || undefined"
           @submit.prevent="handleSave(provider)"
         >
           <div class="form-group toggle-group">
@@ -472,11 +477,16 @@ onMounted(() => {
                 getFormState(provider.id).submitting || getFormState(provider.id).deleting
               "
             >
-              {{
-                getFormState(provider.id).submitting
-                  ? t('providerSettings.actions.saving')
-                  : t('providerSettings.actions.save')
-              }}
+              <span
+                v-if="getFormState(provider.id).submitting"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                data-testid="provider-save-status"
+              >
+                {{ t('providerSettings.actions.saving') }}
+              </span>
+              <span v-else>{{ t('providerSettings.actions.save') }}</span>
             </button>
 
             <button

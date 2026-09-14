@@ -85,6 +85,63 @@ beforeEach(() => {
 })
 
 describe('ProviderSettingsView', () => {
+  it('announces loading without stealing focus and removes the status after load', async () => {
+    let resolveLoad: ((value: Response) => void) | undefined
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => {
+      resolveLoad = resolve
+    }))
+
+    const wrapper = await mountProviderSettingsView({ attachTo: document.body })
+    const focusTarget = document.createElement('button')
+    document.body.appendChild(focusTarget)
+    focusTarget.focus()
+
+    const loadingStatus = wrapper.find('[data-testid="provider-settings-loading-status"]')
+    expect(loadingStatus.attributes('role')).toBe('status')
+    expect(loadingStatus.attributes('aria-live')).toBe('polite')
+    expect(document.activeElement).toBe(focusTarget)
+
+    resolveLoad?.(await jsonResponse(createMockProvidersList()))
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="provider-settings-loading-status"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(focusTarget)
+
+    focusTarget.remove()
+    wrapper.unmount()
+  })
+
+  it('exposes bounded busy and save status semantics only while save is pending', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(createMockProvidersList()))
+    const wrapper = await mountProviderSettingsView()
+    await flushPromises()
+
+    const openaiCard = wrapper.find('[data-provider-id="openai"]')
+    const form = openaiCard.find('form')
+    const submit = openaiCard.find('button.btn-primary')
+    let resolveSave: ((value: Response) => void) | undefined
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => {
+      resolveSave = resolve
+    }))
+
+    await form.trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+
+    expect(form.attributes('aria-busy')).toBe('true')
+    expect(submit.attributes('disabled')).toBeDefined()
+    const saveStatus = submit.find('[data-testid="provider-save-status"]')
+    expect(saveStatus.attributes('role')).toBe('status')
+    expect(saveStatus.attributes('aria-live')).toBe('polite')
+    expect(saveStatus.text()).toContain('Đang lưu')
+
+    resolveSave?.(await jsonResponse(createMockProvidersList().providers[0]))
+    await flushPromises()
+
+    expect(form.attributes('aria-busy')).toBeUndefined()
+    expect(submit.find('[data-testid="provider-save-status"]').exists()).toBe(false)
+    expect(submit.attributes('disabled')).toBeUndefined()
+  })
+
   it('renders list of providers with configured and unconfigured badges', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(createMockProvidersList()))
 
