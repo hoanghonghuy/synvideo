@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import { assignPrimaryVisual, mediaAssetContentURL } from '@/features/media/api'
 import { getScenePlan, listScenePlans, type Scene, type ScenePlan } from '@/features/scene-plan/api'
@@ -12,8 +13,10 @@ import {
   type VideoGenerationOptionModel,
   type VideoGenerationOptionProvider,
 } from './api'
+import messages from './messages'
 
 const route = useRoute()
+const { t } = useI18n({ useScope: 'local', messages })
 const projectId = computed(() => String(route.params.id ?? ''))
 
 const loading = ref(true)
@@ -73,7 +76,7 @@ async function load(): Promise<void> {
     const approved = summaries
       .filter((item) => item.status === 'approved')
       .sort((a, b) => b.version - a.version)[0]
-    if (!approved) throw new Error('An approved scene plan is required before generating scene video.')
+    if (!approved) throw new Error(t('sceneVideo.approvedPlanRequired'))
     plan.value = await getScenePlan(projectId.value, approved.version)
     providers.value = options.providers
     const firstProvider = options.providers[0]
@@ -84,7 +87,7 @@ async function load(): Promise<void> {
     await refreshPendingJobs()
     schedulePolling()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Unable to load video generation workspace.'
+    errorMessage.value = error instanceof Error ? error.message : t('sceneVideo.loadFailed')
   } finally {
     loading.value = false
   }
@@ -106,7 +109,7 @@ async function generate(scene: Scene): Promise<void> {
   try {
     const duration = durationSeconds.value ?? Math.round(scene.expected_duration_seconds)
     if (duration < durationMin.value || duration > durationMax.value) {
-      throw new Error(`Duration must be between ${durationMin.value} and ${durationMax.value} seconds for the selected model.`)
+      throw new Error(t('sceneVideo.durationOutOfRange', { min: durationMin.value, max: durationMax.value }))
     }
     const job = await createSceneVideoGeneration(projectId.value, plan.value.version, scene.key, {
       request_id: crypto.randomUUID(),
@@ -118,7 +121,7 @@ async function generate(scene: Scene): Promise<void> {
     setJob(scene.key, job)
     schedulePolling()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Unable to start video generation.'
+    errorMessage.value = error instanceof Error ? error.message : t('sceneVideo.startFailed')
   } finally {
     submittingSceneKey.value = null
   }
@@ -132,7 +135,7 @@ async function assign(sceneKey: string, job: SceneVideoJobView): Promise<void> {
     await assignPrimaryVisual(projectId.value, plan.value.version, sceneKey, job.media_asset_id)
     setJob(sceneKey, { ...job, assigned_primary_visual: true })
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Unable to assign generated video.'
+    errorMessage.value = error instanceof Error ? error.message : t('sceneVideo.assignFailed')
   } finally {
     assigningJobId.value = null
   }
@@ -173,9 +176,15 @@ function schedulePolling(): void {
 }
 
 function jobLabel(job: SceneVideoJobView): string {
-  if (job.state === 'failed') return job.error_code ? `Failed · ${job.error_code}` : 'Failed'
-  if (job.state === 'succeeded') return job.assigned_primary_visual ? 'Succeeded · assigned' : 'Succeeded'
-  return job.state === 'running' ? 'Generating…' : 'Queued'
+  if (job.state === 'failed') {
+    const failed = t('sceneVideo.stateFailed')
+    return job.error_code ? `${failed} · ${job.error_code}` : failed
+  }
+  if (job.state === 'succeeded') {
+    const succeeded = t('sceneVideo.stateSucceeded')
+    return job.assigned_primary_visual ? `${succeeded} · ${t('sceneVideo.stateAssigned')}` : succeeded
+  }
+  return job.state === 'running' ? t('sceneVideo.stateRunning') : t('sceneVideo.stateQueued')
 }
 
 onMounted(load)
@@ -188,19 +197,19 @@ onBeforeUnmount(() => {
   <main class="scene-video-workspace">
     <header class="scene-video-header">
       <div>
-        <p class="eyebrow">Scene video</p>
-        <h1>AI video generation</h1>
-        <p>Generate alternatives per approved scene, recover status after refresh, preview results, then explicitly assign the chosen video.</p>
+        <p class="eyebrow">{{ t('sceneVideo.eyebrow') }}</p>
+        <h1>{{ t('sceneVideo.title') }}</h1>
+        <p>{{ t('sceneVideo.description') }}</p>
       </div>
     </header>
 
     <p v-if="errorMessage" role="alert" class="error-banner">{{ errorMessage }}</p>
-    <p v-if="loading">Loading video generation workspace…</p>
+    <p v-if="loading">{{ t('sceneVideo.loading') }}</p>
 
     <template v-else-if="plan">
-      <section class="generation-controls" aria-label="Video generation controls">
+      <section class="generation-controls" :aria-label="t('sceneVideo.controlsLabel')">
         <label>
-          Provider
+          {{ t('sceneVideo.provider') }}
           <select v-model="selectedProviderId" @change="onProviderChange">
             <option v-for="provider in providers" :key="provider.id" :value="provider.id">
               {{ provider.display_name }}
@@ -208,7 +217,7 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <label>
-          Model
+          {{ t('sceneVideo.model') }}
           <select v-model="selectedModelId" @change="onModelChange">
             <option v-for="model in selectedProvider?.models ?? []" :key="model.id" :value="model.id">
               {{ model.display_name }}
@@ -216,9 +225,9 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <label>
-          Duration (seconds)
+          {{ t('sceneVideo.duration') }}
           <input v-model.number="durationSeconds" type="number" :min="durationMin" :max="durationMax" />
-          <small>{{ durationMin }}–{{ durationMax }}s supported by the selected model.</small>
+          <small>{{ t('sceneVideo.durationSupport', { min: durationMin, max: durationMax }) }}</small>
         </label>
       </section>
 
@@ -232,16 +241,16 @@ onBeforeUnmount(() => {
               :disabled="!selectedModelId || submittingSceneKey === scene.key"
               @click="generate(scene)"
             >
-              {{ submittingSceneKey === scene.key ? 'Submitting…' : 'Generate alternative' }}
+              {{ submittingSceneKey === scene.key ? t('sceneVideo.submitting') : t('sceneVideo.generateAlternative') }}
             </button>
           </div>
 
           <div class="alternatives">
-            <p v-if="!(jobs[scene.key]?.length)">No generated alternatives yet.</p>
+            <p v-if="!(jobs[scene.key]?.length)">{{ t('sceneVideo.noAlternatives') }}</p>
             <article v-for="job in jobs[scene.key] ?? []" :key="job.id" class="alternative-card">
               <div class="alternative-meta">
                 <strong>{{ jobLabel(job) }}</strong>
-                <span>Attempt {{ job.attempt }}/{{ job.max_attempts }}</span>
+                <span>{{ t('sceneVideo.attempt', { attempt: job.attempt, max: job.max_attempts }) }}</span>
               </div>
               <video
                 v-if="job.state === 'succeeded' && job.media_asset_id"
@@ -255,7 +264,7 @@ onBeforeUnmount(() => {
                 :disabled="job.assigned_primary_visual || assigningJobId === job.id"
                 @click="assign(scene.key, job)"
               >
-                {{ job.assigned_primary_visual ? 'Assigned to scene' : assigningJobId === job.id ? 'Assigning…' : 'Use as primary visual' }}
+                {{ job.assigned_primary_visual ? t('sceneVideo.assignedToScene') : assigningJobId === job.id ? t('sceneVideo.assigning') : t('sceneVideo.useAsPrimary') }}
               </button>
             </article>
           </div>
