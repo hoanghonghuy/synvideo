@@ -129,7 +129,9 @@ describe('GeneratedImageWorkspaceView', () => {
   })
 
   it('recovers an initial load failure without submitting paid generation work', async () => {
-    const projectSpy = vi.mocked(projectApi.getProject)
+    const projectSpy = vi.spyOn(projectApi, 'getProject')
+    projectSpy.mockReset()
+    projectSpy
       .mockRejectedValueOnce(new Error('temporary network failure'))
       .mockResolvedValue(project)
     const createSpy = vi.spyOn(imageApi, 'createSceneImageGeneration')
