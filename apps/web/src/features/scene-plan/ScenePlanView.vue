@@ -628,6 +628,34 @@ function cancelSplitModal() {
   void nextTick(() => document.querySelector<HTMLElement>(`[data-testid="split-scene-${targetIndex}"]`)?.focus())
 }
 
+function handleSplitModalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelSplitModal()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const modal = document.querySelector<HTMLElement>('[data-testid="split-modal"]')
+  if (!modal) return
+  const focusable = Array.from(
+    modal.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled])'),
+  ).filter((element) => element.getAttribute('aria-hidden') !== 'true')
+  if (focusable.length === 0) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) return
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 function generateUniqueKey(baseKey: string): string {
   const cleanBase = baseKey.replace(/-part-\d+$/, '')
   let candidate = `${cleanBase}-part-2`
@@ -1429,6 +1457,7 @@ function errorMessage(code: string) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="split-modal-title"
+      @keydown="handleSplitModalKeydown"
     >
       <div class="modal-card">
         <h3 id="split-modal-title">{{ t('scenePlan.splitModal.title') }}</h3>
