@@ -176,12 +176,14 @@ function toFormState(brief: CreativeBrief): CreativeBriefFormState {
     <p
       v-if="loading"
       class="state-text"
+      role="status"
     >
       {{ t('creativeBrief.states.loading') }}
     </p>
     <div
       v-else-if="errorCode && !project"
       class="notice error"
+      role="alert"
     >
       <p>{{ t(`projects.errors.${errorCode}`) }}</p>
       <button
@@ -219,6 +221,7 @@ function toFormState(brief: CreativeBrief): CreativeBriefFormState {
       <div
         v-if="staleConflict"
         class="notice warning"
+        role="alert"
       >
         <p>{{ t('creativeBrief.states.staleConflict') }}</p>
         <button
@@ -233,6 +236,7 @@ function toFormState(brief: CreativeBrief): CreativeBriefFormState {
       <div
         v-else-if="errorCode"
         class="notice error"
+        role="alert"
       >
         {{ t(errorCode === 'validation_failed' ? 'projects.errors.validation_failed' : `projects.errors.${errorCode}`) }}
       </div>

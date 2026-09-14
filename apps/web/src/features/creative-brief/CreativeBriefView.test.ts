@@ -44,6 +44,26 @@ beforeEach(() => {
 })
 
 describe('CreativeBriefView', () => {
+  it('announces loading and bootstrap failure without stealing focus', async () => {
+    let rejectProject!: (reason?: unknown) => void
+    fetchMock.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectProject = reject
+      }),
+    )
+
+    const wrapper = await mountCreativeBriefView()
+    expect(wrapper.get('[role="status"]').text()).toContain('Đang tải Creative Brief')
+    expect(document.activeElement).toBe(document.body)
+
+    rejectProject(new TypeError('Failed to fetch'))
+    await flushPromises()
+
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toContain('Không thể kết nối máy chủ')
+    expect(alert.get('button').text()).toContain('Thử lại')
+  })
+
   it('renders a new draft when GET returns creative_brief_not_found', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(project))
@@ -217,7 +237,7 @@ describe('CreativeBriefView', () => {
     await flushPromises()
 
     expect((wrapper.find('[name="source_text"]').element as HTMLTextAreaElement).value).toBe('Van con o day')
-    expect(wrapper.text()).toContain('Không thể kết nối máy chủ')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Không thể kết nối máy chủ')
     expect(wrapper.text()).toContain('Có thay đổi chưa lưu')
   })
 
@@ -270,7 +290,9 @@ describe('CreativeBriefView', () => {
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Phiên bản trên máy chủ đã thay đổi')
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toContain('Phiên bản trên máy chủ đã thay đổi')
+    expect(alert.get('[data-testid="reload-latest"]').attributes('type')).toBe('button')
     expect((wrapper.find('[name="source_text"]').element as HTMLTextAreaElement).value).toBe('Thay doi xung dot')
 
     const putCalls = fetchMock.mock.calls.filter(
