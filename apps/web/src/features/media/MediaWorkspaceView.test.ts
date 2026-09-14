@@ -316,6 +316,21 @@ describe('MediaWorkspaceView', () => {
     expect(wrapper.find('[data-testid="scene-history-scene-intro-1"]').exists()).toBe(true)
   })
 
+  it('moves focus into the delete confirmation after explicit delete activation', async () => {
+    route('GET', `/api/v1/projects/${projectId}`, project)
+    route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
+    route('GET', `/api/v1/projects/${projectId}/scene-plans`, [])
+
+    const wrapper = await mountView(projectId, true)
+    await flushPromises()
+
+    await wrapper.find(`[data-testid="delete-asset-${imageId}"]`).trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="delete-confirmation"]').exists()).toBe(true)
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-delete-asset"]').element)
+  })
+
   it('keeps an in-use asset after delete conflict', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
@@ -676,7 +691,7 @@ function routeFn(method: string | undefined, path: string, handler: Handler) {
   handlers.push({ method, path, handler })
 }
 
-async function mountView(initialProjectId = projectId) {
+async function mountView(initialProjectId = projectId, attachToBody = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -686,7 +701,10 @@ async function mountView(initialProjectId = projectId) {
   })
   await router.push(`/projects/${initialProjectId}/media`)
   await router.isReady()
-  return mount(MediaWorkspaceView, { global: { plugins: [router, i18n] } })
+  return mount(MediaWorkspaceView, {
+    attachTo: attachToBody ? document.body : undefined,
+    global: { plugins: [router, i18n] },
+  })
 }
 
 function jsonResponse(body: unknown, status = 200) {
