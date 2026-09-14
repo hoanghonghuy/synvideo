@@ -195,4 +195,48 @@ describe('SceneNarrationWorkspaceView', () => {
 
     expect(createSpy).toHaveBeenCalled()
   })
+
+  it('opens narration history as a labelled modal and moves focus to its close action', async () => {
+    vi.spyOn(projectApi, 'getProject').mockResolvedValue({
+      id: 'proj-123', title: 'Test Project', description: 'Test description', content_format: 'short',
+      aspect_ratio: '16:9', target_duration_seconds: 30, locale: 'vi', status: 'active',
+      created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z',
+    })
+    vi.spyOn(scenePlanApi, 'listScenePlans').mockResolvedValue([{
+      version: 1, revision: 1, status: 'approved', source_script_version: 1, source_proposal_version: 1,
+      content_locale: 'vi-VN', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z',
+      approved_at: '2026-09-01T00:00:00Z',
+    }])
+    vi.spyOn(scenePlanApi, 'getScenePlan').mockResolvedValue({
+      project_id: 'proj-123', version: 1, revision: 1, status: 'approved', content_locale: 'vi-VN',
+      source_script_version: 1, source_proposal_version: 1, created_at: '2026-09-01T00:00:00Z',
+      updated_at: '2026-09-01T00:00:00Z', approved_at: '2026-09-01T00:00:00Z',
+      scenes: [{ key: 'sc-1', script_section_key: 'intro', narration: 'Xin chào', visual_instruction: 'Mở đầu',
+        planned_source_type: 'generated_image', expected_duration_seconds: 5 }],
+    })
+    vi.spyOn(narrationApi, 'fetchTTSOptions').mockResolvedValue({ providers: [] })
+    vi.spyOn(narrationApi, 'listSceneNarrations').mockResolvedValue([])
+    vi.spyOn(narrationApi, 'listSceneNarrationHistory').mockResolvedValue([])
+
+    await router.isReady()
+    const wrapper = mount(SceneNarrationWorkspaceView, {
+      attachTo: document.body,
+      global: { plugins: [router, i18n] },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="history-btn-sc-1"]').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('.modal-dialog')
+    const close = wrapper.get('[data-testid="narration-history-close"]')
+    expect(dialog.attributes('role')).toBe('dialog')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(dialog.attributes('aria-labelledby')).toBe('narration-history-title')
+    expect(wrapper.get('#narration-history-title').text()).toContain('sc-1')
+    expect(document.activeElement).toBe(close.element)
+
+    wrapper.unmount()
+  })
+
 })

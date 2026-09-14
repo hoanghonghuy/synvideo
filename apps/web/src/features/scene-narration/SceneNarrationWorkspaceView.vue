@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getProject, type Project } from '@/api/projects'
@@ -223,6 +223,8 @@ async function openHistory(sceneKey: string) {
   if (!selectedPlanVersion.value) return
   activeHistorySceneKey.value = sceneKey
   loadingHistory.value = true
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-testid="narration-history-close"]')?.focus()
   historyEntries.value = []
   try {
     const list = await listSceneNarrationHistory(
@@ -521,11 +523,17 @@ onMounted(() => {
       class="modal-backdrop"
       @click.self="closeHistory"
     >
-      <div class="modal-dialog">
+      <div
+        class="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="narration-history-title"
+      >
         <div class="modal-header">
-          <h3>{{ t('sceneNarration.historyModal.title', { key: activeHistorySceneKey }) }}</h3>
+          <h3 id="narration-history-title">{{ t('sceneNarration.historyModal.title', { key: activeHistorySceneKey }) }}</h3>
           <button
             class="btn-close"
+            data-testid="narration-history-close"
             @click="closeHistory"
           >
             &times;
