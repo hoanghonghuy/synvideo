@@ -581,6 +581,16 @@ function requestApproval() {
   void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-approve-btn"]')?.focus())
 }
 
+function cancelStaleReload() {
+  confirmStaleReload.value = false
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="reload-stale-scene-plan"]')?.focus())
+}
+
+function cancelApproval() {
+  confirmApproval.value = false
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="approve-scene-plan-btn"]')?.focus())
+}
+
 async function confirmStaleReloadAndDiscard() {
   confirmStaleReload.value = false
   if (selectedVersion.value !== null) await loadVersion(selectedVersion.value, true)
@@ -609,6 +619,13 @@ function openSplitModal(index: number) {
 function closeSplitModal() {
   splitTargetIndex.value = null
   splitError.value = ''
+}
+
+function cancelSplitModal() {
+  const targetIndex = splitTargetIndex.value
+  closeSplitModal()
+  if (targetIndex === null) return
+  void nextTick(() => document.querySelector<HTMLElement>(`[data-testid="split-scene-${targetIndex}"]`)?.focus())
 }
 
 function generateUniqueKey(baseKey: string): string {
@@ -1139,7 +1156,7 @@ function errorMessage(code: string) {
               <button
                 class="secondary-button"
                 type="button"
-                @click="confirmStaleReload = false"
+                @click="cancelStaleReload"
               >
                 {{ t('scenePlan.actions.cancel') }}
               </button>
@@ -1394,7 +1411,7 @@ function errorMessage(code: string) {
               <button
                 class="secondary-button"
                 type="button"
-                @click="confirmApproval = false"
+                @click="cancelApproval"
               >
                 {{ t('scenePlan.actions.cancel') }}
               </button>
@@ -1475,7 +1492,7 @@ function errorMessage(code: string) {
             class="secondary-button"
             type="button"
             data-testid="cancel-split-btn"
-            @click="closeSplitModal"
+            @click="cancelSplitModal"
           >
             {{ t('scenePlan.actions.cancel') }}
           </button>

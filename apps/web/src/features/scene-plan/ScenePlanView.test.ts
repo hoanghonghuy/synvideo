@@ -411,6 +411,11 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="confirm-stale-reload"]').exists()).toBe(true)
     await wrapper.vm.$nextTick()
     expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-reload-stale-scene-plan"]').element)
+    await wrapper.find('[data-testid="confirm-stale-reload"]').findAll('button')[1]!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('reload-stale-scene-plan')
+    await wrapper.find('[data-testid="reload-stale-scene-plan"]').trigger('click')
+    await wrapper.vm.$nextTick()
     await wrapper.find('[data-testid="confirm-reload-stale-scene-plan"]').trigger('click')
     await flushPromises()
 
@@ -443,6 +448,11 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="split-modal"]').attributes('aria-modal')).toBe('true')
     await wrapper.vm.$nextTick()
     expect(document.activeElement).toBe(wrapper.find('[data-testid="split-index-input"]').element)
+    await wrapper.find('[data-testid="cancel-split-btn"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('split-scene-0')
+    await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
+    await wrapper.vm.$nextTick()
 
     // Split index at code point 10
     const splitIndex = 10
@@ -892,6 +902,11 @@ describe('ScenePlanView', () => {
     expect(wrapper.find('[data-testid="confirm-approve-modal"]').exists()).toBe(true)
     await wrapper.vm.$nextTick()
     expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-approve-btn"]').element)
+    await wrapper.find('[data-testid="confirm-approve-modal"]').findAll('button')[1]!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('approve-scene-plan-btn')
+    await wrapper.find('[data-testid="approve-scene-plan-btn"]').trigger('click')
+    await wrapper.vm.$nextTick()
     await wrapper.find('[data-testid="confirm-approve-btn"]').trigger('click')
     await flushPromises()
 
