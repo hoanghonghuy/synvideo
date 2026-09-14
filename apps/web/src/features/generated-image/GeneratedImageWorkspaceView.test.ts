@@ -150,7 +150,7 @@ describe('GeneratedImageWorkspaceView', () => {
 
     expect(projectSpy).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-testid="retry-load-generated-image"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="image-prompt-scene-1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="image-prompt-scene-1"]').exists()).toBe(true)
     expect(createSpy).not.toHaveBeenCalled()
   })
 
