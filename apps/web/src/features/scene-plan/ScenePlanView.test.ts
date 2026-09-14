@@ -454,6 +454,24 @@ describe('ScenePlanView', () => {
     await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
     await wrapper.vm.$nextTick()
 
+    const splitInput = wrapper.find('[data-testid="split-index-input"]')
+    const splitCancel = wrapper.find('[data-testid="cancel-split-btn"]')
+    ;(splitCancel.element as HTMLElement).focus()
+    await wrapper.find('[data-testid="split-modal"]').trigger('keydown', { key: 'Tab' })
+    expect(document.activeElement).toBe(splitInput.element)
+
+    ;(splitInput.element as HTMLElement).focus()
+    await wrapper.find('[data-testid="split-modal"]').trigger('keydown', { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(splitCancel.element)
+
+    await wrapper.find('[data-testid="split-modal"]').trigger('keydown', { key: 'Escape' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="split-modal"]').exists()).toBe(false)
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('split-scene-0')
+
+    await wrapper.find('[data-testid="split-scene-0"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
     // Split index at code point 10
     const splitIndex = 10
     await wrapper.find('[data-testid="split-index-input"]').setValue(String(splitIndex))
