@@ -209,7 +209,10 @@ function armDelete(provider: ProviderSettingView) {
 }
 
 function cancelDelete() {
+  const providerId = pendingDeleteProviderId.value
   pendingDeleteProviderId.value = null
+  if (!providerId) return
+  void nextTick(() => document.getElementById(`delete-provider-${providerId}`)?.focus())
 }
 
 async function handleDelete(provider: ProviderSettingView) {
@@ -478,6 +481,7 @@ onMounted(() => {
 
             <button
               v-if="provider.configured && pendingDeleteProviderId !== provider.id"
+              :id="`delete-provider-${provider.id}`"
               type="button"
               class="btn btn-danger"
               :disabled="
