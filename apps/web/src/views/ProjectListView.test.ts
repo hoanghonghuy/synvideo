@@ -134,6 +134,7 @@ describe('ProjectListView', () => {
       )
 
     const wrapper = mount(ProjectListView, {
+      attachTo: document.body,
       global: {
         plugins: [i18n, testRouter()],
       },
@@ -149,6 +150,7 @@ describe('ProjectListView', () => {
     expect(wrapper.text()).toContain('Trang một')
     const paginationAlert = wrapper.get('.project-library-pagination-error[role="alert"]')
     expect(paginationAlert.text()).toBeTruthy()
+    expect(document.activeElement).toBe(paginationAlert.get('button').element)
 
     await paginationAlert.get('button').trigger('click')
     await flushPromises()
@@ -158,6 +160,7 @@ describe('ProjectListView', () => {
     expect(wrapper.text()).toContain('Trang hai')
     expect(wrapper.find('.project-library-pagination-error').exists()).toBe(false)
     expect(wrapper.find('.project-library-load-more').exists()).toBe(false)
+    wrapper.unmount()
   })
 })
 
