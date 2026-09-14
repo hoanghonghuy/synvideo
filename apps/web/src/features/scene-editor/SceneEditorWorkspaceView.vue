@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/projects'
 import { listScenePlans } from '@/features/scene-plan/api'
@@ -35,6 +36,7 @@ import {
   validateEditableScene,
 } from './editorState'
 import { renderCaptionPresentation } from './renderCaptionPresentation'
+import renderMessages from './renderMessages'
 import {
   isRenderExportCancellable,
   isRenderExportRetryable,
@@ -53,6 +55,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n({ useScope: 'local', messages: renderMessages })
 const projectID = computed(() => String(route.params.id ?? ''))
 const composition = ref<SceneEditorView | null>(null)
 const draft = ref<SceneEditorView | null>(null)
@@ -247,7 +250,7 @@ async function createSnapshot() {
     renderJob.value = job
     pendingRenderCancellationID.value = null
     persistRenderJobID(window.localStorage, projectID.value, job.id)
-    notice.value = `Immutable snapshot ${snapshot.digest.slice(0, 12)}… queued for MP4${hasSnapshotBoundCaptions.value ? ' with in-video captions' : ''}${renderSubtitleMode.value === 'webvtt' ? ' + WebVTT download' : ''} render.`
+    notice.value = t('render.queued', { digest: snapshot.digest.slice(0, 12), captions: hasSnapshotBoundCaptions.value ? t('render.withCaptions') : '', webvtt: renderSubtitleMode.value === 'webvtt' ? t('render.withWebvtt') : '' })
     startRenderPolling()
     void refreshRenderHistory()
   } catch (cause) {
@@ -285,7 +288,7 @@ async function refreshRenderExport(jobID = renderJob.value?.id, reportError = tr
       persistRenderJobID(window.localStorage, projectID.value, null)
       stopRenderPolling()
     } else if (reportError) {
-      error.value = `Render status refresh failed: ${messageFor(cause)}`
+      error.value = t('render.refreshFailed', { detail: messageFor(cause) })
     }
   }
 }
@@ -310,7 +313,7 @@ async function refreshRenderHistory(append = false) {
     renderHistory.value = append ? [...renderHistory.value, ...page.items] : page.items
     renderHistoryCursor.value = page.next_cursor ?? null
   } catch (cause) {
-    if (append) error.value = `Render history refresh failed: ${messageFor(cause)}`
+    if (append) error.value = t('render.historyFailed', { detail: messageFor(cause) })
   }
 }
 
@@ -338,7 +341,7 @@ async function cancelActiveRender() {
     renderJob.value = cancelled
     persistRenderJobID(window.localStorage, projectID.value, cancelled.id)
     if (isRenderExportTerminal(cancelled)) stopRenderPolling()
-    notice.value = cancelled.state === 'cancelled' ? 'Render cancelled.' : 'Cancellation requested.'
+    notice.value = cancelled.state === 'cancelled' ? t('render.cancelled') : t('render.cancellationRequested')
     await refreshRenderHistory()
   } catch (cause) {
     error.value = messageFor(cause)
@@ -356,7 +359,7 @@ async function retryTerminalRender(sourceJob: RenderExportJob) {
     const retried = await retryRenderExport(projectID.value, sourceJob.id, requestID)
     renderJob.value = retried
     persistRenderJobID(window.localStorage, projectID.value, retried.id)
-    notice.value = `Retry queued from ${sourceJob.id.slice(0, 8)}…`
+    notice.value = t('render.retryQueued', { id: sourceJob.id.slice(0, 8) })
     startRenderPolling()
     await refreshRenderHistory()
   } catch (cause) {
@@ -623,21 +626,21 @@ async function applyUpstreamReconcile() {
       <section class="preview-panel" aria-labelledby="preview-heading">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Snapshot-equivalent semantics</p>
-            <h2 id="preview-heading">Composition preview</h2>
+            <p class="eyebrow">{{ t('render.snapshotSemantics') }}</p>
+            <h2 id="preview-heading">{{ t('render.preview') }}</h2>
           </div>
           <div class="render-config">
             <label>
-              WebVTT download
+              {{ t('render.webvttDownload') }}
               <select v-model="renderSubtitleMode" :disabled="snapshotBlocked || acting || renderBusy" aria-describedby="caption-output-help">
-                <option value="off">Do not create</option>
-                <option value="webvtt">Create WebVTT</option>
+                <option value="off">{{ t('render.doNotCreate') }}</option>
+                <option value="webvtt">{{ t('render.createWebvtt') }}</option>
               </select>
             </label>
-            <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">Snapshot &amp; render MP4</button>
+            <button type="button" :disabled="snapshotBlocked || acting" @click="createSnapshot">{{ t('render.snapshotRender') }}</button>
           </div>
         </div>
-        <div id="caption-output-help" class="caption-output-grid" aria-label="Caption outputs">
+        <div id="caption-output-help" class="caption-output-grid" :aria-label="t('render.captionOutputs')">
           <article class="caption-output-card">
             <strong>{{ captionPresentation.burnedInLabel }}</strong>
             <p>{{ captionPresentation.burnedInDescription }}</p>
@@ -654,56 +657,56 @@ async function applyUpstreamReconcile() {
             <span>{{ semanticSceneSummary(scene) }}</span>
           </li>
         </ol>
-        <p v-if="draft.audio_mix">Audio mix document {{ draft.audio_mix.document_id }} revision {{ draft.audio_mix.revision }}.</p>
-        <p v-else>No project audio mix selected.</p>
+        <p v-if="draft.audio_mix">{{ t('render.audioMix', { document: draft.audio_mix.document_id, revision: draft.audio_mix.revision }) }}</p>
+        <p v-else>{{ t('render.noAudioMix') }}</p>
 
         <div v-if="renderJob" class="render-status" aria-live="polite">
           <div>
-            <strong>Render {{ renderJob.cancellation_pending ? 'cancelling' : renderJob.state }}</strong>
-            <span>Attempt {{ renderJob.attempt }}/{{ renderJob.max_attempts }} · {{ renderJob.profile_id }} · WebVTT {{ renderJob.subtitle_mode }}</span>
+            <strong>{{ t('render.status', { state: renderJob.cancellation_pending ? t('render.cancelling') : renderJob.state }) }}</strong>
+            <span>{{ t('render.attempt', { attempt: renderJob.attempt, max: renderJob.max_attempts, profile: renderJob.profile_id, subtitle: renderJob.subtitle_mode }) }}</span>
           </div>
-          <p>Snapshot {{ renderJob.snapshot_digest.slice(0, 12) }}…</p>
-          <p v-if="renderJob.retry_of_render_job_id">Retry of {{ renderJob.retry_of_render_job_id.slice(0, 8) }}…</p>
-          <p v-if="renderJob.error_code" class="field-error" role="alert">Render {{ renderJob.state }}: {{ renderJob.error_code }}</p>
+          <p>{{ t('render.snapshot', { digest: renderJob.snapshot_digest.slice(0, 12) }) }}</p>
+          <p v-if="renderJob.retry_of_render_job_id">{{ t('render.retryOf', { id: renderJob.retry_of_render_job_id.slice(0, 8) }) }}</p>
+          <p v-if="renderJob.error_code" class="field-error" role="alert">{{ t('render.stateError', { state: renderJob.state, code: renderJob.error_code }) }}</p>
           <p v-if="renderJob.state === 'succeeded' && renderJob.artifact">
-            MP4 ready · {{ renderJob.artifact.width }}×{{ renderJob.artifact.height }} · {{ seconds(renderJob.artifact.duration_ms) }} · {{ renderJob.artifact.byte_size }} bytes
+            {{ t('render.ready', { width: renderJob.artifact.width, height: renderJob.artifact.height, duration: seconds(renderJob.artifact.duration_ms), bytes: renderJob.artifact.byte_size }) }}
           </p>
           <p v-if="renderJob.state === 'succeeded' && renderJob.subtitle_mode === 'webvtt' && !renderJob.artifact?.subtitle_media_asset_id" class="action-hint">
-            WebVTT was requested, but this immutable snapshot had no enabled caption sidecar to export.
+            {{ t('render.noSidecar') }}
           </p>
           <div class="render-actions">
-            <span v-if="pendingRenderCancellationID === renderJob.id && isRenderExportCancellable(renderJob)" class="destructive-confirmation" role="group" aria-label="Confirm render cancellation">
-              <span>Stop this active render? Work already completed for this attempt may be lost.</span>
-              <button :id="`confirm-cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="cancelActiveRender">Confirm cancel render</button>
-              <button type="button" :disabled="acting" @click="keepRendering">Keep rendering</button>
+            <span v-if="pendingRenderCancellationID === renderJob.id && isRenderExportCancellable(renderJob)" class="destructive-confirmation" role="group" :aria-label="t('render.confirmAria')">
+              <span>{{ t('render.stopQuestion') }}</span>
+              <button :id="`confirm-cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="cancelActiveRender">{{ t('render.confirmCancel') }}</button>
+              <button type="button" :disabled="acting" @click="keepRendering">{{ t('render.keepRendering') }}</button>
             </span>
-            <button v-else-if="isRenderExportCancellable(renderJob)" :id="`cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="requestRenderCancellation">Cancel render</button>
-            <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">Retry render</button>
-            <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
-            <a v-if="subtitleDownloadURL" :href="subtitleDownloadURL" download>Download WebVTT</a>
-            <button v-else-if="!renderDownloadURL && !isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">Refresh render status</button>
+            <button v-else-if="isRenderExportCancellable(renderJob)" :id="`cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="requestRenderCancellation">{{ t('render.cancelRender') }}</button>
+            <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">{{ t('render.retryRender') }}</button>
+            <a v-if="renderDownloadURL" :href="renderDownloadURL" download>{{ t('render.downloadMp4') }}</a>
+            <a v-if="subtitleDownloadURL" :href="subtitleDownloadURL" download>{{ t('render.downloadWebvtt') }}</a>
+            <button v-else-if="!renderDownloadURL && !isRenderExportTerminal(renderJob)" type="button" @click="refreshRenderExport(renderJob.id)">{{ t('render.refreshStatus') }}</button>
           </div>
         </div>
-        <div v-if="renderHistory.length" class="render-history" aria-label="Render history">
+        <div v-if="renderHistory.length" class="render-history" :aria-label="t('render.historyAria')">
           <div class="render-history-header">
-            <strong>Render history</strong>
-            <button type="button" @click="refreshRenderHistory()">Refresh history</button>
+            <strong>{{ t('render.history') }}</strong>
+            <button type="button" @click="refreshRenderHistory()">{{ t('render.refreshHistory') }}</button>
           </div>
           <ol>
             <li v-for="item in renderHistory" :key="item.id">
               <button type="button" class="history-item" :data-state="item.state" @click="selectRenderHistoryItem(item)">
-                <span>{{ item.state }} · WebVTT {{ item.subtitle_mode }}</span>
+                <span>{{ t('render.historyState', { state: item.state, subtitle: item.subtitle_mode }) }}</span>
                 <span>{{ item.snapshot_digest.slice(0, 8) }}…</span>
-                <span>{{ item.subtitle_mode === 'webvtt' ? (item.artifact?.subtitle_media_asset_id ? 'WebVTT ready' : 'WebVTT requested') : 'No WebVTT download' }}</span>
+                <span>{{ item.subtitle_mode === 'webvtt' ? (item.artifact?.subtitle_media_asset_id ? t('render.webvttReady') : t('render.webvttRequested')) : t('render.noWebvtt') }}</span>
                 <span>{{ item.created_at }}</span>
               </button>
               <div class="history-actions">
-                <a v-if="subtitleURLFor(item)" :href="subtitleURLFor(item)" download>Download WebVTT</a>
-                <button v-if="isRenderExportRetryable(item)" type="button" :disabled="acting" @click="retryTerminalRender(item)">Retry</button>
+                <a v-if="subtitleURLFor(item)" :href="subtitleURLFor(item)" download>{{ t('render.downloadWebvtt') }}</a>
+                <button v-if="isRenderExportRetryable(item)" type="button" :disabled="acting" @click="retryTerminalRender(item)">{{ t('render.retry') }}</button>
               </div>
             </li>
           </ol>
-          <button v-if="renderHistoryCursor" type="button" @click="refreshRenderHistory(true)">Load more history</button>
+          <button v-if="renderHistoryCursor" type="button" @click="refreshRenderHistory(true)">{{ t('render.loadMore') }}</button>
         </div>
       </section>
 

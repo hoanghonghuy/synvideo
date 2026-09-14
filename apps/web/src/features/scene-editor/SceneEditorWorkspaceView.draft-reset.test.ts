@@ -35,6 +35,7 @@ vi.mock('./upstreamBridge', () => ({
   loadUpstreamBridgeGuidance: vi.fn().mockResolvedValue(null),
 }))
 
+import { i18n } from '@/locales'
 import SceneEditorWorkspaceView from './SceneEditorWorkspaceView.vue'
 
 function scene(duration = 2_000): SceneEditorScene {
@@ -66,7 +67,7 @@ async function mountEditor() {
   })
   router.push('/projects/project-1/scene-editor')
   await router.isReady()
-  const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router] } })
+  const wrapper = mount(SceneEditorWorkspaceView, { attachTo: document.body, global: { plugins: [router, i18n] } })
   await flushPromises()
   return wrapper
 }

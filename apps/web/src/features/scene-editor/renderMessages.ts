@@ -1,0 +1,18 @@
+export default {
+  vi: { render: {
+    snapshotSemantics: 'Ngữ nghĩa tương đương snapshot', preview: 'Xem trước composition', webvttDownload: 'Tải WebVTT', doNotCreate: 'Không tạo', createWebvtt: 'Tạo WebVTT', snapshotRender: 'Snapshot & render MP4', captionOutputs: 'Đầu ra phụ đề',
+    audioMix: 'Tài liệu audio mix {document} revision {revision}.', noAudioMix: 'Chưa chọn audio mix cho dự án.',
+    status: 'Render {state}', cancelling: 'đang hủy', attempt: 'Lần {attempt}/{max} · {profile} · WebVTT {subtitle}', snapshot: 'Snapshot {digest}…', retryOf: 'Thử lại từ {id}…', stateError: 'Render {state}: {code}', ready: 'MP4 sẵn sàng · {width}×{height} · {duration} · {bytes} byte', noSidecar: 'Đã yêu cầu WebVTT nhưng snapshot bất biến này không có sidecar phụ đề được bật để xuất.',
+    confirmAria: 'Xác nhận hủy render', stopQuestion: 'Dừng render đang chạy? Phần việc đã hoàn thành của lần này có thể bị mất.', confirmCancel: 'Xác nhận hủy render', keepRendering: 'Tiếp tục render', cancelRender: 'Hủy render', retryRender: 'Thử lại render', downloadMp4: 'Tải MP4 đã render', downloadWebvtt: 'Tải WebVTT', refreshStatus: 'Làm mới trạng thái render',
+    historyAria: 'Lịch sử render', history: 'Lịch sử render', refreshHistory: 'Làm mới lịch sử', historyState: '{state} · WebVTT {subtitle}', webvttReady: 'WebVTT sẵn sàng', webvttRequested: 'Đã yêu cầu WebVTT', noWebvtt: 'Không tải WebVTT', retry: 'Thử lại', loadMore: 'Tải thêm lịch sử',
+    queued: 'Snapshot bất biến {digest}… đã được xếp hàng render MP4{captions}{webvtt}.', withCaptions: ' kèm phụ đề trong video', withWebvtt: ' + tải WebVTT', refreshFailed: 'Làm mới trạng thái render thất bại: {detail}', historyFailed: 'Làm mới lịch sử render thất bại: {detail}', cancelled: 'Đã hủy render.', cancellationRequested: 'Đã yêu cầu hủy render.', retryQueued: 'Đã xếp hàng thử lại từ {id}…'
+  }},
+  en: { render: {
+    snapshotSemantics: 'Snapshot-equivalent semantics', preview: 'Composition preview', webvttDownload: 'WebVTT download', doNotCreate: 'Do not create', createWebvtt: 'Create WebVTT', snapshotRender: 'Snapshot & render MP4', captionOutputs: 'Caption outputs',
+    audioMix: 'Audio mix document {document} revision {revision}.', noAudioMix: 'No project audio mix selected.',
+    status: 'Render {state}', cancelling: 'cancelling', attempt: 'Attempt {attempt}/{max} · {profile} · WebVTT {subtitle}', snapshot: 'Snapshot {digest}…', retryOf: 'Retry of {id}…', stateError: 'Render {state}: {code}', ready: 'MP4 ready · {width}×{height} · {duration} · {bytes} bytes', noSidecar: 'WebVTT was requested, but this immutable snapshot had no enabled caption sidecar to export.',
+    confirmAria: 'Confirm render cancellation', stopQuestion: 'Stop this active render? Work already completed for this attempt may be lost.', confirmCancel: 'Confirm cancel render', keepRendering: 'Keep rendering', cancelRender: 'Cancel render', retryRender: 'Retry render', downloadMp4: 'Download rendered MP4', downloadWebvtt: 'Download WebVTT', refreshStatus: 'Refresh render status',
+    historyAria: 'Render history', history: 'Render history', refreshHistory: 'Refresh history', historyState: '{state} · WebVTT {subtitle}', webvttReady: 'WebVTT ready', webvttRequested: 'WebVTT requested', noWebvtt: 'No WebVTT download', retry: 'Retry', loadMore: 'Load more history',
+    queued: 'Immutable snapshot {digest}… queued for MP4{captions}{webvtt} render.', withCaptions: ' with in-video captions', withWebvtt: ' + WebVTT download', refreshFailed: 'Render status refresh failed: {detail}', historyFailed: 'Render history refresh failed: {detail}', cancelled: 'Render cancelled.', cancellationRequested: 'Cancellation requested.', retryQueued: 'Retry queued from {id}…'
+  }}
+} as const
