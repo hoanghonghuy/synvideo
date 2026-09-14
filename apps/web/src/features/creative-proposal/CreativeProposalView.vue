@@ -319,6 +319,11 @@ function requestApproval() {
   void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-approve"]')?.focus())
 }
 
+function cancelApproval() {
+  confirmApproval.value = false
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="approve-proposal"]')?.focus())
+}
+
 async function approveSelected() {
   if (!selectedProposal.value) {
     return
@@ -760,7 +765,7 @@ async function retryFailedVersion() {
                 class="secondary-button"
                 type="button"
                 :disabled="approving"
-                @click="confirmApproval = false"
+                @click="cancelApproval"
               >
                 {{ t('creativeProposal.actions.cancel') }}
               </button>

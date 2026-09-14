@@ -402,6 +402,11 @@ describe('CreativeProposalView', () => {
     expect(wrapper.text()).toContain('Xác nhận duyệt phiên bản này?')
     await wrapper.vm.$nextTick()
     expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-approve"]').element)
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy')!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('approve-proposal')
+    await wrapper.find('[data-testid="approve-proposal"]').trigger('click')
+    await wrapper.vm.$nextTick()
 
     await wrapper.find('[data-testid="confirm-approve"]').trigger('click')
     await flushPromises()

@@ -402,6 +402,16 @@ function requestApproval() {
   void nextTick(() => document.querySelector<HTMLElement>('[data-testid="confirm-approve-script"]')?.focus())
 }
 
+function cancelStaleReload() {
+  confirmStaleReload.value = false
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="reload-stale-script"]')?.focus())
+}
+
+function cancelApproval() {
+  confirmApproval.value = false
+  void nextTick(() => document.querySelector<HTMLElement>('[data-testid="approve-script"]')?.focus())
+}
+
 async function confirmStaleReloadAndDiscard() {
   confirmStaleReload.value = false
   if (selectedVersion.value !== null) await loadVersion(selectedVersion.value, true)
@@ -802,7 +812,7 @@ function errorMessage(code: string) {
                   <button
                     class="secondary-button"
                     type="button"
-                    @click="confirmStaleReload = false"
+                    @click="cancelStaleReload"
                   >
                     {{ t('script.actions.cancel') }}
                   </button>
@@ -912,7 +922,7 @@ function errorMessage(code: string) {
                     class="secondary-button"
                     type="button"
                     :disabled="approving"
-                    @click="confirmApproval = false"
+                    @click="cancelApproval"
                   >
                     {{ t('script.actions.cancel') }}
                   </button>
