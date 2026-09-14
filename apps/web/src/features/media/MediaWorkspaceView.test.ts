@@ -105,6 +105,21 @@ afterEach(() => {
 })
 
 describe('MediaWorkspaceView', () => {
+  it('announces initial workspace loading as a status without stealing focus', async () => {
+    route('GET', '/api/v1/projects/' + projectId, project)
+    route('GET', '/api/v1/projects/' + projectId + '/media-assets', { assets: [image] })
+    route('GET', '/api/v1/projects/' + projectId + '/scene-plans', [])
+
+    const wrapper = await mountView()
+    const status = wrapper.find('[role="status"]')
+
+    expect(status.text()).toContain('Đang tải')
+    expect(document.activeElement).not.toBe(status.element)
+
+    await flushPromises()
+    expect(wrapper.find('[data-testid="media-asset-' + imageId + '"]').exists()).toBe(true)
+  })
+
   it('keeps the library usable when there is no approved Scene Plan', async () => {
     route('GET', `/api/v1/projects/${projectId}`, project)
     route('GET', `/api/v1/projects/${projectId}/media-assets`, { assets: [image] })
@@ -126,7 +141,7 @@ describe('MediaWorkspaceView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="media-library-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="media-library-error"]').attributes('role')).toBe('alert')
     expect(wrapper.find('[data-testid="media-empty-state"]').exists()).toBe(false)
   })
 
@@ -138,7 +153,7 @@ describe('MediaWorkspaceView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="scene-plan-list-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="scene-plan-list-error"]').attributes('role')).toBe('alert')
     expect(wrapper.find('[data-testid="scene-assignment-disabled"]').exists()).toBe(false)
   })
 
@@ -158,6 +173,7 @@ describe('MediaWorkspaceView', () => {
 
     const wrapper = await mountView()
     await flushPromises()
+    expect(wrapper.find('[data-testid="scene-plan-error"]').attributes('role')).toBe('alert')
     expect(wrapper.find('[data-testid="scene-plan-error"] .secondary-button').exists()).toBe(true)
     expect(wrapper.find('[data-testid="media-asset-' + imageId + '"]').exists()).toBe(true)
 
@@ -195,7 +211,7 @@ describe('MediaWorkspaceView', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="upload-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upload-error"]').attributes('role')).toBe('alert')
     expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
     expect(fetchMock).not.toHaveBeenCalledWith(
       `/api/v1/projects/${projectId}/media-assets`,
@@ -344,7 +360,7 @@ describe('MediaWorkspaceView', () => {
     await flushPromises()
 
     expect(wrapper.find(`[data-testid="media-asset-${imageId}"]`).exists()).toBe(true)
-    expect(wrapper.find('[data-testid="delete-in-use-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="delete-in-use-error"]').attributes('role')).toBe('alert')
   })
 
   it('loads exact bindings when switching approved plan versions', async () => {

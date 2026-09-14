@@ -350,12 +350,14 @@ const supportedMIME = new Set([
     <p
       v-if="loading"
       class="state-text"
+      role="status"
     >
       {{ t('media.states.loading') }}
     </p>
     <div
       v-else-if="planListErrorCode && !project"
       class="notice error"
+      role="alert"
     >
       <p>{{ errorText('errors', planListErrorCode) }}</p>
       <button
@@ -434,6 +436,7 @@ const supportedMIME = new Set([
           v-if="uploadErrorCode"
           class="notice error"
           data-testid="upload-error"
+          role="alert"
         >
           {{ errorText('errors', uploadErrorCode) }}
         </div>
@@ -443,6 +446,7 @@ const supportedMIME = new Set([
         v-if="mediaErrorCode"
         class="notice error"
         data-testid="media-library-error"
+        role="alert"
       >
         <p>{{ errorText('errors', mediaErrorCode) }}</p>
         <button
@@ -456,6 +460,7 @@ const supportedMIME = new Set([
       <p
         v-else-if="mediaLoading"
         class="state-text"
+        role="status"
       >
         {{ t('media.states.loadingAssets') }}
       </p>
@@ -554,6 +559,7 @@ const supportedMIME = new Set([
         v-if="planListErrorCode"
         class="notice error"
         data-testid="scene-plan-list-error"
+        role="alert"
       >
         <p>{{ errorText('errors', planListErrorCode) }}</p>
         <button
@@ -592,6 +598,7 @@ const supportedMIME = new Set([
         <p
           v-if="planLoading"
           class="state-text"
+          role="status"
         >
           {{ t('media.states.loadingPlan') }}
         </p>
@@ -599,6 +606,7 @@ const supportedMIME = new Set([
           v-else-if="planLoadErrorCode"
           class="notice error"
           data-testid="scene-plan-error"
+          role="alert"
         >
           <p>{{ errorText('errors', planLoadErrorCode) }}</p>
           <button
@@ -672,6 +680,7 @@ const supportedMIME = new Set([
                 v-if="assignmentErrors[scene.key]"
                 class="error-text"
                 :data-testid="`assignment-error-${scene.key}`"
+                role="alert"
               >{{ errorText('errors', assignmentErrors[scene.key]!) }}</span>
               <button
                 class="text-button"
@@ -756,6 +765,7 @@ const supportedMIME = new Set([
         v-if="deleteErrorCode"
         class="error-text"
         data-testid="delete-in-use-error"
+        role="alert"
       >
         {{ errorText('errors', deleteErrorCode) }}
       </p>
