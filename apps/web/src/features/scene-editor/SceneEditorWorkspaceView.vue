@@ -182,6 +182,7 @@ function armDraftReset() {
 
 function cancelDraftReset() {
   pendingDraftReset.value = false
+  void nextTick(() => document.getElementById('reload-saved-revision')?.focus())
 }
 
 function resetToSaved() {
@@ -223,7 +224,10 @@ function requestSceneRemoval(scene: SceneEditorScene) {
 }
 
 function cancelSceneRemoval() {
+  const sceneID = pendingSceneRemovalID.value
   pendingSceneRemovalID.value = null
+  if (!sceneID) return
+  void nextTick(() => document.getElementById(`remove-scene-${sceneID}`)?.focus())
 }
 
 async function confirmSceneRemoval(scene: SceneEditorScene) {
@@ -317,7 +321,10 @@ function requestRenderCancellation() {
 }
 
 function keepRendering() {
+  const jobID = pendingRenderCancellationID.value
   pendingRenderCancellationID.value = null
+  if (!jobID) return
+  void nextTick(() => document.getElementById(`cancel-render-${jobID}`)?.focus())
 }
 
 async function cancelActiveRender() {
@@ -602,7 +609,7 @@ async function applyUpstreamReconcile() {
         <div class="save-actions">
           <button type="button" :disabled="!dirty || invalid || acting || conflict" @click="saveDraft">Save composition</button>
           <template v-if="!pendingDraftReset">
-            <button type="button" :disabled="(!dirty && !conflict) || acting" @click="armDraftReset">Reload saved revision</button>
+            <button id="reload-saved-revision" type="button" :disabled="(!dirty && !conflict) || acting" @click="armDraftReset">Reload saved revision</button>
           </template>
           <span v-else class="destructive-confirmation" role="group" aria-label="Confirm discarding local draft">
             <span>Discard unsaved local changes and reload the authoritative saved revision? These draft changes cannot be recovered.</span>
@@ -670,7 +677,7 @@ async function applyUpstreamReconcile() {
               <button :id="`confirm-cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="cancelActiveRender">Confirm cancel render</button>
               <button type="button" :disabled="acting" @click="keepRendering">Keep rendering</button>
             </span>
-            <button v-else-if="isRenderExportCancellable(renderJob)" type="button" :disabled="acting" @click="requestRenderCancellation">Cancel render</button>
+            <button v-else-if="isRenderExportCancellable(renderJob)" :id="`cancel-render-${renderJob.id}`" type="button" :disabled="acting" @click="requestRenderCancellation">Cancel render</button>
             <button v-if="isRenderExportRetryable(renderJob)" type="button" :disabled="acting" @click="retryTerminalRender(renderJob)">Retry render</button>
             <a v-if="renderDownloadURL" :href="renderDownloadURL" download>Download rendered MP4</a>
             <a v-if="subtitleDownloadURL" :href="subtitleDownloadURL" download>Download WebVTT</a>
@@ -796,7 +803,7 @@ async function applyUpstreamReconcile() {
                   <button type="button" :disabled="acting" @click="cancelSceneRemoval">Cancel</button>
                 </span>
               </template>
-              <button v-else type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="requestSceneRemoval(scene)">Remove</button>
+              <button v-else :id="`remove-scene-${scene.id}`" type="button" :disabled="acting || dirty || conflict || draft.scenes.length <= 1" @click="requestSceneRemoval(scene)">Remove</button>
               <span v-if="dirty" class="action-hint">Save or reload local edits before structural actions.</span>
             </div>
           </li>

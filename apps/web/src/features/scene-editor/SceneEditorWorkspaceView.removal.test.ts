@@ -85,6 +85,8 @@ describe('Scene Editor destructive scene removal', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'Cancel')!.trigger('click')
     expect(mocks.removeScene).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('Confirm remove')
+    await flushPromises()
+    expect((document.activeElement as HTMLElement | null)?.id).toBe('remove-scene-scene-1')
 
     await wrapper.findAll('button').find((button) => button.text() === 'Remove')!.trigger('click')
     await wrapper.findAll('button').find((button) => button.text() === 'Confirm remove')!.trigger('click')
