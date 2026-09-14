@@ -391,7 +391,7 @@ describe('ScenePlanView', () => {
     route('GET', `/api/v1/projects/${projectId}/scripts`, [approvedScript])
     route('PUT', `/api/v1/projects/${projectId}/scene-plans/1`, { error: { code: 'STALE_REVISION' } }, 409)
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
 
     await wrapper.find('[name="scene_visual_0"]').setValue('Bản chỉnh sửa cục bộ không được mất')
@@ -407,6 +407,8 @@ describe('ScenePlanView', () => {
     // Trigger reload stale
     await wrapper.find('[data-testid="reload-stale-scene-plan"]').trigger('click')
     expect(wrapper.find('[data-testid="confirm-stale-reload"]').exists()).toBe(true)
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-reload-stale-scene-plan"]').element)
     await wrapper.find('[data-testid="confirm-reload-stale-scene-plan"]').trigger('click')
     await flushPromises()
 
@@ -877,11 +879,13 @@ describe('ScenePlanView', () => {
     })
     route('POST', `/api/v1/projects/${projectId}/scene-plans/1/approve`, approvedDraft)
 
-    const wrapper = await mountView()
+    const wrapper = await mountView(true)
     await flushPromises()
 
     await wrapper.find('[data-testid="approve-scene-plan-btn"]').trigger('click')
     expect(wrapper.find('[data-testid="confirm-approve-modal"]').exists()).toBe(true)
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="confirm-approve-btn"]').element)
     await wrapper.find('[data-testid="confirm-approve-btn"]').trigger('click')
     await flushPromises()
 
@@ -997,7 +1001,7 @@ describe('ScenePlanView', () => {
   })
 })
 
-async function mountView() {
+async function mountView(attachToBody = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -1010,6 +1014,7 @@ async function mountView() {
   await router.isReady()
 
   return mount(ScenePlanView, {
+    attachTo: attachToBody ? document.body : undefined,
     global: {
       plugins: [i18n, router],
     },
