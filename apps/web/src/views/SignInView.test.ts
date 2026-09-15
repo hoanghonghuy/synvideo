@@ -44,6 +44,31 @@ describe('SignInView localization', () => {
     wrapper.unmount()
   })
 
+  it('announces a bounded pending redirect state without moving focus', async () => {
+    let rejectSignIn!: (reason?: unknown) => void
+    mocks.beginSignIn.mockImplementation(() => new Promise<void>((_resolve, reject) => {
+      rejectSignIn = reject
+    }))
+    const wrapper = mount(SignInView, { attachTo: document.body, global: { plugins: [i18n] } })
+    const button = wrapper.get('button')
+    button.element.focus()
+
+    await button.trigger('click')
+
+    expect(wrapper.get('.auth-panel').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[role="status"]').text()).toBe('Đang chuyển đến đăng nhập…')
+    expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+    expect(document.activeElement).toBe(button.element)
+
+    rejectSignIn('network unavailable')
+    await vi.waitFor(() => expect(wrapper.find('[role="status"]').exists()).toBe(false))
+    expect(wrapper.get('.auth-panel').attributes('aria-busy')).toBeUndefined()
+    expect(document.activeElement).toBe(wrapper.get('h1').element)
+    wrapper.unmount()
+  })
+
   it('renders localized local start failure and returns focus to the recovery heading', async () => {
     mocks.beginSignIn.mockRejectedValue('network unavailable')
     const wrapper = mount(SignInView, { attachTo: document.body, global: { plugins: [i18n] } })
