@@ -41,6 +41,7 @@ const stateCopy = computed(() => {
 })
 
 async function signIn() {
+  if (signingIn.value) return
   errorMessage.value = ''
   signingIn.value = true
   try {
@@ -81,7 +82,7 @@ onMounted(() => {
         v-if="configured"
         class="primary-button inline-action"
         type="button"
-        :disabled="signingIn"
+        :aria-disabled="signingIn || undefined"
         @click="signIn"
       >
         {{ signingIn ? t('auth.signIn.pendingAction') : errorMessage ? t('auth.signIn.retryAction') : t('auth.signIn.action') }}
