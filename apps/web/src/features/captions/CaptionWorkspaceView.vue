@@ -17,6 +17,8 @@ import {
 } from './api'
 import messages from './messages'
 
+type CaptionOperation = 'load' | 'derive' | 'save' | 'rebuild'
+
 const route = useRoute()
 const { t } = useI18n({ useScope: 'local', messages })
 const projectID = computed(() => String(route.params.id ?? ''))
@@ -27,11 +29,13 @@ const history = ref<CaptionDocument[]>([])
 const segments = ref<CaptionSegment[]>([])
 const style = ref<CaptionStyle>({ alignment: 'center', position: 'bottom', size: 'medium', weight: 'normal' })
 const busy = ref(false)
+const operation = ref<CaptionOperation | null>(null)
 const message = ref('')
 const errorMessage = ref('')
 
 const canOperate = computed(() => projectID.value !== '' && planVersion.value > 0 && sceneKey.value.trim() !== '')
 const isStale = computed(() => current.value?.state === 'STALE')
+const pendingMessage = computed(() => operation.value ? t(`captions.${operation.value}Pending`) : '')
 
 function copyFromView(view: CaptionView) {
   current.value = view
@@ -51,6 +55,18 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : t('captions.requestFailed')
 }
 
+function startOperation(nextOperation: CaptionOperation) {
+  operation.value = nextOperation
+  busy.value = true
+  message.value = ''
+  errorMessage.value = ''
+}
+
+function finishOperation() {
+  operation.value = null
+  busy.value = false
+}
+
 async function refreshHistory() {
   if (!canOperate.value) return
   history.value = await listCaptionHistory(projectID.value, planVersion.value, sceneKey.value.trim())
@@ -58,9 +74,7 @@ async function refreshHistory() {
 
 async function load() {
   if (!canOperate.value) return
-  busy.value = true
-  message.value = ''
-  errorMessage.value = ''
+  startOperation('load')
   try {
     const view = await getCaptions(projectID.value, planVersion.value, sceneKey.value.trim())
     copyFromView(view)
@@ -70,15 +84,13 @@ async function load() {
     history.value = []
     errorMessage.value = describeError(error)
   } finally {
-    busy.value = false
+    finishOperation()
   }
 }
 
 async function derive() {
   if (!canOperate.value) return
-  busy.value = true
-  message.value = ''
-  errorMessage.value = ''
+  startOperation('derive')
   try {
     const view = await deriveCaptions(projectID.value, planVersion.value, sceneKey.value.trim())
     copyFromView(view)
@@ -87,15 +99,13 @@ async function derive() {
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
-    busy.value = false
+    finishOperation()
   }
 }
 
 async function save() {
   if (!current.value || !canOperate.value) return
-  busy.value = true
-  message.value = ''
-  errorMessage.value = ''
+  startOperation('save')
   try {
     const view = await updateCaptions(projectID.value, planVersion.value, sceneKey.value.trim(), {
       expected_revision: current.value.revision,
@@ -110,15 +120,13 @@ async function save() {
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
-    busy.value = false
+    finishOperation()
   }
 }
 
 async function rebuild() {
   if (!current.value || !canOperate.value) return
-  busy.value = true
-  message.value = ''
-  errorMessage.value = ''
+  startOperation('rebuild')
   try {
     const view = await rebuildCaptions(projectID.value, planVersion.value, sceneKey.value.trim(), current.value.revision)
     copyFromView(view)
@@ -127,7 +135,7 @@ async function rebuild() {
   } catch (error) {
     errorMessage.value = describeError(error)
   } finally {
-    busy.value = false
+    finishOperation()
   }
 }
 
@@ -148,7 +156,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="caption-workspace">
+  <section class="caption-workspace" :aria-busy="busy ? 'true' : undefined">
     <header class="workspace-header">
       <div>
         <p class="eyebrow">{{ t('captions.eyebrow') }}</p>
@@ -171,6 +179,7 @@ onMounted(() => {
       <button :disabled="busy || !canOperate" @click="derive">{{ t('captions.derive') }}</button>
     </div>
 
+    <p v-if="pendingMessage" class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ pendingMessage }}</p>
     <p v-if="errorMessage" class="notice error" role="alert">{{ errorMessage }}</p>
     <p v-if="message" class="notice success" role="status">{{ message }}</p>
 
@@ -262,6 +271,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .notice { padding: .75rem 1rem; border-radius: 8px; }
 .notice.error { background: #fef2f2; color: #991b1b; }
 .notice.success { background: #ecfdf5; color: #065f46; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .segments { display: grid; gap: .75rem; }
 .segment-row { display: grid; grid-template-columns: minmax(260px, 1fr) 140px 140px auto; gap: .75rem; align-items: end; padding: .75rem 0; border-bottom: 1px solid #e5e7eb; }
 .segment-text textarea { width: 100%; resize: vertical; }

@@ -26,6 +26,16 @@ const view = {
   created_at: '2026-09-14T00:00:00Z', state: 'CURRENT',
 } as const
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 async function mountView() {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -56,5 +66,39 @@ describe('CaptionWorkspaceView i18n', () => {
     expect(wrapper.text()).toContain('source 2400 ms')
     expect(wrapper.text()).toContain('asset-12')
     expect(mocks.getCaptions).toHaveBeenCalledWith('project-1', 1, 'scene-1')
+  })
+
+  it('exposes bounded operation-specific loading feedback without stealing focus', async () => {
+    const wrapper = await mountView()
+    const pending = deferred<typeof view>()
+    mocks.getCaptions.mockReturnValueOnce(pending.promise)
+    const loadButton = wrapper.findAll('button').find((button) => button.text() === 'Tải')
+    expect(loadButton).toBeDefined()
+
+    await loadButton!.trigger('click')
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[role="status"]').text()).toBe('Đang tải phụ đề…')
+
+    pending.resolve(view)
+    await flushPromises()
+    expect(wrapper.attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  })
+
+  it('keeps save feedback live only for the in-flight request', async () => {
+    const wrapper = await mountView()
+    const pending = deferred<typeof view>()
+    mocks.updateCaptions.mockReturnValueOnce(pending.promise)
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Lưu revision mới')
+    expect(saveButton).toBeDefined()
+
+    await saveButton!.trigger('click')
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[role="status"]').text()).toBe('Đang lưu phụ đề…')
+
+    pending.resolve(view)
+    await flushPromises()
+    expect(wrapper.attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.get('[role="status"]').text()).toBe('Đã lưu phụ đề.')
   })
 })
