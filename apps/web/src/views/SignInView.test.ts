@@ -50,6 +50,9 @@ describe('SignInView localization', () => {
       rejectSignIn = reject
     }))
     const wrapper = mount(SignInView, { attachTo: document.body, global: { plugins: [i18n] } })
+
+    // Let the component's mount-time recovery focus settle before simulating a real user action.
+    await vi.waitFor(() => expect(document.activeElement).toBe(wrapper.get('h1').element))
     const button = wrapper.get('button')
     button.element.focus()
 
