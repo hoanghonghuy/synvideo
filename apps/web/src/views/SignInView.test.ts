@@ -56,7 +56,7 @@ describe('SignInView localization', () => {
     await button.trigger('click')
 
     expect(wrapper.get('.auth-panel').attributes('aria-busy')).toBe('true')
-    expect(wrapper.get('[role="status"]').text()).toBe('Đang chuyển đến đăng nhập…')
+    expect(wrapper.get('[role="status"]').text()).toBe('Đang mở đăng nhập…')
     expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
     expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
     expect(wrapper.get('button').attributes('disabled')).toBeDefined()
