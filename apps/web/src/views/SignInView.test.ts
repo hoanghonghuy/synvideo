@@ -59,8 +59,12 @@ describe('SignInView localization', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('Đang mở đăng nhập…')
     expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
     expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
-    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('button').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
     expect(document.activeElement).toBe(button.element)
+
+    await button.trigger('click')
+    expect(mocks.beginSignIn).toHaveBeenCalledTimes(1)
 
     rejectSignIn('network unavailable')
     await vi.waitFor(() => expect(wrapper.find('[role="status"]').exists()).toBe(false))
