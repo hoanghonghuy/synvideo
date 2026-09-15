@@ -63,7 +63,10 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <div class="panel auth-panel">
+    <div
+      class="panel auth-panel"
+      :aria-busy="signingIn || undefined"
+    >
       <p class="eyebrow">{{ t('auth.eyebrow') }}</p>
       <h1
         ref="heading"
@@ -83,6 +86,15 @@ onMounted(() => {
       >
         {{ signingIn ? t('auth.signIn.pendingAction') : errorMessage ? t('auth.signIn.retryAction') : t('auth.signIn.action') }}
       </button>
+      <p
+        v-if="signingIn"
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {{ t('auth.signIn.pendingAction') }}
+      </p>
     </div>
   </section>
 </template>
