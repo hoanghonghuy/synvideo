@@ -44,6 +44,38 @@ describe('SignInView localization', () => {
     wrapper.unmount()
   })
 
+  it('announces a bounded pending redirect state without moving focus', async () => {
+    let rejectSignIn!: (reason?: unknown) => void
+    mocks.beginSignIn.mockImplementation(() => new Promise<void>((_resolve, reject) => {
+      rejectSignIn = reject
+    }))
+    const wrapper = mount(SignInView, { attachTo: document.body, global: { plugins: [i18n] } })
+
+    // Let the component's mount-time recovery focus settle before simulating a real user action.
+    await vi.waitFor(() => expect(document.activeElement).toBe(wrapper.get('h1').element))
+    const button = wrapper.get('button')
+    button.element.focus()
+
+    await button.trigger('click')
+
+    expect(wrapper.get('.auth-panel').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[role="status"]').text()).toBe('Đang mở đăng nhập…')
+    expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+    expect(wrapper.get('button').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+    expect(document.activeElement).toBe(button.element)
+
+    await button.trigger('click')
+    expect(mocks.beginSignIn).toHaveBeenCalledTimes(1)
+
+    rejectSignIn('network unavailable')
+    await vi.waitFor(() => expect(wrapper.find('[role="status"]').exists()).toBe(false))
+    expect(wrapper.get('.auth-panel').attributes('aria-busy')).toBeUndefined()
+    expect(document.activeElement).toBe(wrapper.get('h1').element)
+    wrapper.unmount()
+  })
+
   it('renders localized local start failure and returns focus to the recovery heading', async () => {
     mocks.beginSignIn.mockRejectedValue('network unavailable')
     const wrapper = mount(SignInView, { attachTo: document.body, global: { plugins: [i18n] } })
