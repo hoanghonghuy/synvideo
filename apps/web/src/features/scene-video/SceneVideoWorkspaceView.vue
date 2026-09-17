@@ -103,7 +103,7 @@ function onModelChange(): void {
 }
 
 async function generate(scene: Scene): Promise<void> {
-  if (!plan.value || !selectedProviderId.value || !selectedModelId.value) return
+  if (!plan.value || !selectedProviderId.value || !selectedModelId.value || submittingSceneKey.value) return
   errorMessage.value = ''
   submittingSceneKey.value = scene.key
   try {
@@ -128,7 +128,7 @@ async function generate(scene: Scene): Promise<void> {
 }
 
 async function assign(sceneKey: string, job: SceneVideoJobView): Promise<void> {
-  if (!plan.value || !job.media_asset_id) return
+  if (!plan.value || !job.media_asset_id || assigningJobId.value) return
   assigningJobId.value = job.id
   errorMessage.value = ''
   try {
@@ -204,24 +204,20 @@ onBeforeUnmount(() => {
     </header>
 
     <p v-if="errorMessage" role="alert" class="error-banner">{{ errorMessage }}</p>
-    <p v-if="loading">{{ t('sceneVideo.loading') }}</p>
+    <p v-if="loading" role="status" aria-live="polite" aria-atomic="true">{{ t('sceneVideo.loading') }}</p>
 
     <template v-else-if="plan">
       <section class="generation-controls" :aria-label="t('sceneVideo.controlsLabel')">
         <label>
           {{ t('sceneVideo.provider') }}
           <select v-model="selectedProviderId" @change="onProviderChange">
-            <option v-for="provider in providers" :key="provider.id" :value="provider.id">
-              {{ provider.display_name }}
-            </option>
+            <option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.display_name }}</option>
           </select>
         </label>
         <label>
           {{ t('sceneVideo.model') }}
           <select v-model="selectedModelId" @change="onModelChange">
-            <option v-for="model in selectedProvider?.models ?? []" :key="model.id" :value="model.id">
-              {{ model.display_name }}
-            </option>
+            <option v-for="model in selectedProvider?.models ?? []" :key="model.id" :value="model.id">{{ model.display_name }}</option>
           </select>
         </label>
         <label>
@@ -239,9 +235,11 @@ onBeforeUnmount(() => {
             <button
               type="button"
               :disabled="!selectedModelId || submittingSceneKey === scene.key"
+              :aria-busy="submittingSceneKey === scene.key ? 'true' : undefined"
               @click="generate(scene)"
             >
-              {{ submittingSceneKey === scene.key ? t('sceneVideo.submitting') : t('sceneVideo.generateAlternative') }}
+              <span v-if="submittingSceneKey === scene.key" role="status" aria-live="polite" aria-atomic="true">{{ t('sceneVideo.submitting') }}</span>
+              <span v-else>{{ t('sceneVideo.generateAlternative') }}</span>
             </button>
           </div>
 
@@ -252,19 +250,17 @@ onBeforeUnmount(() => {
                 <strong>{{ jobLabel(job) }}</strong>
                 <span>{{ t('sceneVideo.attempt', { attempt: job.attempt, max: job.max_attempts }) }}</span>
               </div>
-              <video
-                v-if="job.state === 'succeeded' && job.media_asset_id"
-                controls
-                preload="metadata"
-                :src="mediaAssetContentURL(projectId, job.media_asset_id)"
-              />
+              <video v-if="job.state === 'succeeded' && job.media_asset_id" controls preload="metadata" :src="mediaAssetContentURL(projectId, job.media_asset_id)" />
               <button
                 v-if="job.state === 'succeeded' && job.media_asset_id"
                 type="button"
                 :disabled="job.assigned_primary_visual || assigningJobId === job.id"
+                :aria-busy="assigningJobId === job.id ? 'true' : undefined"
                 @click="assign(scene.key, job)"
               >
-                {{ job.assigned_primary_visual ? t('sceneVideo.assignedToScene') : assigningJobId === job.id ? t('sceneVideo.assigning') : t('sceneVideo.useAsPrimary') }}
+                <span v-if="job.assigned_primary_visual">{{ t('sceneVideo.assignedToScene') }}</span>
+                <span v-else-if="assigningJobId === job.id" role="status" aria-live="polite" aria-atomic="true">{{ t('sceneVideo.assigning') }}</span>
+                <span v-else>{{ t('sceneVideo.useAsPrimary') }}</span>
               </button>
             </article>
           </div>
@@ -275,84 +271,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.scene-video-workspace {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 32px 24px 64px;
-}
-.scene-video-header,
-.generation-controls,
-.scene-card,
-.alternative-card {
-  border: 1px solid var(--border-color, #d9dde5);
-  border-radius: 14px;
-  background: var(--surface-color, #fff);
-}
-.scene-video-header,
-.generation-controls,
-.scene-card {
-  padding: 20px;
-}
-.eyebrow {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.generation-controls {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin: 20px 0;
-}
-.generation-controls label {
-  display: grid;
-  gap: 6px;
-}
-.generation-controls select,
-.generation-controls input,
-button {
-  min-height: 40px;
-}
-.scene-list {
-  display: grid;
-  gap: 20px;
-}
-.scene-card {
-  display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  gap: 20px;
-}
-.alternatives {
-  display: grid;
-  gap: 12px;
-}
-.alternative-card {
-  padding: 12px;
-}
-.alternative-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-video {
-  display: block;
-  width: 100%;
-  max-height: 360px;
-  margin-bottom: 10px;
-  background: #000;
-}
-.error-banner {
-  padding: 12px 16px;
-  border: 1px solid currentColor;
-  border-radius: 10px;
-}
-@media (max-width: 760px) {
-  .generation-controls,
-  .scene-card {
-    grid-template-columns: 1fr;
-  }
-}
+.scene-video-workspace { max-width: 1120px; margin: 0 auto; padding: 32px 24px 64px; }
+.scene-video-header, .generation-controls, .scene-card, .alternative-card { border: 1px solid var(--border-color, #d9dde5); border-radius: 14px; background: var(--surface-color, #fff); }
+.scene-video-header, .generation-controls, .scene-card { padding: 20px; }
+.eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.generation-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.generation-controls label { display: grid; gap: 6px; }
+.generation-controls select, .generation-controls input, button { min-height: 40px; }
+.scene-list { display: grid; gap: 20px; }
+.scene-card { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 20px; }
+.alternatives { display: grid; gap: 12px; }
+.alternative-card { padding: 12px; }
+.alternative-meta { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+video { display: block; width: 100%; max-height: 360px; margin-bottom: 10px; background: #000; }
+.error-banner { padding: 12px 16px; border: 1px solid currentColor; border-radius: 10px; }
+@media (max-width: 760px) { .generation-controls, .scene-card { grid-template-columns: 1fr; } }
 </style>
