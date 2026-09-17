@@ -196,7 +196,7 @@ describe('SceneVideoWorkspaceView i18n', () => {
     mocks.assignPrimaryVisual.mockReturnValue(pending.promise)
 
     const wrapper = await mountView()
-    const button = wrapper.findAll('button').find((item) => item.text() === 'Dùng làm hình chính')!
+    const button = wrapper.findAll('button').find((item) => item.text() === 'Dùng làm hình ảnh chính')!
     await button.trigger('click')
     await wrapper.vm.$nextTick()
 
