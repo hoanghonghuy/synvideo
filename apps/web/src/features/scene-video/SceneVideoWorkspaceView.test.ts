@@ -69,6 +69,16 @@ const providerOptions = {
   }],
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 async function mountView() {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -135,5 +145,74 @@ describe('SceneVideoWorkspaceView i18n', () => {
       }),
     )
     expect(wrapper.text()).toContain('Đang chờ')
+  })
+
+  it('bounds generation progress semantics to the unresolved request and suppresses duplicate activation', async () => {
+    const pending = deferred<{
+      id: string
+      state: 'queued'
+      attempt: number
+      max_attempts: number
+      assigned_primary_visual: boolean
+      created_at: string
+      updated_at: string
+    }>()
+    mocks.createSceneVideoGeneration.mockReturnValue(pending.promise)
+
+    const wrapper = await mountView()
+    const button = wrapper.findAll('button').find((item) => item.text() === 'Tạo phương án khác')!
+    await button.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const pendingButton = wrapper.find('button[aria-busy="true"]')
+    expect(pendingButton.exists()).toBe(true)
+    expect(pendingButton.attributes('disabled')).toBeDefined()
+    const status = pendingButton.find('[role="status"]')
+    expect(status.exists()).toBe(true)
+    expect(status.attributes('aria-live')).toBe('polite')
+    expect(status.attributes('aria-atomic')).toBe('true')
+    await pendingButton.trigger('click')
+    expect(mocks.createSceneVideoGeneration).toHaveBeenCalledTimes(1)
+
+    pending.resolve({
+      id: 'job-pending', state: 'queued', attempt: 1, max_attempts: 3, assigned_primary_visual: false,
+      created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:00:00Z',
+    })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('button[aria-busy="true"]').exists()).toBe(false)
+    expect(wrapper.find('button [role="status"]').exists()).toBe(false)
+  })
+
+  it('bounds assignment progress semantics to the unresolved request and cleans them after failure', async () => {
+    localStorage.setItem('synvideo:scene-video-jobs:project-1:2', JSON.stringify({
+      'scene-1': [{
+        id: 'job-success', state: 'succeeded', attempt: 1, max_attempts: 3, media_asset_id: 'asset-1',
+        assigned_primary_visual: false, created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:01:00Z',
+      }],
+    }))
+    const pending = deferred<void>()
+    mocks.assignPrimaryVisual.mockReturnValue(pending.promise)
+
+    const wrapper = await mountView()
+    const button = wrapper.findAll('button').find((item) => item.text() === 'Dùng làm hình ảnh chính')!
+    await button.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const pendingButton = wrapper.find('button[aria-busy="true"]')
+    expect(pendingButton.exists()).toBe(true)
+    expect(pendingButton.attributes('disabled')).toBeDefined()
+    expect(pendingButton.find('[role="status"]').attributes('aria-live')).toBe('polite')
+    await pendingButton.trigger('click')
+    expect(mocks.assignPrimaryVisual).toHaveBeenCalledTimes(1)
+
+    pending.reject(new Error('assignment failed'))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('button[aria-busy="true"]').exists()).toBe(false)
+    expect(wrapper.find('button [role="status"]').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').text()).toContain('assignment failed')
   })
 })
