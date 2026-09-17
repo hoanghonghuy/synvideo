@@ -162,14 +162,16 @@ describe('SceneVideoWorkspaceView i18n', () => {
     const wrapper = await mountView()
     const button = wrapper.findAll('button').find((item) => item.text() === 'Tạo phương án khác')!
     await button.trigger('click')
+    await wrapper.vm.$nextTick()
 
-    expect(button.attributes('aria-busy')).toBe('true')
-    expect(button.attributes('disabled')).toBeDefined()
-    const status = button.find('[role="status"]')
+    const pendingButton = wrapper.find('button[aria-busy="true"]')
+    expect(pendingButton.exists()).toBe(true)
+    expect(pendingButton.attributes('disabled')).toBeDefined()
+    const status = pendingButton.find('[role="status"]')
     expect(status.exists()).toBe(true)
     expect(status.attributes('aria-live')).toBe('polite')
     expect(status.attributes('aria-atomic')).toBe('true')
-    await button.trigger('click')
+    await pendingButton.trigger('click')
     expect(mocks.createSceneVideoGeneration).toHaveBeenCalledTimes(1)
 
     pending.resolve({
@@ -177,9 +179,10 @@ describe('SceneVideoWorkspaceView i18n', () => {
       created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:00:00Z',
     })
     await flushPromises()
+    await wrapper.vm.$nextTick()
 
-    expect(button.attributes('aria-busy')).toBeUndefined()
-    expect(button.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-busy="true"]').exists()).toBe(false)
+    expect(wrapper.find('button [role="status"]').exists()).toBe(false)
   })
 
   it('bounds assignment progress semantics to the unresolved request and cleans them after failure', async () => {
@@ -195,18 +198,21 @@ describe('SceneVideoWorkspaceView i18n', () => {
     const wrapper = await mountView()
     const button = wrapper.findAll('button').find((item) => item.text() === 'Dùng làm hình chính')!
     await button.trigger('click')
+    await wrapper.vm.$nextTick()
 
-    expect(button.attributes('aria-busy')).toBe('true')
-    expect(button.attributes('disabled')).toBeDefined()
-    expect(button.find('[role="status"]').attributes('aria-live')).toBe('polite')
-    await button.trigger('click')
+    const pendingButton = wrapper.find('button[aria-busy="true"]')
+    expect(pendingButton.exists()).toBe(true)
+    expect(pendingButton.attributes('disabled')).toBeDefined()
+    expect(pendingButton.find('[role="status"]').attributes('aria-live')).toBe('polite')
+    await pendingButton.trigger('click')
     expect(mocks.assignPrimaryVisual).toHaveBeenCalledTimes(1)
 
     pending.reject(new Error('assignment failed'))
     await flushPromises()
+    await wrapper.vm.$nextTick()
 
-    expect(button.attributes('aria-busy')).toBeUndefined()
-    expect(button.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-busy="true"]').exists()).toBe(false)
+    expect(wrapper.find('button [role="status"]').exists()).toBe(false)
     expect(wrapper.find('[role="alert"]').text()).toContain('assignment failed')
   })
 })
