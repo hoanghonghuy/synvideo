@@ -24,14 +24,16 @@ describe('ProjectCreateView mutation recovery', () => {
     await form.trigger('submit')
     await wrapper.vm.$nextTick()
 
-    expect(form.attributes('aria-busy')).toBe('true')
-    expect(submit.attributes('aria-disabled')).toBe('true')
-    expect(submit.attributes('disabled')).toBeUndefined()
-    expect(submit.get('[role="status"]').attributes('aria-live')).toBe('polite')
-    expect(submit.get('[role="status"]').attributes('aria-atomic')).toBe('true')
-    expect(document.activeElement).toBe(submit.element)
+    const pendingForm = wrapper.get('form')
+    const pendingSubmit = wrapper.get('button[type="submit"]')
+    expect(pendingForm.attributes('aria-busy')).toBe('true')
+    expect(pendingSubmit.attributes('aria-disabled')).toBe('true')
+    expect(pendingSubmit.attributes('disabled')).toBeUndefined()
+    expect(pendingSubmit.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(pendingSubmit.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+    expect(document.activeElement).toBe(pendingSubmit.element)
 
-    await form.trigger('submit')
+    await pendingForm.trigger('submit')
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     resolveRequest(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
