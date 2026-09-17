@@ -77,6 +77,8 @@ const errorId = (field: string) => `project-${field}-error`
 const hasError = (field: string) => Boolean(props.fieldErrors?.[field])
 
 async function onSubmit() {
+  if (props.submitting) return
+
   clientError.duration = ''
   const trimmedDuration = form.targetDurationSeconds.trim()
   let duration: number | null = null
@@ -158,7 +160,7 @@ async function onSubmit() {
       </label>
     </div>
 
-    <button class="primary-button" type="submit" :disabled="submitting">
+    <button class="primary-button" type="submit" :aria-disabled="submitting || undefined">
       <span v-if="submitting" role="status" aria-live="polite" aria-atomic="true" data-testid="submit-status">
         {{ t('projects.actions.submitting') }}
       </span>
