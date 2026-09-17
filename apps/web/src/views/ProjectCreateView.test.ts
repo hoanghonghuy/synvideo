@@ -13,6 +13,37 @@ beforeEach(() => {
 })
 
 describe('ProjectCreateView mutation recovery', () => {
+  it('keeps submit focus and suppresses duplicate requests while create is pending', async () => {
+    let resolveRequest!: (response: ReturnType<typeof jsonResponse>) => void
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => { resolveRequest = resolve }))
+    const wrapper = await mountCreateView()
+    const form = wrapper.get('form')
+    const submit = wrapper.get('button[type="submit"]')
+    ;(submit.element as HTMLButtonElement).focus()
+
+    await form.trigger('submit')
+    await wrapper.vm.$nextTick()
+
+    expect(form.attributes('aria-busy')).toBe('true')
+    expect(submit.attributes('aria-disabled')).toBe('true')
+    expect(submit.attributes('disabled')).toBeUndefined()
+    expect(submit.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(submit.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+    expect(document.activeElement).toBe(submit.element)
+
+    await form.trigger('submit')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    resolveRequest(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
+    await flushPromises()
+
+    expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.get('button[type="submit"]').attributes('aria-disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('[role="alert"]').element)
+    wrapper.unmount()
+  })
+
   it('focuses the request-level error after a generic create failure', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
     const wrapper = await mountCreateView()
