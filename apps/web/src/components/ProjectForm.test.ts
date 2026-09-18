@@ -102,7 +102,9 @@ describe('ProjectForm accessibility', () => {
     expect(status.attributes('role')).toBe('status')
     expect(status.attributes('aria-live')).toBe('polite')
     expect(status.attributes('aria-atomic')).toBe('true')
-    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    const pendingSubmit = wrapper.get('button[type="submit"]')
+    expect(pendingSubmit.attributes('disabled')).toBeUndefined()
+    expect(pendingSubmit.attributes('aria-disabled')).toBe('true')
     expect(document.activeElement).toBe(title.element)
 
     await wrapper.setProps({ submitting: false })
@@ -110,6 +112,7 @@ describe('ProjectForm accessibility', () => {
     expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
     expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('button[type="submit"]').attributes('aria-disabled')).toBeUndefined()
     expect(document.activeElement).toBe(title.element)
 
     wrapper.unmount()
