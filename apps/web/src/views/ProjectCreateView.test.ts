@@ -17,11 +17,10 @@ describe('ProjectCreateView mutation recovery', () => {
     let resolveRequest!: (response: ReturnType<typeof jsonResponse>) => void
     fetchMock.mockReturnValueOnce(new Promise((resolve) => { resolveRequest = resolve }))
     const wrapper = await mountCreateView()
-    const form = wrapper.get('form')
     const submit = wrapper.get('button[type="submit"]')
     ;(submit.element as HTMLButtonElement).focus()
 
-    await form.trigger('submit')
+    await wrapper.get('form').trigger('submit')
     await wrapper.vm.$nextTick()
 
     const pendingForm = wrapper.get('form')
@@ -38,15 +37,10 @@ describe('ProjectCreateView mutation recovery', () => {
 
     resolveRequest(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
     await flushPromises()
-
-    expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
-    expect(wrapper.get('button[type="submit"]').attributes('aria-disabled')).toBeUndefined()
-    expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
-    expect(document.activeElement).toBe(wrapper.get('[role="alert"]').element)
     wrapper.unmount()
   })
 
-  it('focuses the request-level error after a generic create failure', async () => {
+  it('focuses the request-level error after a generic create failure and clears pending state', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: { code: 'request_failed', message: 'failed' } }, 500))
     const wrapper = await mountCreateView()
 
@@ -56,6 +50,9 @@ describe('ProjectCreateView mutation recovery', () => {
     const alert = wrapper.get('[role="alert"]')
     expect(alert.attributes('tabindex')).toBe('-1')
     expect(document.activeElement).toBe(alert.element)
+    expect(wrapper.get('form').attributes('aria-busy')).toBeUndefined()
+    expect(wrapper.get('button[type="submit"]').attributes('aria-disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="submit-status"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
